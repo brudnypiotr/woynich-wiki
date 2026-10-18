@@ -4,5 +4,7 @@
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [ -x "$ROOT/.venv/Scripts/python.exe" ]; then PY="$ROOT/.venv/Scripts/python.exe"
 elif [ -x "$ROOT/.venv/bin/python" ]; then PY="$ROOT/.venv/bin/python"
+elif [ -n "$LOCALAPPDATA" ] && [ -x "$(cygpath -u "$LOCALAPPDATA" 2>/dev/null)/woynich-wiki/python312/python.exe" ]; then
+  PY="$(cygpath -u "$LOCALAPPDATA")/woynich-wiki/python312/python.exe"  # embeddable Python (setup fallback)
 else PY=python; fi
 PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m kb.core.precommit

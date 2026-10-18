@@ -53,6 +53,15 @@ function Get-File([string]$Url, [string]$Sha256, [string]$Name) {
   return $dest
 }
 
+function Invoke-Native {
+  # Run an external program and return its exit code. Windows PowerShell 5.1 would otherwise turn any stderr
+  # line (warnings, progress) into a terminating error while ErrorActionPreference is Stop.
+  param([string]$Exe, [string[]]$ArgList)
+  $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { & $Exe @ArgList 2>&1 | ForEach-Object { "$_" } | Out-Host; return $LASTEXITCODE }
+  finally { $ErrorActionPreference = $old }
+}
+
 function Find-Python {
   $candidates = @(
     (Join-Path $Base 'python312\python.exe'),
@@ -63,16 +72,25 @@ function Find-Python {
     $cmd = Get-Command $c -ErrorAction SilentlyContinue
     if ($cmd -and $cmd.Source -notmatch 'WindowsApps') { $candidates += $cmd.Source }
   }
+  # Windows PowerShell 5.1 turns any stderr line of a native program into a terminating error when
+  # ErrorActionPreference is Stop, so probe with Continue and read the version from stdout only.
+  $ErrorActionPreference = 'Continue'
   foreach ($exe in $candidates) {
     if (-not (Test-Path $exe)) { continue }
-    $pyArgs = @('-c', 'import sys; print("%d.%d" % sys.version_info[:2])')
+    $pyArgs = @('-c', 'import sys; print("PYVER=%d.%d" % sys.version_info[:2])')
     if ((Split-Path $exe -Leaf) -eq 'py.exe') { $pyArgs = @('-3') + $pyArgs }
     try {
-      $v = (& $exe @pyArgs 2>$null | Out-String).Trim()
-      if ($v -match '^(\d+)\.(\d+)$' -and ([int]$Matches[1] -gt 3 -or ([int]$Matches[1] -eq 3 -and [int]$Matches[2] -ge 11))) {
-        return @{ exe = $exe; version = $v; embeddable = (Test-Path (Join-Path (Split-Path $exe) 'python312._pth')) }
+      $out = (& $exe @pyArgs 2>&1 | ForEach-Object { "$_" }) -join "`n"
+      if ($out -match 'PYVER=(\d+)\.(\d+)') {
+        $v = "$($Matches[1]).$($Matches[2])"
+        if ([int]$Matches[1] -gt 3 -or ([int]$Matches[1] -eq 3 -and [int]$Matches[2] -ge 11)) {
+          return @{ exe = $exe; version = $v; embeddable = (Test-Path (Join-Path (Split-Path $exe) 'python312._pth')) }
+        }
+        Write-Host "  found Python $v at $exe (too old, need 3.11+)"
+      } else {
+        Write-Host "  cannot run $exe : $out"
       }
-    } catch { Write-Verbose "cannot run $exe" }
+    } catch { Write-Host "  cannot run $exe : $($_.Exception.Message)" }
   }
   return $null
 }
@@ -92,7 +110,13 @@ if ($py) {
   try {
     $installer = Get-File $Sources.python_installer.url $Sources.python_installer.sha256 'python-installer.exe'
     $argList = @('/quiet', 'InstallAllUsers=0', "TargetDir=$target", 'PrependPath=0', 'Include_launcher=0', 'Include_test=0', 'Shortcuts=0', 'AssociateFiles=0')
-    $p = Start-Process -FilePath $installer -ArgumentList $argList -Wait -PassThru
+    for ($try = 1; $try -le 4; $try++) {
+      $p = Start-Process -FilePath $installer -ArgumentList $argList -Wait -PassThru
+      if ($p.ExitCode -ne 1618) { break }
+      # 1618 = another installation (Windows Update, Intune, ...) is running: wait and retry
+      Write-Host "Another installation is in progress (code 1618); waiting 45 s (attempt $try of 4) ..." -ForegroundColor Yellow
+      Start-Sleep -Seconds 45
+    }
     if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode)" }
   } catch {
     Write-Host "Per-user installer failed ($($_.Exception.Message)); trying the embeddable package." -ForegroundColor Yellow
@@ -103,7 +127,7 @@ if ($py) {
     (Get-Content $pth) -replace '^#\s*import site', 'import site' | Set-Content $pth -Encoding ASCII
     Add-Content $pth 'Lib\site-packages'
     $getpip = Get-File $Sources.get_pip.url $null 'get-pip.py'
-    & (Join-Path $target 'python.exe') $getpip --no-warn-script-location | Out-Host
+    $null = Invoke-Native (Join-Path $target 'python.exe') @($getpip, '--no-warn-script-location')
   }
   $py = Find-Python
   if (-not $py) { Step 'Python' 'FAIL' 'could not install Python. Run doctor.cmd and send doctor-report.json.'; Stop-Transcript | Out-Null; exit 2 }
@@ -124,14 +148,20 @@ try {
   } elseif (-not (Test-Path $venvPy)) {
     $mk = @('-m', 'venv', (Join-Path $Repo '.venv'))
     if ((Split-Path $py.exe -Leaf) -eq 'py.exe') { $mk = @('-3') + $mk }
-    & $py.exe @mk | Out-Host
+    if ((Invoke-Native $py.exe $mk) -ne 0) { throw 'could not create the virtual environment' }
     Step 'Virtual environment' 'OK' (Join-Path $Repo '.venv')
   } else {
     Step 'Virtual environment' 'OK' 'already present'
   }
-  & $venvPy @pipArgs | Out-Host
-  if ($LASTEXITCODE -ne 0) { throw "pip exit code $LASTEXITCODE" }
+  $pipCode = Invoke-Native $venvPy $pipArgs   # pip writes warnings to stderr; judge by the exit code
+  if ($pipCode -ne 0) { throw "pip exit code $pipCode" }
   Step 'Python packages' 'OK' 'requirements.txt installed'
+  # Make `import kb` work from any folder (the embeddable Python ignores PYTHONPATH): a .pth file in site-packages.
+  $site = (& $venvPy -c "import sysconfig; print(sysconfig.get_paths()['purelib'])" 2>$null | Select-Object -Last 1)
+  if ($site -and (Test-Path $site)) {
+    Set-Content -Path (Join-Path $site 'woynich-wiki.pth') -Value $Repo -Encoding ASCII
+    Step 'Python path' 'OK' "kb importable ($site)"
+  }
 } catch {
   Step 'Python packages' 'FAIL' ($_.Exception.Message + '. Behind a proxy without internet? Put .whl files into .\wheels and run setup.cmd -Offline.')
   Stop-Transcript | Out-Null; exit 2
@@ -166,15 +196,14 @@ $gitExe = (Get-Command git -ErrorAction SilentlyContinue)
 if (-not $gitExe -and (Test-Path (Join-Path $Base 'git\cmd\git.exe'))) { $gitExe = Get-Item (Join-Path $Base 'git\cmd\git.exe') }
 if ($gitExe) {
   $gitPath = if ($gitExe.Source) { $gitExe.Source } else { $gitExe.FullName }
-  & $gitPath -C $Repo config core.hooksPath .githooks
+  $null = Invoke-Native $gitPath @('-C', $Repo, 'config', 'core.hooksPath', '.githooks')
   Step 'Git hooks' 'OK' 'pre-commit guard enabled (blocks secrets and invalid records)'
 }
 
 # ------------------------------------------------------------------ 4. Copilot runtime (SDK)
 if ($SkipCopilot) { Step 'Copilot runtime' 'SKIP' 'skipped by option' }
 else {
-  & $venvPy -m copilot download-runtime | Out-Host
-  if ($LASTEXITCODE -eq 0) { Step 'Copilot runtime' 'OK' 'downloaded and verified by the Copilot SDK' }
+  if ((Invoke-Native $venvPy @('-m', 'copilot', 'download-runtime')) -eq 0) { Step 'Copilot runtime' 'OK' 'downloaded and verified by the Copilot SDK' }
   else { Step 'Copilot runtime' 'WARN' 'download failed; the SDK will retry on first use (needs github.com)' }
 }
 
@@ -192,8 +221,7 @@ Step 'Command' 'OK' 'kb.cmd created (run: kb --help)'
 
 Push-Location $Repo
 try {
-  & $venvPy -m pytest -q 2>&1 | Out-Host
-  if ($LASTEXITCODE -eq 0) { Step 'Self-test' 'OK' 'all tests passed' } else { Step 'Self-test' 'WARN' 'some tests failed; see setup.log' }
+  if ((Invoke-Native $venvPy @('-m', 'pytest', '-q', '-p', 'no:cacheprovider')) -eq 0) { Step 'Self-test' 'OK' 'all tests passed' } else { Step 'Self-test' 'WARN' 'some tests failed; see setup.log' }
 } finally { Pop-Location }
 
 Write-Host ''
