@@ -23,6 +23,11 @@ kb site --open                         # dashboard: sources, topics, discrepanci
 Expected: an answer citing `p. 3` of the OM and `t. 00:01:10` of the meeting, and one discrepancy (12 h vs 10 h).
 Then with your own files: `kb add C:\path\to\document.pdf` (or drop files into `instance\inbox\` and run `kb collect inbox`).
 
+### Dashboard branding (optional)
+Put a logo and a header background into `instance\branding\` (`logo.png` or `logo.svg`, `background.jpg`) and run
+`kb site`. They are embedded into the single dashboard file; company imagery never goes into this repository.
+Set the title in `instance\config\profile.yaml` (`instance: {title: "Orders Rules knowledge base"}`).
+
 ### In GitHub Copilot CLI
 Start `copilot` in this folder. It reads `AGENTS.md` and offers the skills `/kb-add`, `/kb-ingest`, `/kb-ask`,
 `/kb-code`, `/kb-status`, `/kb-verify`. Ask normally ("what is the minimum rest at home base?"): Copilot runs

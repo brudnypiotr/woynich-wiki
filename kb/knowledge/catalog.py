@@ -21,7 +21,7 @@ from kb.core import config, gitops, schemas
 from kb import extractors
 
 INSTANCE_DIRS = ["inbox", "raw", "store", "wiki/sources", "wiki/topics", "wiki/answers", "catalog", "queue", "reports", "config"]
-INSTANCE_GITIGNORE = "store/\ninbox/processed/\n.cache/\nsite/\nreports/\n*.tmp\n"
+INSTANCE_GITIGNORE = "store/\ninbox/processed/\n.cache/\nsite/\nreports/\nbranding/\n*.tmp\n"
 
 
 def now() -> str:
