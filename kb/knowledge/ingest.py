@@ -51,12 +51,15 @@ def windows(segs: list[tuple[str, str]]) -> list[list[tuple[str, str]]]:
     return out
 
 
-def extract_claims(gw: Gateway, rec: dict, segs) -> tuple[list[dict], list[dict]]:
+def extract_claims(gw: Gateway, rec: dict, segs, progress=None) -> tuple[list[dict], list[dict]]:
     verified, rejected = [], []
     by_loc = {}
     for loc, txt in segs:
         by_loc.setdefault(loc, []).append(txt)
-    for win in windows(segs):
+    wins = windows(segs)
+    for wi, win in enumerate(wins, 1):
+        if progress:
+            progress("facts", f"reading part {wi} of {len(wins)} ({win[0][0] or 'top'} … {win[-1][0] or 'top'})")
         body = "\n\n".join(f"[{loc or 'top'}]\n{txt}" for loc, txt in win)
         prompt = (f"{RULES}\nExtract up to {MAX_CLAIMS_PER_WINDOW} important facts from the SOURCE below "
                   f"(document: {rec['title']}). For each fact give:\n- text: the fact in one clear sentence\n"
@@ -89,7 +92,9 @@ def slugify(s: str) -> str:
     return s[:60] or "topic"
 
 
-def ingest_source(gw: Gateway, sid: str, commit: bool = True) -> dict:
+def ingest_source(gw: Gateway, sid: str, commit: bool = True, progress=None) -> dict:
+    """progress(step, detail) is called at each stage (used by `kb serve` to show steps)."""
+    step = progress or (lambda *_: None)
     inst = catalog.instance()
     rec = catalog.load(sid)
     d = inst / "raw" / sid
@@ -97,12 +102,15 @@ def ingest_source(gw: Gateway, sid: str, commit: bool = True) -> dict:
     if not segs:
         rec["status"] = "ingested"; catalog.save(rec)
         return {"id": sid, "claims": 0, "rejected": 0, "topics": []}
-    claims, rejected = extract_claims(gw, rec, segs)
+    step("facts", f"{len(segs)} located segments")
+    claims, rejected = extract_claims(gw, rec, segs, progress)
+    step("facts", f"{len(claims)} verified facts, {len(rejected)} rejected")
     for i, c in enumerate(claims, 1):
         c["n"] = i
     (d / "claims.json").write_text(json.dumps({"verified": claims, "rejected": rejected}, ensure_ascii=False, indent=1), encoding="utf-8")
 
     summary, topic_map = [], {}
+    step("summary", "summary and topics")
     if claims:
         existing = pages.topic_index()
         listing = "\n".join(f"[{c['n']}] {c['text']}" for c in claims)
@@ -126,7 +134,9 @@ def ingest_source(gw: Gateway, sid: str, commit: bool = True) -> dict:
 
     written = [pages.write_source_page(rec, claims, summary, topic_map)]
     for slug, t in topic_map.items():
+        step("topics", f"topic page: {t['title']}")
         written.append(pages.update_topic(gw, slug, t["title"], rec, [c for c in claims if c["n"] in t["claims"]]))
+    step("glossary", "glossary, index, log")
     written += pages.update_glossary(rec, segs)
     rec["status"] = "ingested"
     catalog.save(rec)

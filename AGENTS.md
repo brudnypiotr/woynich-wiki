@@ -5,7 +5,7 @@ Knowledge lives in the **instance** folder (`instance/`, its own git repository,
 
 ## How to run the tool
 - Windows: `.\kb.cmd <command>` (created by `setup.cmd`) · macOS/Linux: `.venv/bin/python -m kb <command>`
-- Commands: `add <file|folder>`, `collect inbox|git|jira`, `ingest`, `ask "<question>"`, `code-ask "<question>"`,
+- Commands: `add <file|folder>`, `collect inbox|git|jira`, `ingest`, `ask "<question>"`, `code-ask "<question>"`, `serve` (local web app),
   `search <words>`, `verify`, `site`, `status`. Add `--json` for machine-readable output where supported.
 
 ## Rules (always)

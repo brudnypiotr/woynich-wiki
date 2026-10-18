@@ -122,6 +122,12 @@ def cmd_site(a) -> int:
     return 0
 
 
+def cmd_serve(a) -> int:
+    from kb.publish import serve
+    serve.serve(port=a.port, open_browser=not a.no_browser, adapter=a.adapter)
+    return 0
+
+
 def cmd_status(a) -> int:
     from collections import Counter
     from kb.knowledge import catalog
@@ -251,6 +257,9 @@ def main(argv=None) -> int:
     s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_search)
     s = sub.add_parser("verify", help="check every citation and quote on wiki pages"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_verify)
     s = sub.add_parser("site", help="build the dashboard (instance/site/index.html)"); s.add_argument("--open", action="store_true"); s.set_defaults(fn=cmd_site)
+    s = sub.add_parser("serve", help="local web app: add files with visible steps, discussion sessions, dashboard")
+    s.add_argument("--port", type=int, default=8765); s.add_argument("--no-browser", action="store_true"); s.add_argument("--adapter")
+    s.set_defaults(fn=cmd_serve)
     s = sub.add_parser("status", help="counts and model usage"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_status)
     sub.add_parser("plugins", help="list registered plugins").set_defaults(fn=cmd_plugins)
     sub.add_parser("login", help="sign in to GitHub Copilot (once)").set_defaults(fn=cmd_login)
