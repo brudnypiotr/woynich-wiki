@@ -22,11 +22,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Repo = Split-Path -Parent $PSScriptRoot
+$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { Join-Path (Get-Location).Path 'setup' }
+$Repo = Split-Path -Parent $ScriptDir
 $Base = Join-Path $env:LOCALAPPDATA 'woynich-wiki'
 $Downloads = Join-Path $Base 'downloads'
 $Log = Join-Path $Repo 'setup.log'
-$Sources = Get-Content (Join-Path $PSScriptRoot 'sources.json') -Raw | ConvertFrom-Json
+$Sources = Get-Content (Join-Path $ScriptDir 'sources.json') -Raw | ConvertFrom-Json
 New-Item -ItemType Directory -Force -Path $Base, $Downloads | Out-Null
 try { Start-Transcript -Path $Log -Force | Out-Null } catch { Write-Verbose 'transcript unavailable' }
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { Write-Verbose 'TLS setting unchanged' }

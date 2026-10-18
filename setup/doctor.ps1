@@ -10,11 +10,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$ReportPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'doctor-report.json'),
+  [string]$ReportPath = '',
   [int]$TimeoutSec = 15
 )
 
 $ErrorActionPreference = 'Continue'
+# $PSScriptRoot can be empty in param() defaults on Windows PowerShell 5.1: resolve the folder here, with a fallback.
+$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { (Get-Location).Path }
+if (-not $ReportPath) { $ReportPath = Join-Path (Split-Path -Parent $ScriptDir) 'doctor-report.json' }
 $results = New-Object System.Collections.Generic.List[object]
 
 function Add-Check {
@@ -65,7 +68,7 @@ try {
 } catch { Add-Check 'system' 'Long paths' 'INFO' 'unknown' }
 
 # ---------------------------------------------------------------- folders
-$repo = Split-Path -Parent $PSScriptRoot
+$repo = Split-Path -Parent $ScriptDir
 $st = 'OK'; $adv = ''
 if ($repo -match 'OneDrive') { $st = 'WARN'; $adv = 'Move the repository out of OneDrive (sync conflicts, files-on-demand).' }
 if ($repo.Length -gt 60) { $st = 'WARN'; $adv = ($adv + ' Path is long; a shorter path avoids the 260-character limit.').Trim() }
@@ -168,7 +171,7 @@ $verdict = if ($counts.FAIL -gt 0) { 'BLOCKERS FOUND: setup will probably not fi
 Write-Host $verdict -ForegroundColor $(if ($counts.FAIL -gt 0) { 'Red' } elseif ($counts.WARN -gt 0) { 'Yellow' } else { 'Green' })
 
 $report = [ordered]@{
-  tool = 'woynich-wiki doctor'; version = 1; at = (Get-Date).ToString('s'); computer_hash = ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($env:COMPUTERNAME))) -replace '-', '').Substring(0, 12)
+  tool = 'woynich-wiki doctor'; version = 1; at = (Get-Date).ToString('s'); computer_hash = ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes([string]$env:COMPUTERNAME))) -replace '-', '').Substring(0, 12)
   summary = $counts; verdict = $verdict; checks = $results
 }
 $report | ConvertTo-Json -Depth 5 | Set-Content -Path $ReportPath -Encoding UTF8
