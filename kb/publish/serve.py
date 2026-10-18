@@ -53,6 +53,8 @@ def _save_session(s: dict) -> None:
 
 
 def _job_step(job: dict, step: str, detail: str = "") -> None:
+    if job.get("cancel"):
+        raise ingest.Cancelled()
     job["step"] = step
     job["log"].append({"at": time.strftime("%H:%M:%S"), "step": step, "detail": detail})
 
@@ -77,13 +79,24 @@ def run_ingest_job(job: dict, path: Path, gw: Gateway) -> None:
             if rec["status"] == "error":
                 raise RuntimeError(info.get("error") or "extraction failed")
             if created or rec["status"] == "extracted":
-                res = ingest.ingest_source(gw, rec["id"], progress=lambda st, d: _job_step(job, st, d))
-                job["result"] = res
+                res = ingest.ingest_pending(gw, [rec["id"]], progress=lambda st, d: _job_step(job, st, d))
+                job["result"] = res[0] if res else None
             v = verify.verify_all()
             _job_step(job, "verify", f"{v['ok']}/{v['facts']} citations verified, {len(v['problems'])} problems")
             site.build()
         _job_step(job, "done", rec["title"])
         job["state"] = "done"
+    except ingest.Cancelled:
+        with WRITE_LOCK:
+            catalog.rollback()
+            note = "cancelled; unfinished changes rolled back"
+            if job.get("remove_on_cancel") and job.get("source_id"):
+                catalog.remove(job["source_id"]); job["removed"] = True
+                note += "; source removed"
+            elif job.get("source_id"):
+                note += "; the source stays registered (ingest it later or remove it)"
+        job["state"] = "cancelled"
+        job["log"].append({"at": time.strftime("%H:%M:%S"), "step": "cancelled", "detail": note})
     except Exception as e:  # shown in the UI; details in the job log
         job["state"] = "error"
         job["error"] = f"{type(e).__name__}: {e}"[:500]
@@ -165,6 +178,26 @@ class Handler(BaseHTTPRequestHandler):
                 s = {"id": uuid.uuid4().hex[:12], "topic": topic, "created": catalog.now(), "updated": catalog.now(), "turns": []}
                 _save_session(s)
                 return self._send(200, s)
+            m = re.fullmatch(r"/api/jobs/([0-9a-f]{12})/cancel", url.path)
+            if m:
+                job = JOBS.get(m.group(1))
+                if not job or job["state"] != "running":
+                    return self._send(409, {"error": "job is not running"})
+                job["cancel"] = True
+                job["remove_on_cancel"] = bool(self._json_body().get("remove"))
+                return self._send(200, {"ok": True, "note": "stops after the current step (a model call can take ~30 s)"})
+            m = re.fullmatch(r"/api/sources/([0-9a-f]{12})/remove", url.path)
+            if m:
+                if not WRITE_LOCK.acquire(timeout=1):
+                    return self._send(409, {"error": "an ingest is running; cancel it first"})
+                try:
+                    r = catalog.remove(m.group(1))
+                finally:
+                    WRITE_LOCK.release()
+                for j in JOBS.values():
+                    if j.get("source_id") == m.group(1):
+                        j["removed"] = True
+                return self._send(200, r)
             m = re.fullmatch(r"/api/sessions/([0-9a-f]{12})/(ask|save)", url.path)
             if m:
                 s = _load_session(m.group(1))
@@ -319,10 +352,17 @@ async function upload(files){for(const file of files){const j=await api('/api/up
 function showJob(j,once){let el=document.getElementById('job-'+j.id);if(!el){el=document.createElement('div');el.className='panel';el.id='job-'+j.id;$('#jobs')&&$('#jobs').prepend(el)}
   const at=STEPS.indexOf(j.step);
   el.innerHTML=`<b>${esc(j.filename)}</b> <small class="sub">${j.bytes?Math.round(j.bytes/1024)+' KB':''}</small>
-   <div class="steps">${STEPS.map((s,i)=>`<span class="${j.state==='error'&&i===Math.max(at,0)?'err':(i<at||j.state==='done'?'done':(i===at?'now':''))}">${s}</span>`).join('')}</div>
-   ${j.error?`<p style="color:var(--bad)">${esc(j.error)}</p>`:''}<div class="log">${(j.log||[]).map(l=>`${l.at} ${l.step}: ${esc(l.detail)}`).join('\n')}</div>`;
+   <div class="steps">${STEPS.map((s,i)=>`<span class="${(j.state==='error'||j.state==='cancelled')&&i===Math.max(at,0)?'err':(i<at||j.state==='done'?'done':(i===at?'now':''))}">${s}</span>`).join('')}</div>
+   ${j.error?`<p style="color:var(--bad)">${esc(j.error)}</p>`:''}
+   <div style="display:flex;gap:8px;margin:6px 0">${j.state==='running'?`<button class="sec" onclick="cancelJob('${j.id}',false)">Cancel</button><button class="sec" onclick="cancelJob('${j.id}',true)">Cancel and remove file</button>`:
+     (j.source_id&&!j.removed?`<button class="sec" onclick="removeSrc('${j.id}','${j.source_id}')">Remove from knowledge base</button>`:(j.removed?'<span class="sub">removed</span>':''))}</div>
+   <div class="log">${(j.log||[]).map(l=>`${l.at} ${l.step}: ${esc(l.detail)}`).join('\n')}</div>`;
   if(j.state==='running'&&!once)setTimeout(()=>api('/api/jobs/'+j.id).then(x=>showJob(x)),1500);
   else if(j.state==='running'&&once)setTimeout(()=>api('/api/jobs/'+j.id).then(x=>showJob(x)),1500)}
+window.cancelJob=async(id,rm)=>{if(rm&&!confirm('Stop and delete this file from the knowledge base?'))return;
+  await api('/api/jobs/'+id+'/cancel',{method:'POST',body:JSON.stringify({remove:rm})}).catch(e=>alert(e.message))};
+window.removeSrc=async(jid,sid)=>{if(!confirm('Delete this source, its facts and pages from the knowledge base? (one commit, can be undone with Git)'))return;
+  try{await api('/api/sources/'+sid+'/remove',{method:'POST'});api('/api/jobs/'+jid).then(x=>showJob(x))}catch(e){alert(e.message)}};
 function renderTurn(t,i){return `<div class="turn"><div class="q">${esc(t.question)}</div><div class="a">${t.not_found?'<p class="nf">No answer found in the knowledge base. Try other words, or add a source that covers it.</p>':
   t.sentences.map((s,k)=>`<p>${esc(s.text)}${s.cites.map((c,m)=>`<span class="cite" onclick="tg('${i}-${k}-${m}')">[${esc(c.title)} · ${esc(c.locator)}]</span>`).join('')}</p>`+
    s.cites.map((c,m)=>`<div class="ex" id="ex-${i}-${k}-${m}">${esc(c.excerpt)}…</div>`).join('')).join('')}</div></div>`}

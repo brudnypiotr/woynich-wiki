@@ -106,6 +106,11 @@ def update_topic(gw, slug: str, title: str, rec: dict, new_claims: list[dict]) -
                 conflicts = [c for c in data["conflicts"] if len(c["claims"]) >= 2 and all(1 <= n <= len(numbered) for n in c["claims"])]
             except ValueError:
                 pass
+    return render_topic(slug, title, claims, numbered, synopsis, conflicts)
+
+
+def render_topic(slug: str, title: str, claims: list[dict], numbered: list[dict], synopsis: list[dict], conflicts: list[dict]) -> Path:
+    """Write topic JSON + Markdown from verified claims (no model call). Synopsis/conflict refs index into `numbered`."""
     data = {"slug": slug, "title": title, "updated": today(), "synopsis": synopsis, "conflicts": conflicts,
             "claims": [f"{c['source_id']}:{c['n']}" for c in numbered]}
     (wiki() / "topics").mkdir(parents=True, exist_ok=True)
@@ -127,6 +132,43 @@ def update_topic(gw, slug: str, title: str, rec: dict, new_claims: list[dict]) -
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     write_discrepancies()
     return p
+
+
+def drop_source(sid: str) -> list[Path]:
+    """Remove one source's facts from topic pages and the glossary without calling the model: synopsis sentences
+    and conflicts that cite the removed source are dropped, the rest is re-numbered. Returns touched paths."""
+    touched = []
+    tdir = wiki() / "topics"
+    for f in sorted(tdir.glob("*.json")) if tdir.exists() else []:
+        t = json.loads(f.read_text(encoding="utf-8"))
+        keys = t.get("claims", [])
+        md = tdir / f"{t['slug']}.md"
+        if not any(k.startswith(sid + ":") for k in keys) and not (md.exists() and sid in md.read_text(encoding="utf-8")):
+            continue
+        claims = topic_claims(t["slug"])  # raw/<sid> is already gone
+        if not claims:
+            f.unlink(); (tdir / f"{t['slug']}.md").unlink(missing_ok=True)
+            touched += [f, tdir / f"{t['slug']}.md"]
+            continue
+        numbered = claims[:MAX_TOPIC_CLAIMS_FOR_MODEL]
+        new_index = {f"{c['source_id']}:{c['n']}": i for i, c in enumerate(numbered, 1)}
+        remap = lambda refs: [new_index[keys[n - 1]] for n in refs if 0 < n <= len(keys) and keys[n - 1] in new_index]
+        keep = lambda refs: all(0 < n <= len(keys) and not keys[n - 1].startswith(sid + ":") for n in refs)
+        synopsis = [{**x, "claims": remap(x["claims"])} for x in t.get("synopsis", []) if keep(x["claims"])]
+        conflicts = [{**x, "claims": remap(x["claims"])} for x in t.get("conflicts", []) if keep(x["claims"])]
+        touched += [f, render_topic(t["slug"], t["title"], claims, numbered, [x for x in synopsis if x["claims"]],
+                                    [x for x in conflicts if len(x["claims"]) >= 2])]
+    gpath = wiki() / "glossary.json"
+    if gpath.exists():
+        gloss = json.loads(gpath.read_text(encoding="utf-8"))
+        for k in list(gloss):
+            gloss[k]["cites"] = [c for c in gloss[k]["cites"] if c["source_id"] != sid]
+            if not gloss[k]["cites"]:
+                del gloss[k]
+        gpath.write_text(json.dumps(gloss, ensure_ascii=False, indent=1), encoding="utf-8")
+        touched += update_glossary({"id": sid}, [])
+    touched.append(write_discrepancies())
+    return touched
 
 
 def write_discrepancies() -> Path:

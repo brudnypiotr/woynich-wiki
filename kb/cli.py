@@ -60,7 +60,13 @@ def cmd_collect(a) -> int:
 def cmd_ingest(a) -> int:
     from kb.knowledge import ingest, verify
     from kb.llm.gateway import Gateway
-    res = ingest.ingest_pending(Gateway(adapter=a.adapter), a.ids or None)
+    try:
+        res = ingest.ingest_pending(Gateway(adapter=a.adapter), a.ids or None,
+                                    progress=lambda step, detail: print(f"  {step}: {detail}", flush=True))
+    except KeyboardInterrupt:
+        print("\ninterrupted: unfinished changes were rolled back; the source stays registered.\n"
+              "Run `kb ingest` to continue, or `kb remove <id>` to delete it (`kb status --sources` lists ids).")
+        return 130
     for r in res:
         print(f"ingested {r['id']}: {r['claims']} verified facts, {r['rejected']} rejected, topics: {', '.join(r['topics']) or '-'}")
     if not res:
@@ -150,6 +156,25 @@ def cmd_serve(a) -> int:
     return 0
 
 
+def cmd_remove(a) -> int:
+    from kb.knowledge import catalog
+    rc = 0
+    for sid in a.ids:
+        try:
+            r = catalog.remove(sid)
+            print(f"removed {r['id']}  {r['title']}  (was {r['status_was']})")
+        except KeyError as e:
+            print(e); rc = 1
+    return rc
+
+
+def cmd_rollback(a) -> int:
+    from kb.knowledge import catalog
+    paths = catalog.rollback()
+    print(f"discarded {len(paths)} uncommitted file(s) in raw/ and wiki/" if paths else "nothing to roll back")
+    return 0
+
+
 def cmd_status(a) -> int:
     from collections import Counter
     from kb.knowledge import catalog
@@ -159,6 +184,10 @@ def cmd_status(a) -> int:
     if met.exists():
         for line in met.read_text(encoding="utf-8").splitlines():
             e = json.loads(line); calls += 1; tokens += (e.get("tokens_in") or 0) + (e.get("tokens_out") or 0)
+    if getattr(a, "sources", False):
+        for r in srcs:
+            print(f"{r['id']}  {r['status']:<9} {r['kind']:<10} {r['title']}")
+        return 0
     data = {"instance": str(catalog.instance()), "sources": len(srcs), "by_status": dict(Counter(r["status"] for r in srcs)),
             "by_kind": dict(Counter(r["kind"] for r in srcs)), "model_calls": calls, "model_tokens": tokens}
     _out(a, data, "\n".join(f"{k}: {v}" for k, v in data.items()))
@@ -284,7 +313,11 @@ def main(argv=None) -> int:
     s = sub.add_parser("serve", help="local web app: add files with visible steps, discussion sessions, dashboard")
     s.add_argument("--port", type=int, default=8765); s.add_argument("--no-browser", action="store_true"); s.add_argument("--adapter")
     s.set_defaults(fn=cmd_serve)
-    s = sub.add_parser("status", help="counts and model usage"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_status)
+    s = sub.add_parser("status", help="counts and model usage"); s.add_argument("--json", action="store_true")
+    s.add_argument("--sources", action="store_true", help="list sources with id and status"); s.set_defaults(fn=cmd_status)
+    s = sub.add_parser("remove", help="delete sources completely (original, text, facts, pages); one commit")
+    s.add_argument("ids", nargs="+"); s.set_defaults(fn=cmd_remove)
+    sub.add_parser("rollback", help="discard uncommitted leftovers of an interrupted ingest").set_defaults(fn=cmd_rollback)
     sub.add_parser("plugins", help="list registered plugins").set_defaults(fn=cmd_plugins)
     sub.add_parser("login", help="sign in to GitHub Copilot (once)").set_defaults(fn=cmd_login)
     sub.add_parser("llm-smoke", help="spike S1: test model access from scripts").set_defaults(fn=cmd_llm_smoke)

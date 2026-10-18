@@ -102,6 +102,7 @@ def ingest_source(gw: Gateway, sid: str, commit: bool = True, progress=None) -> 
     if not segs:
         rec["status"] = "ingested"; catalog.save(rec)
         return {"id": sid, "claims": 0, "rejected": 0, "topics": []}
+    catalog.ingest_started(sid)
     step("facts", f"{len(segs)} located segments")
     claims, rejected = extract_claims(gw, rec, segs, progress)
     step("facts", f"{len(claims)} verified facts, {len(rejected)} rejected")
@@ -142,13 +143,20 @@ def ingest_source(gw: Gateway, sid: str, commit: bool = True, progress=None) -> 
     catalog.save(rec)
     written += pages.update_index_log_hot(f"ingest {rec['title']}: {len(claims)} verified facts, {len(rejected)} rejected, topics: {', '.join(topic_map) or '-'}")
     if commit:
-        gitops.commit(inst, [d] + written, gitops.message(
+        gitops.commit(inst, [d, pages.wiki()], gitops.message(  # all of wiki/: pages, topic data, discrepancies
             "ingest", f"{rec['title']} — {len(claims)} facts, {len(topic_map)} topics", scope=sid,
             body=f"verified claims: {len(claims)}\nrejected claims: {len(rejected)}\ntopics: {', '.join(topic_map)}"))
+    catalog.ingest_finished()
     return {"id": sid, "claims": len(claims), "rejected": len(rejected), "topics": list(topic_map)}
 
 
-def ingest_pending(gw: Gateway | None = None, only: list[str] | None = None) -> list[dict]:
+class Cancelled(Exception):
+    """Raised from a progress callback to stop an ingest between steps (the current model call finishes first)."""
+
+
+def ingest_pending(gw: Gateway | None = None, only: list[str] | None = None, progress=None) -> list[dict]:
+    """Ingest new sources one by one. If interrupted (Ctrl+C or Cancelled), the unfinished source is rolled back to
+    its last commit: its original stays registered (status `extracted`) and can be ingested again or removed."""
     gw = gw or Gateway()
     out = []
     for rec in catalog.all_sources():
@@ -156,5 +164,9 @@ def ingest_pending(gw: Gateway | None = None, only: list[str] | None = None) -> 
             continue
         if not only and rec["status"] != "extracted":
             continue
-        out.append(ingest_source(gw, rec["id"]))
+        try:
+            out.append(ingest_source(gw, rec["id"], progress=progress))
+        except (KeyboardInterrupt, Cancelled):
+            catalog.rollback()
+            raise
     return out
