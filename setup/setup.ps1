@@ -181,8 +181,9 @@ else {
 # ------------------------------------------------------------------ 5. kb.cmd + self-test
 $shim = @"
 @echo off
+rem Runs from any folder, so relative file paths (kb add .\file.pdf) keep working.
 setlocal
-cd /d "%~dp0"
+set "PYTHONPATH=%~dp0"
 "$venvPy" -m kb %*
 exit /b %ERRORLEVEL%
 "@

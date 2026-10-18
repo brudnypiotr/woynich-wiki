@@ -45,10 +45,16 @@ $lang = $ExecutionContext.SessionState.LanguageMode
 if ($lang -eq 'FullLanguage') { Add-Check 'policy' 'PowerShell language mode' 'OK' $lang }
 else { Add-Check 'policy' 'PowerShell language mode' 'FAIL' $lang 'Scripts run in restricted mode (AppLocker/WDAC). Setup scripts will likely be blocked; ask IT or use the manual install guide.' }
 
-$policies = Get-ExecutionPolicy -List | ForEach-Object { "{0}={1}" -f $_.Scope, $_.ExecutionPolicy }
-$effective = Get-ExecutionPolicy
+$policies = @(); $effective = $null
+try {
+  $policies = Get-ExecutionPolicy -List -ErrorAction Stop | ForEach-Object { "{0}={1}" -f $_.Scope, $_.ExecutionPolicy }
+  $effective = Get-ExecutionPolicy -ErrorAction Stop
+} catch { }
 $st = 'OK'; $adv = ''
-if ($effective -in @('Restricted','AllSigned')) { $st = 'WARN'; $adv = 'setup.cmd starts PowerShell with -ExecutionPolicy Bypass for this process only; if MachinePolicy/UserPolicy is set by GPO this may still be blocked.' }
+if (-not $effective) {
+  $st = 'INFO'; $effective = 'unknown'
+  $adv = 'Could not read the policy (PowerShell module not loaded). Start doctor.cmd by double-click or from cmd.exe.'
+} elseif ($effective -in @('Restricted','AllSigned')) { $st = 'WARN'; $adv = 'setup.cmd starts PowerShell with -ExecutionPolicy Bypass for this process only; if MachinePolicy/UserPolicy is set by GPO this may still be blocked.' }
 Add-Check 'policy' 'Execution policy' $st ("effective={0}; {1}" -f $effective, ($policies -join ', ')) $adv
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -139,11 +145,11 @@ $r = Invoke-Tool 'git' @('--version')
 if ($r.found) { Add-Check 'tools' 'Git' 'OK' $r.output } else { Add-Check 'tools' 'Git' 'WARN' 'not found' 'Setup can unpack Portable Git into %LOCALAPPDATA%, no admin needed.' }
 
 $r = Invoke-Tool 'copilot' @('--version')
-if ($r.found) { Add-Check 'tools' 'GitHub Copilot CLI' 'OK' ($r.output -split "`n")[0] } else { Add-Check 'tools' 'GitHub Copilot CLI' 'INFO' 'not on PATH' 'Not required: the Python Copilot SDK bundles its own CLI.' }
+if ($r.found) { Add-Check 'tools' 'GitHub Copilot CLI' 'OK' ($r.output -split "`r?`n")[0] } else { Add-Check 'tools' 'GitHub Copilot CLI' 'INFO' 'not on PATH' 'Not required: the Python Copilot SDK bundles its own CLI.' }
 
 foreach ($t in @('node', 'winget', 'gh')) {
   $r = Invoke-Tool $t @('--version')
-  Add-Check 'tools' $t 'INFO' ($(if ($r.found) { ($r.output -split "`n")[0] } else { 'not found' }))
+  Add-Check 'tools' $t 'INFO' ($(if ($r.found) { ($r.output -split "`r?`n")[0] } else { 'not found' }))
 }
 
 $r = Invoke-Tool 'cmdkey' @('/list')
