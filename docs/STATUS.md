@@ -1,5 +1,10 @@
 # Status and retrospective (2026-10-18)
 
+## Update 2026-10-19: first real test
+Four knowledge-sharing transcripts: facts verified but useless to a reader ("Person X said …"), pages read as lists.
+Diagnosis and the proposed ingest v2 are in [INGEST-ANALYSIS.md](INGEST-ANALYSIS.md). Added: stop/rollback/remove
+(`kb rollback`, `kb remove`, Cancel in `kb serve`); fixed: topic data was never committed.
+
 ## Where we are
 The mini-flow runs **end to end on a standard work laptop** (Windows 11, no admin rights, Windows PowerShell 5.1,
 GPT-6 Luna via GitHub Copilot). On the fictional sample corpus: 4 sources → 19 verified facts, 0 rejected,
@@ -39,7 +44,7 @@ Jira JSON, code, text) · `knowledge` (catalog, search, ingest, pages, glossary,
 | Decision log (ADR page type), corrections workflow | D20, trust slide | |
 | Review workflow (draft → reviewed) | ADR-0005 | all pages stay `draft` |
 | Gold-set evaluation script (30 questions) | PRODUCT.md B1 | template only |
-| Remove a source (`kb remove`), cancel a running ingest from the app | usability | today: Ctrl+C and Git reset in the instance |
+| Ingest v2 (model-written pages) | INGEST-ANALYSIS.md | v1 produces fact lists |
 | Semantic search (embeddings) | D19 | only if FTS5 measurably misses |
 
 ## Architecture assumptions deferred
