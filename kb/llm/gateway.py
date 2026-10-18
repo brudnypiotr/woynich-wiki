@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -62,8 +63,10 @@ class Gateway:
                            (self.cfg.get("budget") or {}).get("max_tokens_per_run"))
 
     def model_for(self, task: str) -> tuple[str, str]:
+        """KB_MODEL (env) > model_override (config, set with `kb model set`) > tier model for the task."""
         tier = (self.cfg.get("tasks") or {}).get(task, "standard")
-        return tier, self.cfg["tiers"][tier]["model"]
+        forced = os.environ.get("KB_MODEL") or self.cfg.get("model_override")
+        return tier, forced or self.cfg["tiers"][tier]["model"]
 
     def run(self, task: str, prompt: str, attachments=None, **meta) -> LLMResult:
         tier, model = self.model_for(task)

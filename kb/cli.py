@@ -170,6 +170,45 @@ def cmd_login(a) -> int:
     return 2
 
 
+def cmd_model(a) -> int:
+    import yaml
+    from kb.llm.gateway import Gateway
+    gw = Gateway(adapter=a.adapter)
+    if a.action == "show":
+        tier, model = gw.model_for("query")
+        print(f"model used for all tasks: {model}" if gw.cfg.get("model_override") or __import__("os").environ.get("KB_MODEL")
+              else f"per task tier, e.g. query -> {tier}: {model}")
+        return 0
+    try:
+        models = gw.llm.inner.list_models()
+    except Exception as e:
+        models = None
+        print(f"cannot list models ({type(e).__name__}: {e})")
+    if a.action == "list":
+        for m in models or []:
+            print(f"  {m['id']:<28} {m.get('name') or '':<28} {m.get('policy') or ''}")
+        return 0 if models else 1
+    if not a.model:
+        print("usage: kb model set <id or name>"); return 2
+    if models:
+        want = a.model.strip().lower()
+        hit = next((m for m in models if want in (str(m["id"]).lower(), str(m.get("name") or "").lower())), None)
+        if hit:
+            a.model = hit["id"]
+        elif not a.force:
+            close = [m["id"] for m in models if want.replace(" ", "-") in str(m["id"]).lower() or want in str(m.get("name") or "").lower()]
+            print(f"{a.model!r} is not an available model" + (f"; did you mean {close[0]!r}?" if close else "") +
+                  "\nRun `kb model list`, or use --force to set it anyway.")
+            return 1
+    p = config.paths().instance / "config" / "models.yaml"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    data = (yaml.safe_load(p.read_text(encoding="utf-8")) or {}) if p.exists() else {}
+    data["model_override"] = a.model
+    p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    print(f"all tasks now use {a.model} ({p})")
+    return 0
+
+
 def cmd_secrets(a) -> int:
     store = registry.create("secret_stores", a.store)
     if a.action == "set":
@@ -216,6 +255,9 @@ def main(argv=None) -> int:
     sub.add_parser("plugins", help="list registered plugins").set_defaults(fn=cmd_plugins)
     sub.add_parser("login", help="sign in to GitHub Copilot (once)").set_defaults(fn=cmd_login)
     sub.add_parser("llm-smoke", help="spike S1: test model access from scripts").set_defaults(fn=cmd_llm_smoke)
+    s = sub.add_parser("model", help="list models, or use one model for every task (kb model set <id>)")
+    s.add_argument("action", choices=["list", "set", "show"]); s.add_argument("model", nargs="?")
+    s.add_argument("--adapter"); s.add_argument("--force", action="store_true"); s.set_defaults(fn=cmd_model)
     s = sub.add_parser("secrets", help="store or check a secret (Jira token, ...)")
     s.add_argument("action", choices=["set", "check"]); s.add_argument("name")
     s.add_argument("--store", default="keyring"); s.set_defaults(fn=cmd_secrets)

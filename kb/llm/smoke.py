@@ -103,9 +103,12 @@ def summary(report: dict) -> str:
         if e.get("ok"):
             c = e.get("check", {})
             verdict = "PASS" if c.get("schema") and c.get("quotes_verbatim", 0) >= 1 else "PARTIAL"
-            lines.append(f"  [{verdict}] {name}: {e['seconds']}s, tokens in/out {e.get('tokens_in')}/{e.get('tokens_out')}, "
+            lines.append(f"  [{verdict}] {name}: model {e.get('model')}, {e['seconds']}s, tokens in/out {e.get('tokens_in')}/{e.get('tokens_out')}, "
                          f"json={c.get('json')} schema={c.get('schema')} verbatim quotes={c.get('quotes_verbatim')}/{c.get('claims')}")
         else:
             lines.append(f"  [FAIL] {name}: {e.get('error')}")
+    for name, e in report["adapters"].items():
+        if e.get("models"):
+            lines.append(f"  available models ({name}): " + ", ".join(str(m.get("id") if isinstance(m, dict) else m) for m in e["models"]))
     lines.append(f"  report: {report.get('_path')}  (send this file back for review)")
     return "\n".join(lines)

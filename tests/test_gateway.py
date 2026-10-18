@@ -24,3 +24,10 @@ def test_budget(tmp_path):
     with pytest.raises(BudgetExceeded):
         for _ in range(100):
             gw.run("classify", "z" * 200)
+
+
+def test_model_override(tmp_path, monkeypatch):
+    gw = Gateway(cfg={**CFG, "model_override": "one-model", "budget": {}}, log_path=tmp_path / "m.jsonl")
+    assert gw.run("classify", "x").model == "one-model" and gw.run("summarize", "y").model == "one-model"
+    monkeypatch.setenv("KB_MODEL", "env-model")
+    assert gw.run("classify", "x").model == "env-model"
