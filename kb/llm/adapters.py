@@ -130,19 +130,36 @@ class CopilotSDKAdapter(LLM):
                 text = getattr(data, "content", None)
                 if text is None:
                     text = str(data if data is not None else event)
-                tin = tout = None
+                tin = tout = premium = None
                 try:
                     m = await session.rpc.usage.get_metrics()
                     tin = sum((mm.usage.input_tokens or 0) for mm in m.model_metrics.values())
                     tout = sum((mm.usage.output_tokens or 0) for mm in m.model_metrics.values())
+                    premium = getattr(m, "total_premium_request_cost", None)
                 except Exception:
-                    pass
-                return LLMResult(text=text, model=model, tokens_in=tin, tokens_out=tout)
+                    premium = None
+                return LLMResult(text=text, model=model, tokens_in=tin, tokens_out=tout, raw={"premium": premium})
             finally:
                 await client.stop()
 
     def complete(self, prompt, model, attachments=None, response_schema=None):
         return asyncio.run(self._run(prompt, model, attachments, response_schema))
+
+    def quota(self) -> dict:
+        """Remaining Copilot entitlement of the signed-in user (premium requests, chat, completions)."""
+        async def go():
+            from copilot import CopilotClient
+            from copilot.rpc import AccountGetQuotaRequest
+            client = CopilotClient()
+            await client.start()
+            try:
+                res = await client.rpc.account.get_quota(AccountGetQuotaRequest())
+                return {k: {"used": getattr(v, "used_requests", None), "entitlement": getattr(v, "entitlement_requests", None),
+                            "remaining_pct": getattr(v, "remaining_percentage", None), "resets": str(getattr(v, "reset_date", "") or "")}
+                        for k, v in (res.quota_snapshots or {}).items()}
+            finally:
+                await client.stop()
+        return asyncio.run(go())
 
     def auth_status(self):
         async def go():

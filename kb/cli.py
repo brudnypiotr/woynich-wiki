@@ -122,6 +122,28 @@ def cmd_site(a) -> int:
     return 0
 
 
+def cmd_quota(a) -> int:
+    from kb.llm.gateway import Gateway
+    gw = Gateway(adapter="copilot-sdk")
+    try:
+        q = gw.llm.inner.quota()
+    except Exception as e:
+        print(f"cannot read quota ({type(e).__name__}: {e})"); return 1
+    used_here = 0.0
+    met = config.paths().metering
+    if met.exists():
+        for line in met.read_text(encoding="utf-8").splitlines():
+            used_here += json.loads(line).get("premium") or 0
+    if a.json:
+        print(json.dumps({"quota": q, "premium_used_by_kb": used_here}, indent=1)); return 0
+    for k, v in q.items():
+        ent = "unlimited" if v["entitlement"] == -1 else v["entitlement"]
+        pct = f"{v['remaining_pct']:.1f}% left" if isinstance(v["remaining_pct"], (int, float)) else ""
+        print(f"  {k:<22} used {v['used']} of {ent}  {pct}  resets {v['resets'][:10] or 'n/a'}")
+    print(f"  premium requests used by this knowledge base (metered): {used_here:g}")
+    return 0
+
+
 def cmd_serve(a) -> int:
     from kb.publish import serve
     serve.serve(port=a.port, open_browser=not a.no_browser, adapter=a.adapter)
@@ -257,6 +279,8 @@ def main(argv=None) -> int:
     s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_search)
     s = sub.add_parser("verify", help="check every citation and quote on wiki pages"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_verify)
     s = sub.add_parser("site", help="build the dashboard (instance/site/index.html)"); s.add_argument("--open", action="store_true"); s.set_defaults(fn=cmd_site)
+    s = sub.add_parser("quota", help="your Copilot quota (premium requests left) and what kb used")
+    s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_quota)
     s = sub.add_parser("serve", help="local web app: add files with visible steps, discussion sessions, dashboard")
     s.add_argument("--port", type=int, default=8765); s.add_argument("--no-browser", action="store_true"); s.add_argument("--adapter")
     s.set_defaults(fn=cmd_serve)

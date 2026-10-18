@@ -39,13 +39,14 @@ def collect_data() -> dict:
         if cj.exists():
             d = json.loads(cj.read_text(encoding="utf-8"))
             claims[r["id"]] = {"verified": len(d.get("verified", [])), "rejected": len(d.get("rejected", []))}
-    usage = defaultdict(lambda: {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cost": 0.0, "seconds": 0.0, "errors": 0})
+    usage = defaultdict(lambda: {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cost": 0.0, "premium": 0.0, "seconds": 0.0, "errors": 0})
     for e in _jsonl(inst / "catalog" / "metering.jsonl"):
         u = usage[e.get("stage") or e.get("task") or "other"]
         u["calls"] += 1
         u["tokens_in"] += e.get("tokens_in") or 0
         u["tokens_out"] += e.get("tokens_out") or 0
         u["cost"] += e.get("cost") or 0
+        u["premium"] += e.get("premium") or 0
         u["seconds"] += e.get("duration_s") or 0
         u["errors"] += 0 if e.get("ok", True) else 1
     gl = wiki / "glossary.json"
@@ -198,7 +199,7 @@ const T={
    <div class="card ${conf?'warn':'ok'}"><b>${conf}</b><span>discrepancies ⚖️</span></div>
    <div class="card ${v&&v.problems.length?'bad':'ok'}"><b>${v?v.ok+'/'+v.facts:'–'}</b><span>citations verified</span></div>
    <div class="card blue"><b>${Object.keys(D.glossary).length}</b><span>glossary terms</span></div>
-   <div class="card"><b>${(sum(D.usage,'tokens_in')+sum(D.usage,'tokens_out')).toLocaleString()}</b><span>model tokens · ${sum(D.usage,'calls')} calls</span></div>
+   <div class="card"><b>${(sum(D.usage,'tokens_in')+sum(D.usage,'tokens_out')).toLocaleString()}</b><span>model tokens · ${sum(D.usage,'calls')} calls · ${sum(D.usage,'premium')||'–'} premium</span></div>
    <div class="card blue"><b>${D.queries.length}</b><span>recent questions</span></div></div>
    <div class="panel"><h3>Start here</h3><div class="links">${[['index.md','Index'],['discrepancies.md','Discrepancies ⚖️'],['glossary.md','Glossary']].filter(p=>D.pages[p[0]]).map(p=>`<a href="#p:${p[0]}">${p[1]}</a>`).join('')}</div></div>
    <div class="panel"><h3>Recent activity</h3>${recent.length?'<ul>'+recent.map(l=>'<li>'+esc(l.slice(2))+'</li>').join('')+'</ul>':'<p class="sub">Nothing yet.</p>'}</div>`},
@@ -208,8 +209,8 @@ const T={
  Discrepancies(){const rows=D.topics.flatMap(t=>t.conflicts.map(c=>`<tr><td><a href="#p:topics/${t.slug}.md">${esc(t.title)}</a></td><td>⚖️ ${esc(c.explanation)}</td></tr>`));
   return head('Discrepancies','Discrepancies ⚖️','Sources that disagree. Experts decide which one wins (authority, validity date).')+(rows.length?`<table><tr><th>Topic</th><th>What disagrees</th></tr>${rows.join('')}</table>`:'<p class="sub">No discrepancies found yet.</p>')},
  Glossary(){return head('Glossary','Glossary','Terms and acronyms found in the sources, by rules (not by the model).')+`<table><tr><th>Term</th><th>Meaning</th><th>Defined in</th></tr>`+Object.entries(D.glossary).map(([k,e])=>`<tr><td><b>${esc(k)}</b></td><td>${esc(e.expansion)}</td><td>${e.cites.slice(0,3).map(c=>`<a href="#p:sources/${c.source_id}.md">${esc((D.sources.find(s=>s.id===c.source_id)||{}).title||c.source_id)}</a> · ${esc(c.locator)}`).join('<br>')}</td></tr>`).join('')+'</table>'},
- Usage(){const rows=Object.entries(D.usage);return head('Usage','AI usage','Every model call is metered: tokens, time, and cost when prices are set in config/models.yaml.')+`<table><tr><th>Stage</th><th>Calls</th><th>Tokens in</th><th>Tokens out</th><th>Cost</th><th>Time (s)</th><th>Errors</th></tr>`+
-  rows.map(([k,u])=>`<tr><td>${esc(k)}</td><td>${u.calls}</td><td>${u.tokens_in.toLocaleString()}</td><td>${u.tokens_out.toLocaleString()}</td><td>${u.cost?u.cost.toFixed(4):'–'}</td><td>${u.seconds.toFixed(1)}</td><td class="${u.errors?'bad':''}">${u.errors}</td></tr>`).join('')+'</table>'},
+ Usage(){const rows=Object.entries(D.usage);return head('Usage','AI usage','Every model call is metered: tokens, time, and cost when prices are set in config/models.yaml.')+`<table><tr><th>Stage</th><th>Calls</th><th>Tokens in</th><th>Tokens out</th><th>Premium requests</th><th>Cost</th><th>Time (s)</th><th>Errors</th></tr>`+
+  rows.map(([k,u])=>`<tr><td>${esc(k)}</td><td>${u.calls}</td><td>${u.tokens_in.toLocaleString()}</td><td>${u.tokens_out.toLocaleString()}</td><td>${u.premium||'–'}</td><td>${u.cost?u.cost.toFixed(4):'–'}</td><td>${u.seconds.toFixed(1)}</td><td class="${u.errors?'bad':''}">${u.errors}</td></tr>`).join('')+'</table>'},
  Questions(){return head('Questions','Recent questions','Asked with kb ask or /kb-ask in Copilot CLI.')+(D.queries.length?`<table><tr><th>When</th><th>Question</th><th>Answered</th><th>Time (s)</th></tr>`+D.queries.map(q=>`<tr><td>${esc(q.at.slice(0,16))}</td><td>${esc(q.question)}</td><td class="${q.not_found?'warn':'ok'}">${q.not_found?'not found':q.sentences+' sentences'}</td><td>${q.seconds}</td></tr>`).join('')+'</table>':'<p class="sub">No questions yet.</p>')},
  Verify(){const v=D.verify;if(!v)return head('Verify','Citation check','')+'<p>Run <code>kb verify</code>.</p>';
   return head('Verify','Citation check','Every quote on every page is matched against its source.')+`<p>${v.pages} pages · ${v.facts} cited facts · <b class="${v.problems.length?'bad':'ok'}">${v.ok} verified</b> · ${v.problems.length} problems</p>`+(v.problems.length?`<table><tr><th>Page</th><th>Line</th><th>Issue</th></tr>${v.problems.map(p=>`<tr><td><a href="#p:${p.page}">${esc(p.page)}</a></td><td>${p.line}</td><td>${esc(p.issue)}</td></tr>`).join('')}</table>`:'')},

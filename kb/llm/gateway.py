@@ -44,11 +44,22 @@ class Metered(LLM):
                 cost = round(tin / 1e6 * price.get("input", 0) + tout / 1e6 * price.get("output", 0), 6)
             ev = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "task": task, "stage": stage,
                   "source_id": source_id, "adapter": self.inner.name, "model": model, "tier": tier,
-                  "tokens_in": tin, "tokens_out": tout, "cost": cost,
+                  "tokens_in": tin, "tokens_out": tout, "cost": cost, "premium": _premium(res),
                   "duration_s": round(time.perf_counter() - t0, 3), "ok": err is None, "error": err}
             self.log_path.parent.mkdir(parents=True, exist_ok=True)
             with self.log_path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(ev, ensure_ascii=False) + "\n")
+
+
+def _premium(res) -> float | None:
+    """Premium requests used by one call (SDK metrics or CLI usage file), when the adapter reports it."""
+    raw = getattr(res, "raw", None)
+    if not isinstance(raw, dict):
+        return None
+    if raw.get("premium") is not None:
+        return raw["premium"]
+    usage = raw.get("usage")
+    return usage.get("totalPremiumRequestCost") if isinstance(usage, dict) else None
 
 
 class Gateway:
