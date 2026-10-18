@@ -20,6 +20,11 @@ Status: **draft**, nothing implemented yet. Pitch: [PITCH.md](PITCH.md). Risks: 
 | D13 | **Core vs client knowledge** with a promotion workflow | future |
 | D14 | **Local transcription (Whisper) is not part of setup**; optional personal module | most laptops have no suitable GPU |
 | D15 | **Rollout order:** Orders rules KB → Inventory System product Q&A → one client / one area → product | see [VISION.md](VISION.md) §1 |
+| D17 | **MVP connectors:** inbox folder, Git repo, Jira, exported files; mailbox/OneDrive/Teams via Microsoft Graph **later** (needs IT) | pluggable, see [ARCHITECTURE.md](ARCHITECTURE.md) |
+| D18 | **Secrets** in Windows Credential Manager (`keyring`), never in the repo | |
+| D19 | **Search:** SQLite FTS5 in MVP; embeddings (RAG) optional later | |
+| D20 | **Glossary** is a separate module; **token & cost meter** is a separate feature; **decision records (ADR)** are a page type | see below |
+| D21 | **Data processing approval:** assumed granted; internal adoption first, external sale not in scope now | |
 | D16 | **Images are sources:** figures and screenshots extracted from PDFs with page, caption and nearby text | enables "where do I click?" answers |
 
 ## Modules
@@ -38,6 +43,10 @@ Status: **draft**, nothing implemented yet. Pitch: [PITCH.md](PITCH.md). Risks: 
 | `verify/` | schema, quote ↔ locator, PDF ↔ title, "does source support sentence" | ✅ |
 | `site/` | static HTML: catalog, pages, status dashboard | ✅ |
 | `query/` | Copilot skill: answer from wiki with citations | ✅ |
+| `glossary/` | terms and acronyms: definition, synonyms, per-client meaning, source citations; used by transcription correction, search synonyms and pages | ✅ |
+| `metering/` | token and cost meter per task / stage / source / model tier; budget limits; cost report on the dashboard | ✅ |
+| `decisions/` | decision records (ADR) extracted from Jira, meetings, emails; status and supersession chain | small |
+| `search/` | SQLite FTS5 index over text chunks, pages, glossary; query = search first, then read | ✅ |
 | `lint/` | stale pages, missing citations, orphan sources | later |
 
 ## Locators per source type
@@ -53,7 +62,7 @@ Status: **draft**, nothing implemented yet. Pitch: [PITCH.md](PITCH.md). Risks: 
 
 ## Repository layout (target)
 ```
-wojnicz/
+woynich-wiki/
 ├── setup.cmd, setup/            # bootstrap (no admin)
 ├── config/                      # profile.yaml (client, authority, sources), models.yaml
 ├── tools/                       # python modules above
@@ -62,3 +71,39 @@ wojnicz/
 ├── docs/                        # pitch, design, analysis, user guide
 └── instance/                    # created by `init`: raw/ catalog/ queue/ wiki/ site/  (never committed to the blueprint)
 ```
+
+## Glossary module
+One file per term in `wiki/glossary/` plus an index:
+```yaml
+term: FDP
+expansion: Flight Duty Period
+definition: "…" — [[OM-A rev 7]] §7.1
+synonyms: [flight duty period, duty period]
+scope: core | client:<id>
+sources: [...]
+```
+Built from three inputs: (1) acronym patterns found by scripts ("Flight Duty Period (FDP)"), (2) glossary sections in documents, (3) terms proposed by the model, which are **only suggestions until confirmed**. Used everywhere: transcript correction, search synonyms, linking terms on pages, onboarding.
+
+## Token & cost meter
+A decorator on the LLM gateway records every call to `catalog/metering.jsonl`: `task, stage, source_id, model, tier, tokens_in, tokens_out, cost, duration`. Prices per model are kept in `config/models.yaml`. It feeds:
+- **budgets** (stop a run when a limit is reached),
+- **dashboard** (cost per source, per page, per question),
+- **business case** (real tokens per question replace the pitch assumptions).
+
+## Decision records (ADR)
+A decision is a first-class page type in `wiki/decisions/`, because "why is it like this?" is the most valuable question.
+```yaml
+id: DEC-0042
+title: Early-start extension of minimum rest
+status: proposed | accepted | superseded | rejected
+date: 2026-05-03
+decided_by: role or forum (e.g. "client workshop", "change board")
+context: … — [[Workshop 2026-03-12]] t. 00:42:10
+decision: … — [[PROJ-1234]] #c5
+consequences: …
+supersedes: DEC-0017
+superseded_by: null
+affects: [[Feature X]], [[Rule Y]]
+```
+- **How decisions get in:** the classifier flags candidates (Jira status changes and resolutions, comments with "agreed / decided / approved", meeting transcript segments, emails); the model drafts a record **only from cited text**; a human confirms. Nothing becomes `accepted` without a source.
+- **How they are used:** feature and configuration pages link to the decisions that shaped them; discrepancy checks compare implementation against the latest accepted decision; the supersession chain answers "what was true on date X".
