@@ -2,6 +2,7 @@
 pitch/assets/
 # instance data (client/project content) and large originals: never in the blueprint
 instance/
+instance-*/
 store/
 # secrets
 .env

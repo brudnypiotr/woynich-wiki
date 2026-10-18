@@ -42,10 +42,15 @@ code_repos:
 Then `kb code-ask "How is minimum rest computed? EXA-142" --evidence` (or `/kb-code` in Copilot): the answer cites
 `repo/path:line@commit`. Try it on the sample: `samples\code-repo` (run `git init` + commit there first).
 
+### Browser app
+`kb serve` opens a local app (127.0.0.1 only): drop files and watch the ingest steps, or open a discussion on a
+topic and ask follow-up questions with citations. Stop it with Ctrl+C.
+
 ### All commands
-`add`, `collect inbox|git|jira`, `ingest`, `ask`, `code-ask`, `search`, `verify`, `site`, `status`, `secrets set|check`, `login`, `llm-smoke`, `plugins`.
+`add`, `collect inbox|git|jira`, `ingest`, `ask`, `code-ask`, `serve`, `search`, `verify`, `site`, `status`, `model list|set|show`, `secrets set|check`, `login`, `llm-smoke`, `plugins`.
 
 ## Documentation
+- [docs/STATUS.md](docs/STATUS.md): what works, what is next, retrospective · [docs/REAL-DATA-TEST.md](docs/REAL-DATA-TEST.md): checklist for the first real documents
 - [docs/PITCH.md](docs/PITCH.md): what it is and why (for managers) · [pitch/index.html](pitch/index.html): 8-slide deck
 - [docs/PRODUCT.md](docs/PRODUCT.md): personas, baseline, gold questions, success criteria
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): patterns, plugins, secrets, search, connectors
