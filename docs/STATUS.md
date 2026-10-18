@@ -6,6 +6,9 @@ Diagnosis in [INGEST-ANALYSIS.md](INGEST-ANALYSIS.md); decision [ADR-0018](decis
 **the model now writes the wiki** (agent session per source, sandboxed; `kb ingest`, `kb ask`, `kb lint`). Added: stop/rollback/remove
 (`kb rollback`, `kb remove`, Cancel in `kb serve`); fixed: topic data was never committed.
 
+Update: v1 removed; one assistant over wiki, code repositories (`code_repos` with descriptions), Jira tools and
+screenshots (`kb ask --image`, `kb code-ask`, `kb chat`, Discuss in `kb serve`). Architecture: [architecture.html](architecture.html).
+
 ## Where we are
 The mini-flow runs **end to end on a standard work laptop** (Windows 11, no admin rights, Windows PowerShell 5.1,
 GPT-6 Luna via GitHub Copilot). On the fictional sample corpus: 4 sources → 19 verified facts, 0 rejected,

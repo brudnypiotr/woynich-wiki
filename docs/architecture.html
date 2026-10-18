@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>woynich-wiki architecture</title>
+<style>
+:root{--navy:#06103d;--navy2:#181a3a;--navy3:#14152f;--blue:#2969f2;--vio:#764bff;--vio-soft:#efeaff;--blue-soft:#e8efff;
+  --bg:#f8f8f8;--card:#fff;--ink:#111827;--ink2:#374151;--mute:#6b7280;--line:#e5e7eb;--ok:#1f9d6b;--ok-soft:#e3f6ee;--warn:#b86e0b;--warn-soft:#fdf1df;--bad:#c23b3b;--bad-soft:#fde8e8}
+@media (prefers-color-scheme:dark){:root{--bg:#0d0f24;--card:#14152f;--ink:#eef0fa;--ink2:#d6dcf7;--mute:#9aa3c7;--line:#262949;--vio-soft:rgba(118,75,255,.18);--blue-soft:rgba(41,105,242,.18);--ok-soft:rgba(31,157,107,.18);--warn-soft:rgba(217,138,27,.18);--bad-soft:rgba(194,59,59,.2)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 'Red Hat Display',system-ui,'Segoe UI',sans-serif}
+header{background:var(--navy2);color:#fff;padding:22px 32px;border-bottom:3px solid var(--vio)}
+header h1{margin:0;font-size:24px;font-weight:800}header p{margin:4px 0 0;color:#b9c1ea}
+.wrap{display:grid;grid-template-columns:240px 1fr}
+nav{background:var(--navy3);padding:18px 12px;position:sticky;top:0;height:100vh;overflow:auto}
+nav a{display:block;color:#c3c9ea;text-decoration:none;padding:7px 12px;border-radius:8px;font-weight:600;font-size:14px}
+nav a:hover{background:rgba(255,255,255,.07);color:#fff}
+main{padding:28px 36px;max-width:1150px}
+section{margin-bottom:44px}
+h2{font-size:22px;color:var(--navy);margin:0 0 6px;font-weight:800}
+@media (prefers-color-scheme:dark){h2,h3{color:#fff}}
+h3{font-size:16px;color:var(--navy);margin:20px 0 8px}
+.kicker{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--vio)}
+p,li{color:var(--ink2)}
+.lead{font-size:16px}
+table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:10px 0 18px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}
+th{background:var(--navy);color:#fff;font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+tr:last-child td{border-bottom:0}
+code{background:var(--vio-soft);padding:1px 6px;border-radius:5px;font-size:13px}
+.grid{display:grid;gap:14px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--vio)}
+.card.blue::before{background:var(--blue)}.card.ok::before{background:var(--ok)}.card.warn::before{background:#d98a1b}
+.card h4{margin:0 0 6px;font-size:15px;color:var(--navy)}@media (prefers-color-scheme:dark){.card h4{color:#fff}}
+.card p,.card li{font-size:14px;margin:4px 0}
+.pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:700}
+.ok{background:var(--ok-soft);color:var(--ok)}.part{background:var(--warn-soft);color:var(--warn)}.no{background:var(--bad-soft);color:var(--bad)}
+.who{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:700}
+.m{background:var(--vio-soft);color:var(--vio)}.s{background:var(--blue-soft);color:var(--blue)}.u{background:var(--ok-soft);color:var(--ok)}.e{background:var(--warn-soft);color:var(--warn)}
+.flow{display:flex;flex-direction:column;gap:8px}
+.step{display:grid;grid-template-columns:34px 1fr auto;gap:12px;align-items:start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.step .n{width:28px;height:28px;border-radius:50%;background:var(--navy);color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px}
+.step.ai .n{background:var(--vio)}.step.ai{border-color:var(--vio)}.step b{color:var(--navy)}@media (prefers-color-scheme:dark){.step b{color:#fff}}
+.step small{color:var(--mute)}
+svg text{font-family:inherit}
+.note{border-left:4px solid var(--vio);background:var(--vio-soft);padding:10px 14px;border-radius:0 10px 10px 0;margin:12px 0}
+.warnbox{border-left:4px solid #d98a1b;background:var(--warn-soft);padding:10px 14px;border-radius:0 10px 10px 0;margin:12px 0}
+@media (max-width:900px){.wrap{grid-template-columns:1fr}nav{position:static;height:auto;display:flex;flex-wrap:wrap}.g2,.g3,.g4{grid-template-columns:1fr}main{padding:20px 16px}}
+</style>
+</head>
+<body>
+<header><h1>woynich-wiki: architecture</h1><p>Project knowledge base with a paper trail · blueprint state of 2026-10-19 · ADR-0018 (the model writes the wiki)</p></header>
+<div class="wrap">
+<nav>
+<a href="#overview">1. Overview</a><a href="#picture">2. Big picture</a><a href="#decisions">3. Who decides what</a>
+<a href="#workflows">4. Workflows</a><a href="#sources">5. Source processing</a><a href="#users">6. End users</a>
+<a href="#modules">7. Modules and scripts</a><a href="#config">8. Configuration</a><a href="#security">9. Security and data</a>
+<a href="#cost">10. Cost and metering</a><a href="#status">11. Implemented / not yet</a><a href="#forgotten">12. Easy to forget</a>
+<a href="#risks">13. Risks and next steps</a>
+</nav>
+<main>
+
+<section id="overview">
+<div class="kicker">1 · Overview</div>
+<h2>What it is</h2>
+<p class="lead">A knowledge base for one project or client area. People add sources (documents, tickets, meeting
+recordings, e-mails, code). <b>The model reads every source completely and writes the wiki</b>: source summaries,
+pages about systems, rules, processes and decisions, linked to each other, with every statement citing the exact page,
+minute, comment or line it comes from. People then ask questions in plain language (in Copilot CLI, the terminal or a
+local browser app); the model answers from the wiki, and when needed from the original sources, the code, Jira and
+screenshots.</p>
+<div class="grid g4">
+<div class="card"><h4>The model is the author</h4><p>Karpathy's LLM Wiki pattern, as in the claude-obsidian plugin. No fixed fact templates.</p></div>
+<div class="card blue"><h4>Scripts are the guard</h4><p>Sandbox, text extraction with locators, checks, commits, rollback, metering.</p></div>
+<div class="card ok"><h4>Every statement has a source</h4><p>Citations to page / minute / comment / line; originals never change.</p></div>
+<div class="card warn"><h4>Local and private</h4><p>Runs on the work laptop, no admin rights; the knowledge stays in a local Git repository.</p></div>
+</div>
+<h3>Blueprint and instance</h3>
+<table><tr><th></th><th>Blueprint (this repository)</th><th>Instance (<code>instance\</code>)</th></tr>
+<tr><td>Contains</td><td>code, prompts, setup, documentation, fictional samples</td><td>the sources, extracted text, the wiki, logs, settings</td></tr>
+<tr><td>Git</td><td>private GitHub repository</td><td>its own local Git repository, never pushed by the tool</td></tr>
+<tr><td>Company data</td><td>never</td><td>yes (stays on the laptop)</td></tr></table>
+</section>
+
+<section id="picture">
+<div class="kicker">2 · Big picture</div>
+<h2>Components and boundaries</h2>
+<svg viewBox="0 0 1060 470" width="100%" role="img" aria-label="Architecture diagram">
+<defs><marker id="ar" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#764bff"/></marker></defs>
+<style>.bx{fill:var(--card);stroke:var(--line);stroke-width:1.5}.hd{font-weight:800;font-size:14px;fill:var(--ink)}.tx{font-size:12px;fill:var(--mute)}
+.vb{fill:var(--vio-soft);stroke:#764bff;stroke-width:1.5}.nb{fill:var(--blue-soft);stroke:#2969f2;stroke-width:1.5}.ln{stroke:#764bff;stroke-width:1.6;fill:none;marker-end:url(#ar)}.dl{stroke:#9aa3c7;stroke-width:1.4;stroke-dasharray:5 4;fill:none;marker-end:url(#ar)}</style>
+<rect class="bx" x="10" y="20" width="190" height="200" rx="12"/><text class="hd" x="26" y="46">People</text>
+<text class="tx" x="26" y="70">curator: adds sources, ingests,</text><text class="tx" x="26" y="86">removes, runs lint</text>
+<text class="tx" x="26" y="110">specialist / newcomer: asks</text><text class="tx" x="26" y="134">developer: code questions</text>
+<text class="tx" x="26" y="158">manager: dashboard</text><text class="tx" x="26" y="182">expert: settles contradictions</text>
+<rect class="nb" x="240" y="20" width="220" height="200" rx="12"/><text class="hd" x="256" y="46">Interfaces</text>
+<text class="tx" x="256" y="70">kb … (command line, kb.cmd)</text><text class="tx" x="256" y="94">Copilot CLI + skills /kb-ask …</text>
+<text class="tx" x="256" y="118">kb serve: browser app</text><text class="tx" x="256" y="134">  (add files, discuss, screenshots)</text>
+<text class="tx" x="256" y="158">dashboard (single HTML file)</text><text class="tx" x="256" y="182">kb chat (terminal conversation)</text>
+<rect class="bx" x="500" y="20" width="250" height="200" rx="12"/><text class="hd" x="516" y="46">Scripts (Python, kb/)</text>
+<text class="tx" x="516" y="70">catalog: register, dedup, extract</text><text class="tx" x="516" y="94">wiki: run ingest session, check, commit</text>
+<text class="tx" x="516" y="118">chat: run question session</text><text class="tx" x="516" y="142">agent: sandbox, metering</text>
+<text class="tx" x="516" y="166">verify, search, site, serve</text><text class="tx" x="516" y="190">gitops, secrets, setup, doctor</text>
+<rect class="vb" x="790" y="20" width="260" height="200" rx="12"/><text class="hd" x="806" y="46">Agent session (Copilot SDK)</text>
+<text class="tx" x="806" y="70">model: GPT-6 Luna (configurable)</text><text class="tx" x="806" y="94">tools: view, glob, grep (read)</text>
+<text class="tx" x="806" y="118">create, edit, apply_patch (write, ingest)</text><text class="tx" x="806" y="142">jira_get, jira_search (questions)</text>
+<text class="tx" x="806" y="166">no shell, no web, no MCP, no memory</text><text class="tx" x="806" y="190">every call checked by the sandbox</text>
+<rect class="bx" x="240" y="270" width="510" height="180" rx="12"/><text class="hd" x="256" y="296">Instance (local Git repository)</text>
+<text class="tx" x="256" y="320">raw/&lt;id&gt;/ original, source.json, text.md (with locators), figures/</text>
+<text class="tx" x="256" y="344">wiki/ index · log · hot · sources/ · entities/ · concepts/ · decisions/ · answers/ · glossary.md</text>
+<text class="tx" x="256" y="368">store/ originals over 20 MB (not in Git) · catalog/ metering, questions · sessions/</text>
+<text class="tx" x="256" y="392">config/ profile.yaml, models.yaml · branding/ · site/ dashboard · reports/</text>
+<text class="tx" x="256" y="420">write access for the model: wiki/ only</text>
+<rect class="nb" x="790" y="270" width="260" height="180" rx="12"/><text class="hd" x="806" y="296">Outside (read-only)</text>
+<text class="tx" x="806" y="320">code repositories (code_repos)</text><text class="tx" x="806" y="344">Jira REST (token in Credential Manager)</text>
+<text class="tx" x="806" y="368">GitHub Copilot API (model)</text><text class="tx" x="806" y="392">screenshots attached by the user</text>
+<rect class="bx" x="10" y="270" width="190" height="180" rx="12"/><text class="hd" x="26" y="296">Inputs</text>
+<text class="tx" x="26" y="320">files: PDF, DOCX, HTML, EML,</text><text class="tx" x="26" y="336">VTT/SRT, text, code</text>
+<text class="tx" x="26" y="360">Jira JQL (collect jira)</text><text class="tx" x="26" y="384">Git repo files (collect git)</text>
+<text class="tx" x="26" y="408">inbox folder</text>
+<path class="ln" d="M200 120 H238"/><path class="ln" d="M460 120 H498"/><path class="ln" d="M750 120 H788"/>
+<path class="ln" d="M625 220 V268"/><path class="ln" d="M920 220 V268"/><path class="dl" d="M880 220 C 820 250, 760 300, 752 330"/>
+<path class="ln" d="M200 360 H238"/>
+</svg>
+</section>
+
+<section id="decisions">
+<div class="kicker">3 · Who decides what</div>
+<h2>Decision matrix</h2>
+<p><span class="who m">Model</span> <span class="who s">Scripts</span> <span class="who u">User</span> <span class="who e">Expert / reviewer</span></p>
+<table><tr><th>Decision</th><th>Who</th><th>How / where</th></tr>
+<tr><td>Which sources enter the knowledge base</td><td><span class="who u">User</span></td><td><code>kb add</code>, upload in <code>kb serve</code>, <code>kb collect</code></td></tr>
+<tr><td>Whether a file is new or a duplicate; where the original is kept</td><td><span class="who s">Scripts</span></td><td>SHA-256 id, Git or <code>store/</code> (&gt; 20 MB)</td></tr>
+<tr><td>How text and locators are extracted</td><td><span class="who s">Scripts</span></td><td>extractor per file type (section 5)</td></tr>
+<tr><td>When ingest runs; stopping it; removing a source</td><td><span class="who u">User</span></td><td><code>kb ingest</code>, Cancel, Ctrl+C, <code>kb remove</code></td></tr>
+<tr><td>What in a source matters and how to read a long source</td><td><span class="who m">Model</span></td><td>agent session, <code>prompts/ingest.md</code></td></tr>
+<tr><td>Which pages to create or update; page structure and wording; links</td><td><span class="who m">Model</span></td><td>source / entity / concept / decision pages, index, log, hot, glossary</td></tr>
+<tr><td>That two sources contradict each other</td><td><span class="who m">Model</span></td><td><code>&gt; [!contradiction]</code> callout on both pages</td></tr>
+<tr><td>Which source wins in a contradiction</td><td><span class="who e">Expert</span></td><td>not decided by the system (no tooling yet)</td></tr>
+<tr><td>What the model may read, write and call</td><td><span class="who s">Scripts</span></td><td>sandbox in <code>kb/knowledge/agent.py</code>, enforced per tool call</td></tr>
+<tr><td>Whether the result is accepted</td><td><span class="who s">Scripts</span></td><td>source page must exist; checks produce warnings; commit or rollback</td></tr>
+<tr><td>Whether a page is correct</td><td><span class="who e">Reviewer</span></td><td>pages stay <code>status: draft</code>; Git diff per ingest (review tooling not yet)</td></tr>
+<tr><td>How to answer a question; whether to look into code, Jira, sources</td><td><span class="who m">Model</span></td><td><code>prompts/chat.md</code>; read-only session</td></tr>
+<tr><td>Which repositories and Jira the model may use</td><td><span class="who u">User</span></td><td><code>code_repos</code>, <code>jira</code> in the profile; token in Credential Manager</td></tr>
+<tr><td>Which model is used</td><td><span class="who u">User</span></td><td><code>kb model set gpt-6-luna</code>; per-task routing in <code>models.yaml</code></td></tr>
+<tr><td>Every change to the knowledge base is recorded</td><td><span class="who s">Scripts</span></td><td>one commit per source / answer / removal / lint</td></tr>
+</table>
+</section>
+
+<section id="workflows">
+<div class="kicker">4 · Workflows</div>
+<h2>All steps, end to end</h2>
+<h3>4.1 Setup (once per laptop)</h3>
+<div class="flow">
+<div class="step"><span class="n">1</span><div><b>doctor.cmd</b> read-only machine check: PowerShell, policies, AppLocker, proxy, reachability, Python, Git, Copilot.<br><small>setup/doctor.ps1 → doctor-report.json</small></div><span class="who s">Scripts</span></div>
+<div class="step"><span class="n">2</span><div><b>setup.cmd</b> private Python 3.12 (installer or embeddable), packages, Git hooks, Copilot runtime, kb.cmd, self-test.<br><small>setup/setup.ps1 → setup.log</small></div><span class="who s">Scripts</span></div>
+<div class="step"><span class="n">3</span><div><b>copilot login</b>, <b>kb llm-smoke</b>, <b>kb model set gpt-6-luna</b>, <b>kb init</b><br><small>instance created as its own Git repository</small></div><span class="who u">User</span></div>
+</div>
+<h3>4.2 Add a source</h3>
+<div class="flow">
+<div class="step"><span class="n">1</span><div><b>Register</b>: SHA-256, id = first 12 characters; duplicate → stop. Original copied unchanged to <code>raw/&lt;id&gt;/</code> or <code>store/</code>.</div><span class="who s">Scripts</span></div>
+<div class="step"><span class="n">2</span><div><b>Extract</b> text with locators to <code>text.md</code>; tables; figures; quality info (<code>needs_ocr</code>) to <code>extract.json</code>.</div><span class="who s">Scripts</span></div>
+<div class="step"><span class="n">3</span><div><b>Commit</b> <code>source(&lt;id&gt;): add …</code>; status <code>extracted</code>.</div><span class="who s">Scripts</span></div>
+</div>
+<h3>4.3 Ingest (the model writes the wiki), one agent session per source</h3>
+<div class="flow">
+<div class="step"><span class="n">1</span><div><b>Prepare</b>: wiki skeleton, readable source page name, prompt with title, kind, locators, figures, hints for transcripts and long sources. Marker "ingest running".</div><span class="who s">Scripts</span></div>
+<div class="step ai"><span class="n">2</span><div><b>Read</b> <code>wiki/index.md</code>, <code>hot.md</code>, then the whole source (in parts if long), existing related pages.</div><span class="who m">Model</span></div>
+<div class="step ai"><span class="n">3</span><div><b>Write</b> the source page, create or update entity / concept / decision pages, glossary, contradiction callouts, index, log, hot. Inline citations <code>([[source]] p. 12)</code>.</div><span class="who m">Model</span></div>
+<div class="step"><span class="n">4</span><div><b>Sandbox</b> during the session: every tool call checked (read inside the instance, write inside <code>wiki/</code>); live progress; Cancel denies further calls.</div><span class="who s">Scripts</span></div>
+<div class="step"><span class="n">5</span><div><b>Check</b>: source page exists (else fail); links resolve; citations point to an existing place in the source; uncited lines; contradictions counted → <code>reports/verify.json</code>.</div><span class="who s">Scripts</span></div>
+<div class="step"><span class="n">6</span><div><b>Commit</b> <code>ingest(&lt;id&gt;): … N pages created, M updated</code> with model, premium requests, tokens, tool calls, page list. Status <code>ingested</code>. Dashboard rebuilt (in serve).</div><span class="who s">Scripts</span></div>
+<div class="step"><span class="n">!</span><div><b>On error or Cancel</b>: everything not committed is rolled back; the source stays registered (ingest again or remove).</div><span class="who s">Scripts</span></div>
+</div>
+<h3>4.4 Ask / discuss / code question</h3>
+<div class="flow">
+<div class="step"><span class="n">1</span><div><b>Question</b> via <code>kb ask</code>, <code>kb code-ask</code>, <code>kb chat</code>, Copilot CLI skill, or Discuss in <code>kb serve</code> (with history, topic, screenshots).</div><span class="who u">User</span></div>
+<div class="step ai"><span class="n">2</span><div><b>Read</b> index → relevant pages → sources at cited places; if needed grep and read code in the configured repositories; <code>jira_get</code>; look at the image.</div><span class="who m">Model</span></div>
+<div class="step ai"><span class="n">3</span><div><b>Answer</b> with citations (<code>[[page]]</code>, source place, <code>repo/path:line@commit</code>, <code>KEY#cN</code>) or <code>NOT FOUND:</code>.</div><span class="who m">Model</span></div>
+<div class="step"><span class="n">4</span><div><b>Log</b> question, time, premium request; optional <b>save</b> as <code>wiki/answers/…</code> (commit).</div><span class="who s">Scripts</span></div>
+</div>
+<h3>4.5 Maintenance</h3>
+<table><tr><th>Operation</th><th>What happens</th><th>Who</th></tr>
+<tr><td><code>kb remove &lt;id&gt;</code></td><td>original, text and source page deleted; the model removes knowledge only that source supported from other pages; one <code>fix(&lt;id&gt;)</code> commit</td><td><span class="who u">User</span> <span class="who m">Model</span> <span class="who s">Scripts</span></td></tr>
+<tr><td><code>kb rollback</code></td><td>leftovers of an interrupted ingest discarded (tracked files restored, newer untracked files deleted)</td><td><span class="who s">Scripts</span></td></tr>
+<tr><td><code>kb lint</code></td><td>the model fixes index, broken links, orphans, duplicates, missing contradiction callouts; report in <code>wiki/meta/</code>; commit</td><td><span class="who m">Model</span></td></tr>
+<tr><td><code>kb verify</code></td><td>checks only, no changes</td><td><span class="who s">Scripts</span></td></tr>
+<tr><td><code>kb quota</code>, dashboard Usage</td><td>premium requests left this month; what the knowledge base used per stage</td><td><span class="who s">Scripts</span></td></tr></table>
+</section>
+
+<section id="sources">
+<div class="kicker">5 · Source processing</div>
+<h2>What happens to each kind of source</h2>
+<table><tr><th>Source</th><th>Extraction (scripts)</th><th>Locator the model cites</th><th>Status</th></tr>
+<tr><td>PDF</td><td>text per page (pypdfium2), tables as Markdown (pdfplumber), figures as PNG per page; pages without text flagged <code>needs_ocr</code></td><td><code>p. 12</code></td><td><span class="pill ok">done</span> OCR <span class="pill no">not yet</span></td></tr>
+<tr><td>Word (.docx)</td><td>paragraphs and headings</td><td><code>¶ 3</code></td><td><span class="pill ok">done</span></td></tr>
+<tr><td>Web page (.html)</td><td>visible text, title</td><td><code>¶ 3</code></td><td><span class="pill ok">done</span></td></tr>
+<tr><td>E-mail (.eml)</td><td>headers, body paragraphs, attachment names</td><td><code>¶ 3</code></td><td><span class="pill ok">done</span> attachments as sources <span class="pill no">not yet</span></td></tr>
+<tr><td>Teams / meeting transcript (.vtt, .srt)</td><td>speaker lines, one time marker per minute</td><td><code>t. 00:12:30</code></td><td><span class="pill ok">done</span></td></tr>
+<tr><td>Jira issue (.jira.json, <code>kb collect jira</code>)</td><td>summary, status, description, comments (Cloud ADF or Data Center text)</td><td><code>#description</code>, <code>#c2</code></td><td><span class="pill ok">done</span></td></tr>
+<tr><td>Code / text files</td><td>line markers every 10 lines; Git repository files at a commit (<code>kb collect git</code>)</td><td><code>L 120</code></td><td><span class="pill ok">done</span></td></tr>
+<tr><td>Code repositories (live)</td><td>not ingested: the model reads them during questions</td><td><code>repo/path:line@commit</code></td><td><span class="pill ok">done</span></td></tr>
+<tr><td>Screenshots</td><td>attached to a question</td><td>"(attached screenshot)"</td><td><span class="pill ok">done</span> as wiki sources <span class="pill no">not yet</span></td></tr>
+<tr><td>Excel, Outlook .msg, Confluence, OneDrive / Teams (Graph)</td><td>-</td><td>-</td><td><span class="pill no">not yet</span></td></tr></table>
+<div class="note">Why scripts still extract text: the model must cite exact places. Markers like <code>&lt;!-- p. 12 --&gt;</code> make every page, minute and comment addressable, and let code check that a citation exists.</div>
+</section>
+
+<section id="users">
+<div class="kicker">6 · End users</div>
+<h2>How people interact with it</h2>
+<div class="grid g2">
+<div class="card"><h4>Specialist / newcomer: asks</h4><ul><li>Copilot CLI in the repo folder: plain question or <code>/kb-ask</code>.</li><li><code>kb serve</code> → Discuss: a topic, follow-up questions, Ctrl+V a screenshot, click citations.</li><li>Answer in a few sentences, each with its source; <code>NOT FOUND</code> instead of guessing.</li></ul></div>
+<div class="card blue"><h4>Curator: feeds and looks after the wiki</h4><ul><li><code>kb serve</code> → Add sources: drop files, watch the model read and write, Cancel.</li><li><code>kb remove</code>, <code>kb lint</code>, <code>kb verify</code>, <code>kb quota</code>.</li><li>Reviews the Git diff after an ingest.</li></ul></div>
+<div class="card ok"><h4>Developer: code questions</h4><ul><li><code>kb code-ask "…" --evidence</code> or <code>/kb-code</code>; "question about the code" in Discuss.</li><li>Wiki + code + Jira in one answer, cited to <code>file:line@commit</code>.</li></ul></div>
+<div class="card warn"><h4>Manager: state at a glance</h4><ul><li>Dashboard: sources, pages, contradictions, citation check, premium requests, recent questions.</li><li>Opens offline from one HTML file; optional logo from <code>instance\branding\</code>.</li></ul></div>
+</div>
+</section>
+
+<section id="modules">
+<div class="kicker">7 · Modules and scripts</div>
+<h2>Code map</h2>
+<table><tr><th>Path</th><th>Responsibility</th></tr>
+<tr><td><code>kb/cli.py</code></td><td>all <code>kb</code> commands</td></tr>
+<tr><td><code>kb/knowledge/agent.py</code></td><td>agent session with the Copilot SDK; sandbox (tool and path policy); progress; cancel; metering</td></tr>
+<tr><td><code>kb/knowledge/wiki.py</code></td><td>ingest per source (prepare, session, check, commit, rollback); save answers; cleanup after remove; lint</td></tr>
+<tr><td><code>kb/knowledge/chat.py</code></td><td>questions and conversations: wiki + code repositories + Jira tools + images; <code>kb repos</code></td></tr>
+<tr><td><code>prompts/*.md</code></td><td>the model's instructions: <code>ingest</code>, <code>chat</code>, <code>remove</code>, <code>lint</code></td></tr>
+<tr><td><code>kb/knowledge/catalog.py</code></td><td>instance init, register, dedup, extract, inbox, rollback, remove</td></tr>
+<tr><td><code>kb/knowledge/verify.py</code></td><td>links, citations, uncited lines, contradictions</td></tr>
+<tr><td><code>kb/knowledge/search.py</code></td><td>SQLite FTS5 over sources and pages (<code>kb search</code>, no model)</td></tr>
+<tr><td><code>kb/extractors/</code></td><td>PDF, DOCX, HTML, e-mail, transcripts, Jira JSON, code, text</td></tr>
+<tr><td><code>kb/connectors/</code></td><td>inbox folder, Git repository at a ref, Jira (JQL)</td></tr>
+<tr><td><code>kb/llm/</code></td><td>model routing and override per task, adapters (SDK, CLI, fake), smoke test, quota</td></tr>
+<tr><td><code>kb/publish/site.py</code>, <code>serve.py</code></td><td>dashboard; local web app (upload with steps, Discuss, screenshots)</td></tr>
+<tr><td><code>kb/core/</code></td><td>config, plugin registry, schemas, Git commits, secrets (Credential Manager), pre-commit guard</td></tr>
+<tr><td><code>setup/</code>, <code>doctor.cmd</code>, <code>setup.cmd</code></td><td>Windows bootstrap without admin rights (PowerShell 5.1 compatible)</td></tr>
+<tr><td><code>AGENTS.md</code>, <code>.agents/skills/</code></td><td>Copilot CLI instructions and skills: kb-add, kb-ingest, kb-ask, kb-code, kb-status, kb-verify</td></tr>
+<tr><td><code>tests/</code></td><td>30 tests offline, with a scripted agent instead of the model</td></tr></table>
+</section>
+
+<section id="config">
+<div class="kicker">8 · Configuration</div>
+<h2>Where settings live</h2>
+<table><tr><th>File</th><th>Settings</th></tr>
+<tr><td><code>instance\config\profile.yaml</code> (overrides <code>config\profile.yaml</code>)</td><td><code>instance.title</code>; <code>code_repos</code> (name, path, description); <code>jira</code> (base_url, email for Cloud); authority levels (reserved); <code>store.max_git_bytes</code></td></tr>
+<tr><td><code>instance\config\models.yaml</code></td><td><code>model_override</code> (set by <code>kb model set</code>); tiers per task; <code>agent.timeout_s</code>; budget; prices</td></tr>
+<tr><td>Windows Credential Manager</td><td>secrets only: <code>kb secrets set jira-token</code></td></tr>
+<tr><td>Environment</td><td><code>KB_INSTANCE</code> (instance folder), <code>KB_MODEL</code> (one-off model override)</td></tr>
+<tr><td><code>config\plugins.yaml</code></td><td>extra connectors / extractors without changing the core</td></tr></table>
+</section>
+
+<section id="security">
+<div class="kicker">9 · Security and data</div>
+<h2>Controls</h2>
+<div class="grid g2">
+<div class="card"><h4>Sandbox for the model</h4><p>Allowed tools only; read inside the instance (and configured repositories); write only in <code>wiki/</code>; questions are read-only; denied calls are logged and counted in the commit.</p></div>
+<div class="card"><h4>Sources are data</h4><p>Prompts say so explicitly; even if a document contains instructions, the model cannot run commands or reach the network.</p></div>
+<div class="card blue"><h4>Secrets</h4><p>Only in Windows Credential Manager; the pre-commit hook blocks tokens and keys in both repositories.</p></div>
+<div class="card blue"><h4>Local app</h4><p><code>kb serve</code> listens on 127.0.0.1 only and needs a per-start token, so other web pages cannot call it.</p></div>
+<div class="card ok"><h4>Traceability</h4><p>Originals unchanged; one commit per change with model and cost; every page change visible as a diff.</p></div>
+<div class="card warn"><h4>Removal and history</h4><p><code>kb remove</code> deletes the current files, but the instance's Git history still contains them. True erasure needs a history rewrite (not built).</p></div>
+</div>
+</section>
+
+<section id="cost">
+<div class="kicker">10 · Cost and metering</div>
+<h2>What it costs</h2>
+<table><tr><th>Operation</th><th>Premium requests</th><th>Tokens (observed on samples)</th><th>Time</th></tr>
+<tr><td>Ingest one source</td><td>1 (one agent session)</td><td>50k–90k</td><td>~1 min for short sources</td></tr>
+<tr><td>Question / chat turn / code question</td><td>1</td><td>20k–60k</td><td>10–30 s</td></tr>
+<tr><td>Remove with cleanup, lint</td><td>1 each</td><td>depends on wiki size</td><td></td></tr></table>
+<p>Every session is written to <code>catalog\metering.jsonl</code> (premium requests, tokens, time, tool calls, denied calls) and shown in the dashboard. <code>kb quota</code> reads the remaining monthly entitlement from GitHub. If billing moves to tokens / AI credits, the meter already records tokens and AI units.</p>
+</section>
+
+<section id="status">
+<div class="kicker">11 · Implemented / not yet</div>
+<h2>Capabilities</h2>
+<table><tr><th>Capability</th><th>Status</th><th>Notes</th></tr>
+<tr><td>Windows setup without admin, doctor, self-test</td><td><span class="pill ok">done</span></td><td>verified on the work laptop</td></tr>
+<tr><td>Model from scripts, one model for all tasks (GPT-6 Luna), quota</td><td><span class="pill ok">done</span></td><td></td></tr>
+<tr><td>Sources: files, inbox, Jira JQL, Git repository files</td><td><span class="pill ok">done</span></td><td></td></tr>
+<tr><td>Ingest written by the model (sources, entities, concepts, decisions, glossary, index, log, hot, contradictions)</td><td><span class="pill ok">done</span></td><td>ADR-0018</td></tr>
+<tr><td>Checks: links, citation places, uncited lines</td><td><span class="pill ok">done</span></td><td>warnings, no deletions</td></tr>
+<tr><td>Questions, conversation, code questions, Jira tools, screenshots</td><td><span class="pill ok">done</span></td><td>CLI, Copilot CLI, browser</td></tr>
+<tr><td>Cancel, rollback, remove with cleanup, lint</td><td><span class="pill ok">done</span></td><td></td></tr>
+<tr><td>Dashboard, browser app, Copilot skills</td><td><span class="pill ok">done</span></td><td>skills not yet tried in real Copilot CLI</td></tr>
+<tr><td>Long PDFs (100+ pages) with GPT-6 Luna</td><td><span class="pill part">to verify</span></td><td>the model reads in parts; context limits unknown</td></tr>
+<tr><td>"What to emphasise" hint before ingest</td><td><span class="pill no">not yet</span></td><td>claude-obsidian asks this; easy to add</td></tr>
+<tr><td>Semantic check "is this sentence supported by its citation"</td><td><span class="pill no">not yet</span></td><td>today: only that the cited place exists</td></tr>
+<tr><td>Review workflow (draft → reviewed), corrections from the app</td><td><span class="pill no">not yet</span></td><td></td></tr>
+<tr><td>Authority and validity dates deciding contradictions; new version of a source</td><td><span class="pill no">not yet</span></td><td>fields exist (ADR-0006)</td></tr>
+<tr><td>OCR, Excel, .msg, Confluence, Microsoft Graph, local transcription</td><td><span class="pill no">not yet</span></td><td></td></tr>
+<tr><td>Gold-set evaluation (30 questions), Windows CI</td><td><span class="pill no">not yet</span></td><td></td></tr>
+<tr><td>Multi-user: shared instance, queue as a service</td><td><span class="pill no">not yet</span></td><td>today one person per instance</td></tr></table>
+</section>
+
+<section id="forgotten">
+<div class="kicker">12 · Easy to forget</div>
+<h2>Questions this architecture still has to answer</h2>
+<div class="grid g2">
+<div class="card"><h4>Who reviews the model's pages?</h4><p>Pages stay draft. Without a review habit (owner per area, diff after each ingest), errors accumulate silently.</p></div>
+<div class="card"><h4>New version of a document</h4><p>A changed file gets a new id and is ingested as a new source. The model may notice it supersedes the old one, but there is no explicit "supersedes" step yet.</p></div>
+<div class="card"><h4>Prompt changes</h4><p>Prompts shape the whole wiki. Their version is not recorded in commits yet; after a prompt change, older pages follow older rules.</p></div>
+<div class="card"><h4>Model upgrade</h4><p>A stronger model can re-ingest the same sources. Decide whether to rebuild the wiki from scratch or let the new model update existing pages.</p></div>
+<div class="card"><h4>Backup</h4><p>The instance is a local Git repository plus <code>store\</code> (not in Git). A copy to a company share or a company Git server is not set up.</p></div>
+<div class="card"><h4>Two writers at once</h4><p><code>kb serve</code> locks within its own process only. Running <code>kb ingest</code> in a terminal at the same time can conflict; use one at a time.</p></div>
+<div class="card"><h4>Language</h4><p>The wiki is in English; sources may be Polish. The model translates when writing; quotes in the original language are not enforced.</p></div>
+<div class="card"><h4>Erasure</h4><p>Removing a source does not remove it from Git history (see section 9).</p></div>
+</div>
+</section>
+
+<section id="risks">
+<div class="kicker">13 · Risks and next steps</div>
+<h2>What to watch</h2>
+<table><tr><th>Risk</th><th>Control today</th><th>Next</th></tr>
+<tr><td>The model invents or over-generalises</td><td>citations required; places checked; NOT FOUND rule; draft status</td><td>semantic support check; review workflow</td></tr>
+<tr><td>A good page is rewritten badly</td><td>one commit per ingest; diff; revert</td><td>show diff in the app; lint</td></tr>
+<tr><td>Page sprawl and duplicates</td><td>prompt prefers updating; <code>kb lint</code></td><td>lint report in the dashboard</td></tr>
+<tr><td>GPT-6 Luna too weak for long or complex sources</td><td>reading in parts; one model setting</td><td>test on 50–100 page documents; stronger model for writing when funded</td></tr>
+<tr><td>Premium request budget</td><td><code>kb quota</code>; meter per session</td><td>confirm before large batches</td></tr></table>
+<div class="note"><b>Next steps:</b> re-run the four knowledge-sharing transcripts on a clean instance; one 30–50 page Orders document; configure the rules repository in <code>code_repos</code> and ask code questions; try the skills in Copilot CLI.</div>
+</section>
+</main>
+</div>
+</body>
+</html>

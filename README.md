@@ -54,6 +54,7 @@ Check with `kb repos`. Then:
 `add`, `collect inbox|git|jira`, `ingest`, `ask`, `code-ask`, `chat`, `repos`, `lint`, `remove`, `rollback`, `serve`, `search`, `verify`, `site`, `status`, `model list|set|show`, `secrets set|check`, `login`, `llm-smoke`, `plugins`.
 
 ## Documentation
+- [docs/architecture.html](docs/architecture.html): architecture (who decides what, workflows, source processing, modules, status) — open in a browser
 - [docs/STATUS.md](docs/STATUS.md): what works, what is next, retrospective · [docs/REAL-DATA-TEST.md](docs/REAL-DATA-TEST.md): checklist for the first real documents
 - [docs/PITCH.md](docs/PITCH.md): what it is and why (for managers) · [pitch/index.html](pitch/index.html): 8-slide deck
 - [docs/PRODUCT.md](docs/PRODUCT.md): personas, baseline, gold questions, success criteria
