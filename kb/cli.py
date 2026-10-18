@@ -158,14 +158,16 @@ def cmd_llm_smoke(a) -> int:
 
 
 def cmd_login(a) -> int:
-    """Sign in to GitHub Copilot with the runtime downloaded by the Copilot SDK (device / browser flow)."""
+    """Sign in to GitHub Copilot once. The SDK reuses the credentials stored by the Copilot CLI login
+    (or COPILOT_GITHUB_TOKEN / GH_TOKEN). The runtime bundled with the SDK has no `login` command."""
+    import shutil
     import subprocess
-    try:
-        from copilot import _cli_download as dl
-    except ImportError:
-        print("Copilot SDK not installed. Run setup.cmd first."); return 2
-    cli = dl.get_cached_cli_path() or dl.download_cli()
-    return subprocess.call([cli, "login"])
+    cli = shutil.which("copilot")
+    if cli:
+        return subprocess.call([cli, "login"])
+    print("GitHub Copilot CLI not found. Install it (winget install GitHub.Copilot, or npm i -g @github/copilot),\n"
+          "run `copilot login` once, then `kb llm-smoke`. Alternative: set COPILOT_GITHUB_TOKEN for this user.")
+    return 2
 
 
 def cmd_secrets(a) -> int:
