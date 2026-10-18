@@ -39,7 +39,7 @@ Jira JSON, code, text) · `knowledge` (catalog, search, ingest, pages, glossary,
 | Decision log (ADR page type), corrections workflow | D20, trust slide | |
 | Review workflow (draft → reviewed) | ADR-0005 | all pages stay `draft` |
 | Gold-set evaluation script (30 questions) | PRODUCT.md B1 | template only |
-| Premium-request meter | cost feature | tokens are metered; premium requests are not yet |
+| Remove a source (`kb remove`), cancel a running ingest from the app | usability | today: Ctrl+C and Git reset in the instance |
 | Semantic search (embeddings) | D19 | only if FTS5 measurably misses |
 
 ## Architecture assumptions deferred
