@@ -175,18 +175,31 @@ def _reject_permission(request, invocation):
 
 
 def _final_text(events: list[dict]) -> str | None:
-    """Best effort: last assistant message content in the JSONL event stream (format verified in spike S1)."""
-    found = None
+    """Last `assistant.message` content in the JSONL event stream (never reasoning or streaming deltas);
+    falls back to a `result` event."""
+    final = fallback = None
     for ev in events:
         t = str(ev.get("type", ""))
+        if "reasoning" in t or "delta" in t:
+            continue
         data = ev.get("data") if isinstance(ev.get("data"), dict) else ev
         content = data.get("content") or data.get("text") or data.get("message")
-        if isinstance(content, str) and ("assistant" in t or "message" in t or "result" in t):
-            found = content
-    return found
+        if not isinstance(content, str) or not content.strip():
+            continue
+        if t == "assistant.message":
+            final = content
+        elif t == "result" or "assistant" in t:
+            fallback = content
+    return final or fallback
 
 
 def _sum_tokens(obj) -> tuple[int | None, int | None]:
+    """Tokens from the CLI usage file. It repeats the same numbers in modelMetrics, agentMetrics and
+    providerModelMetrics, so read modelMetrics only; walk the whole object only for other formats."""
+    if isinstance(obj, dict) and isinstance(obj.get("modelMetrics"), dict):
+        tin = sum(int((m.get("usage") or {}).get("inputTokens") or 0) for m in obj["modelMetrics"].values())
+        tout = sum(int((m.get("usage") or {}).get("outputTokens") or 0) for m in obj["modelMetrics"].values())
+        return tin, tout
     tin = tout = 0
     seen = False
 

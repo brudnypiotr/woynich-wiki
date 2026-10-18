@@ -43,3 +43,15 @@ def test_cli_npm_shim_runs_node(tmp_path, monkeypatch):
     monkeypatch.setattr(adapters.shutil, "which", lambda c: str(shim) if c == "copilot" else None)
     argv = adapters.CopilotCLIAdapter().argv()
     assert argv[0].endswith("node.exe") and argv[1].replace("\\", "/").endswith("node_modules/@github/copilot/npm-loader.js")
+
+
+def test_cli_parsing_final_message_and_tokens():
+    from kb.llm.adapters import _final_text, _sum_tokens
+    events = [{"type": "assistant.reasoning", "data": {"content": "**thinking**"}},
+              {"type": "assistant.message", "data": {"content": '{"claims": []}'}},
+              {"type": "assistant.reasoning_delta", "data": {"content": "x"}}]
+    assert _final_text(events) == '{"claims": []}'
+    u = {"modelMetrics": {"m": {"usage": {"inputTokens": 100, "outputTokens": 7}}},
+         "agentMetrics": {"main": {"modelMetrics": {"m": {"usage": {"inputTokens": 100, "outputTokens": 7}}}}},
+         "providerModelMetrics": [{"metrics": {"usage": {"inputTokens": 100, "outputTokens": 7}}}]}
+    assert _sum_tokens(u) == (100, 7)
