@@ -21,3 +21,12 @@ scope_default: client           # core | client
 # Large originals live outside git, addressed by hash.
 store:
   max_git_bytes: 20000000        # 20 MB
+
+# Code repositories for `kb code-ask` (read-only git grep at a fixed ref). Paths relative to the blueprint folder.
+code_repos: []
+#  - {name: inventory-service, path: ../inventory-service, ref: main, globs: ["*.java", "*.xml"]}
+
+# Jira for `kb collect jira --jql "..."`. Token: `kb secrets set jira-token` (never in this file).
+jira: {}
+#  base_url: https://jira.example.com      # Data Center: personal access token, no email
+#  email: you@example.com                  # Jira Cloud only (basic auth with API token)
