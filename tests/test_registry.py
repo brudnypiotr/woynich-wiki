@@ -6,7 +6,7 @@ def test_new_connector_via_config_only(tmp_path):
     plugins = {"connectors": {"dummy": "tests.dummy_plugin:DummyConnector"}}
     c = registry.create("connectors", "dummy", plugins=plugins)
     assert list(c.list()) == ["a", "b"]
-    assert c.fetch("a", tmp_path).path.read_text() == "a"
+    assert c.fetch("a", tmp_path).path.read_text(encoding="utf-8") == "a"
 
 
 def test_default_plugins_resolve():

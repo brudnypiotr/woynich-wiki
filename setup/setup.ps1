@@ -217,6 +217,7 @@ $shim = @"
 rem Runs from any folder, so relative file paths (kb add .\file.pdf) keep working.
 setlocal
 set "PYTHONPATH=%~dp0"
+set "PYTHONUTF8=1"
 "$venvPy" -m kb %*
 exit /b %ERRORLEVEL%
 "@

@@ -180,6 +180,12 @@ def cmd_secrets(a) -> int:
 
 
 def main(argv=None) -> int:
+    # Copilot CLI and pipes capture our output: on Windows that would be cp1252 and fail on "·" or "⚖️".
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser(prog="kb", description="woynich-wiki knowledge base")
     ap.add_argument("--version", action="version", version=f"woynich-wiki {__version__}")
     sub = ap.add_subparsers(dest="cmd", required=True)

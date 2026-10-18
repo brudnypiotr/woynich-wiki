@@ -33,7 +33,7 @@ def test_add_extracts_with_locators_and_commits(kb, instance):
     assert set(recs) == {"document", "transcript", "ticket", "email"}
     assert all(r["status"] == "extracted" for r in recs.values())
     assert recs["ticket"]["title"].startswith("EXA-142: ")
-    pdf_text = (instance / "raw" / recs["document"]["id"] / "text.md").read_text()
+    pdf_text = (instance / "raw" / recs["document"]["id"] / "text.md").read_text(encoding="utf-8")
     assert "<!-- p. 3 -->" in pdf_text and "12 hours" in pdf_text
     assert sum(m.startswith("source(") for m in git_log(instance)) == 4
     again, created = catalog.add_file(SAMPLES / "EXA-142.jira.json")
@@ -50,10 +50,10 @@ def test_ingest_verifies_quotes_flags_discrepancy(kb, instance):
     res = ingest.ingest_pending(kb)
     assert len(res) == 4 and all(r["rejected"] >= 1 for r in res)  # invented quote rejected every time
     w = instance / "wiki"
-    topic = (w / "topics" / "minimum-rest.md").read_text()
+    topic = (w / "topics" / "minimum-rest.md").read_text(encoding="utf-8")
     assert "Invented fact" not in topic and "Bad ref." not in topic
-    assert "⚖️" in (w / "discrepancies.md").read_text()
-    assert "FDP" in (w / "glossary.md").read_text() and "WOCL" in (w / "glossary.md").read_text()
+    assert "⚖️" in (w / "discrepancies.md").read_text(encoding="utf-8")
+    assert "FDP" in (w / "glossary.md").read_text(encoding="utf-8") and "WOCL" in (w / "glossary.md").read_text(encoding="utf-8")
     v = verify.verify_all()
     assert v["facts"] > 0 and not v["problems"]
     assert sum(m.startswith("ingest(") for m in git_log(instance)) == 4
@@ -62,10 +62,10 @@ def test_ingest_verifies_quotes_flags_discrepancy(kb, instance):
 def test_verify_catches_tampered_quote(kb, instance):
     ingest.ingest_pending(kb)
     p = instance / "wiki" / "topics" / "minimum-rest.md"
-    lines = p.read_text().splitlines()
+    lines = p.read_text(encoding="utf-8").splitlines()
     i = next(i for i, l in enumerate(lines) if l.startswith('  > "'))
     lines[i] = '  > "a quote that nobody ever wrote anywhere"'
-    p.write_text("\n".join(lines))
+    p.write_text("\n".join(lines), encoding="utf-8")
     v = verify.verify_all()
     assert any(pr["issue"] == "quote not found in source" for pr in v["problems"])
 
@@ -75,7 +75,7 @@ def test_ask_cites_and_logs(kb, instance):
     res = ask.answer("minimum rest at home base", kb, save=True)
     assert not res["not_found"] and "sources/" in ask.render(res)
     assert Path(res["saved"]).exists()
-    assert json.loads((instance / "catalog" / "queries.jsonl").read_text().splitlines()[-1])["sentences"] == 1
+    assert json.loads((instance / "catalog" / "queries.jsonl").read_text(encoding="utf-8").splitlines()[-1])["sentences"] == 1
     assert ask.answer("zzzz qqqq", kb)["not_found"]
 
 
@@ -95,5 +95,5 @@ def test_code_ask_cites_path_line_commit(kb, instance, tmp_path):
 
 def test_site_builds(kb, instance):
     ingest.ingest_pending(kb)
-    html = site.build().read_text()
+    html = site.build().read_text(encoding="utf-8")
     assert "const D=" in html and "minimum-rest" in html and "</script>" in html

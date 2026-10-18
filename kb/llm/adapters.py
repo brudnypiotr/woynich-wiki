@@ -45,7 +45,7 @@ class CopilotCLIAdapter(LLM):
         """CLI versions differ (e.g. --usage-output-file appeared in 1.0.81); detect from --help once."""
         if not hasattr(self, "_help"):
             try:
-                r = subprocess.run([self.command, "--help"], capture_output=True, text=True, timeout=60)
+                r = subprocess.run([self.command, "--help"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
                 self._help = r.stdout + r.stderr
             except Exception:
                 self._help = ""

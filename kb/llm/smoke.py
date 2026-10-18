@@ -62,7 +62,7 @@ def run() -> dict:
     if cli:
         for args in (["--version"], ["--help"]):
             try:
-                r = subprocess.run([cli, *args], capture_output=True, text=True, timeout=60)
+                r = subprocess.run([cli, *args], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
                 report[f"copilot {' '.join(args)}"] = (r.stdout or r.stderr)[:6000]
             except Exception as e:
                 report[f"copilot {' '.join(args)}"] = f"error: {e}"

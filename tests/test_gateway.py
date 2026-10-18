@@ -14,7 +14,7 @@ def test_routing_and_metering(tmp_path):
     gw = Gateway(cfg=CFG, log_path=log)
     r = gw.run("classify", "x" * 40, source_id="abc")
     assert r.model == "m-basic"
-    ev = json.loads(log.read_text().splitlines()[0])
+    ev = json.loads(log.read_text(encoding="utf-8").splitlines()[0])
     assert ev["task"] == "classify" and ev["tier"] == "basic" and ev["ok"] and ev["tokens_in"] == 10 and ev["cost"] is not None
     assert gw.run("summarize", "y").model == "m-std"  # unknown task -> standard tier
 
