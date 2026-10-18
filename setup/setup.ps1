@@ -77,11 +77,12 @@ function Find-Python {
   $ErrorActionPreference = 'Continue'
   foreach ($exe in $candidates) {
     if (-not (Test-Path $exe)) { continue }
-    $pyArgs = @('-c', 'import sys; print("PYVER=%d.%d" % sys.version_info[:2])')
+    # No double quotes in the code: Windows PowerShell 5.1 strips them from native arguments.
+    $pyArgs = @('-c', 'import sys; print(sys.version_info[:2])')
     if ((Split-Path $exe -Leaf) -eq 'py.exe') { $pyArgs = @('-3') + $pyArgs }
     try {
       $out = (& $exe @pyArgs 2>&1 | ForEach-Object { "$_" }) -join "`n"
-      if ($out -match 'PYVER=(\d+)\.(\d+)') {
+      if ($out -match '\((\d+), (\d+)\)') {
         $v = "$($Matches[1]).$($Matches[2])"
         if ([int]$Matches[1] -gt 3 -or ([int]$Matches[1] -eq 3 -and [int]$Matches[2] -ge 11)) {
           return @{ exe = $exe; version = $v; embeddable = (Test-Path (Join-Path (Split-Path $exe) 'python312._pth')) }
@@ -157,7 +158,10 @@ try {
   if ($pipCode -ne 0) { throw "pip exit code $pipCode" }
   Step 'Python packages' 'OK' 'requirements.txt installed'
   # Make `import kb` work from any folder (the embeddable Python ignores PYTHONPATH): a .pth file in site-packages.
+  $ErrorActionPreference = 'Continue'
   $site = (& $venvPy -c "import sysconfig; print(sysconfig.get_paths()['purelib'])" 2>$null | Select-Object -Last 1)
+  $ErrorActionPreference = 'Stop'
+  if ($site) { $site = "$site".Trim() }
   if ($site -and (Test-Path $site)) {
     Set-Content -Path (Join-Path $site 'woynich-wiki.pth') -Value $Repo -Encoding ASCII
     Step 'Python path' 'OK' "kb importable ($site)"
