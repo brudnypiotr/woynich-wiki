@@ -11,6 +11,7 @@ KIND_BY_EXT = {
     ".pdf": "document", ".docx": "document", ".doc": "document", ".md": "document", ".txt": "document", ".html": "web",
     ".htm": "web", ".xlsx": "spreadsheet", ".csv": "spreadsheet", ".eml": "email", ".msg": "email",
     ".vtt": "transcript", ".srt": "transcript", ".png": "image", ".jpg": "image", ".jpeg": "image",
+    ".py": "code", ".cs": "code", ".java": "code", ".js": "code", ".ts": "code", ".sql": "code", ".ps1": "code",
 }
 
 

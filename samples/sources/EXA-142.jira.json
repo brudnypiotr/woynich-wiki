@@ -1,0 +1,69 @@
+{
+ "key": "EXA-142",
+ "fields": {
+  "summary": "Minimum rest at home base: rule engine uses 10 h",
+  "status": {
+   "name": "In Review"
+  },
+  "resolution": null,
+  "updated": "2026-03-18T10:12:00.000+0100",
+  "description": {
+   "type": "doc",
+   "content": [
+    {
+     "type": "paragraph",
+     "content": [
+      {
+       "type": "text",
+       "text": "Client request: reduce the minimum rest period before a duty starting at home base from 12 hours to 10 hours. The rule MinRestHomeBase reads the value from the parameter MIN_REST_HOME_BASE_HOURS."
+      }
+     ]
+    }
+   ]
+  },
+  "comment": {
+   "comments": [
+    {
+     "author": {
+      "displayName": "Marek"
+     },
+     "created": "2026-03-12T09:00:00.000+0100",
+     "body": {
+      "type": "doc",
+      "content": [
+       {
+        "type": "paragraph",
+        "content": [
+         {
+          "type": "text",
+          "text": "Parameter MIN_REST_HOME_BASE_HOURS changed to 10 in the Example Air configuration."
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "author": {
+      "displayName": "Anna"
+     },
+     "created": "2026-03-18T10:12:00.000+0100",
+     "body": {
+      "type": "doc",
+      "content": [
+       {
+        "type": "paragraph",
+        "content": [
+         {
+          "type": "text",
+          "text": "The operations manual revision 4 still says 12 hours. Waiting for the client to publish an OM revision."
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ }
+}

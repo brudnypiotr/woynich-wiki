@@ -1,0 +1,65 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Length 249 >>
+stream
+BT /F1 11 Tf 14 TL 60 780 Td (Example Air) Tj T* (Operations Manual Part A) Tj T* (Chapter 7: Flight and Duty Time Limitations) Tj T* () Tj T* (Revision 4, effective 1 January 2026) Tj T* (Fictional document for testing the knowledge base.) Tj T* ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 3 0 R >> >> >>
+endobj
+6 0 obj
+<< /Length 498 >>
+stream
+BT /F1 11 Tf 14 TL 60 780 Td (7.1 Definitions) Tj T* () Tj T* (Flight Duty Period \(FDP\) means a period that starts when a crew member reports for duty) Tj T* (and finishes when the aircraft finally comes to rest after the last sector.) Tj T* (Window of Circadian Low \(WOCL\) means the period between 02:00 and 05:59 in the time zone) Tj T* (to which the crew member is acclimatised.) Tj T* (Home base is the location assigned by the operator where the crew member normally starts duty.) Tj T* ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 6 0 R /Resources << /Font << /F1 3 0 R >> >> >>
+endobj
+8 0 obj
+<< /Length 432 >>
+stream
+BT /F1 11 Tf 14 TL 60 780 Td (7.4 Minimum rest) Tj T* () Tj T* (The minimum rest period before a flight duty period starting at home base is 12 hours) Tj T* (or the length of the preceding duty period, whichever is greater.) Tj T* (The minimum rest period away from home base is 10 hours, including 8 hours of sleep opportunity.) Tj T* (Rest periods must be planned in the roster and published at least 14 days in advance.) Tj T* ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 8 0 R /Resources << /Font << /F1 3 0 R >> >> >>
+endobj
+10 0 obj
+<< /Length 460 >>
+stream
+BT /F1 11 Tf 14 TL 60 780 Td (7.5 Extended rest) Tj T* () Tj T* (Each crew member must receive a recurrent extended rest period of 36 hours including two local nights) Tj T* (so that there are never more than 168 hours between the end of one extended rest and the start of the next.) Tj T* (Table 7.5: Extended rest) Tj T* (Period | Minimum | Nights) Tj T* (Recurrent | 36 hours | 2 local nights) Tj T* (After 4 time zones | 48 hours | 2 local nights) Tj T* ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 10 0 R /Resources << /Font << /F1 3 0 R >> >> >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000134 00000 n 
+0000000231 00000 n 
+0000000531 00000 n 
+0000000657 00000 n 
+0000001206 00000 n 
+0000001332 00000 n 
+0000001815 00000 n 
+0000001941 00000 n 
+0000002453 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R /Info << /Title (Example Air OM-A Chapter 7) >> >>
+startxref
+2581
+%%EOF

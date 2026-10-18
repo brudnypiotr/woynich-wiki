@@ -1,4 +1,8 @@
 #!/bin/sh
-# woynich-wiki: block secrets and invalid records. Uses the repo virtualenv if present.
-if [ -x .venv/Scripts/python.exe ]; then PY=.venv/Scripts/python.exe; elif [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python; fi
-exec "$PY" -m kb.core.precommit
+# woynich-wiki: block secrets and invalid records. Works for the blueprint and for instance repositories
+# (the instance points core.hooksPath here), using the blueprint's virtualenv.
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -x "$ROOT/.venv/Scripts/python.exe" ]; then PY="$ROOT/.venv/Scripts/python.exe"
+elif [ -x "$ROOT/.venv/bin/python" ]; then PY="$ROOT/.venv/bin/python"
+else PY=python; fi
+PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m kb.core.precommit

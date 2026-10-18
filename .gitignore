@@ -18,3 +18,4 @@ __pycache__/
 *.egg-info/
 doctor-report.json
 .DS_Store
+kb.cmd

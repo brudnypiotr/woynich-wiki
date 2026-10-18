@@ -17,6 +17,13 @@ PATTERNS = {
 RECORD_SCHEMAS = {"catalog/records/": "source_record", "queue/": "queue_item"}
 
 
+def schema_for(path: str) -> str | None:
+    path = path.replace("\\", "/")
+    if re.search(r"(^|/)raw/[0-9a-f]{12}/source\.json$", path):
+        return "source_record"
+    return next((name for prefix, name in RECORD_SCHEMAS.items() if prefix in path and path.endswith(".json")), None)
+
+
 def staged() -> list[str]:
     out = subprocess.run(["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"], capture_output=True, text=True, check=True)
     return [l for l in out.stdout.splitlines() if l]
@@ -39,10 +46,10 @@ def main(files: list[str] | None = None) -> int:
             continue
         for hit in scan_text(text):
             problems.append(f"{f}: looks like a {hit}; secrets belong in Windows Credential Manager (kb secrets set ...)")
-        for prefix, name in RECORD_SCHEMAS.items():
-            if prefix in f.replace("\\", "/") and f.endswith(".json"):
-                for e in schemas.errors(name, json.loads(text)):
-                    problems.append(f"{f}: {e}")
+        name = schema_for(f)
+        if name:
+            for e in schemas.errors(name, json.loads(text)):
+                problems.append(f"{f}: {e}")
     for pr in problems:
         print("pre-commit:", pr, file=sys.stderr)
     return 1 if problems else 0
