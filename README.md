@@ -34,21 +34,24 @@ Start `copilot` in this folder. It reads `AGENTS.md` and offers the skills `/kb-
 `/kb-code`, `/kb-status`, `/kb-verify`. Ask normally ("what is the minimum rest at home base?"): Copilot runs
 `kb ask` and repeats the citations. Allow the shell tool for `kb.cmd` when asked.
 
-### Code questions
-Clone a repository next to this one and list it in `instance\config\profile.yaml`:
+### Code questions, Jira and screenshots
+Describe your local repositories in `instance\config\profile.yaml` (the model may only read them):
 ```
 code_repos:
-  - {name: rules, path: ../my-repo, ref: main}
+  - name: inventory-service
+    path: C:/Users/you/DEV/inventory-service
+    description: Inventory backend (Java). Rules engine, orders; look here for rule logic and parameters.
 ```
-Then `kb code-ask "How is minimum rest computed? EXA-142" --evidence` (or `/kb-code` in Copilot): the answer cites
-`repo/path:line@commit`. Try it on the sample: `samples\code-repo` (run `git init` + commit there first).
-
-### Browser app
-`kb serve` opens a local app (127.0.0.1 only): drop files and watch the ingest steps, or open a discussion on a
-topic and ask follow-up questions with citations. Stop it with Ctrl+C.
+Check with `kb repos`. Then:
+- `kb code-ask "How is minimum rest computed?" --evidence` → answer from wiki + code, citing `file:line@commit`;
+- `kb ask "What does this screen show?" --image screenshot.png` → the model explains the screen with the wiki;
+- `kb chat` → a conversation in the terminal (`/image <file>`, `/save`, `/exit`); in the browser: `kb serve` → Discuss
+  (paste a screenshot with Ctrl+V, tick "question about the code");
+- with Jira configured (`jira.base_url` in the profile, `kb secrets set jira-token`) the model can fetch tickets
+  (`jira_get`, `jira_search`) during the conversation.
 
 ### All commands
-`add`, `collect inbox|git|jira`, `ingest`, `ask`, `code-ask`, `lint`, `remove`, `rollback`, `serve`, `search`, `verify`, `site`, `status`, `model list|set|show`, `secrets set|check`, `login`, `llm-smoke`, `plugins`.
+`add`, `collect inbox|git|jira`, `ingest`, `ask`, `code-ask`, `chat`, `repos`, `lint`, `remove`, `rollback`, `serve`, `search`, `verify`, `site`, `status`, `model list|set|show`, `secrets set|check`, `login`, `llm-smoke`, `plugins`.
 
 ## Documentation
 - [docs/STATUS.md](docs/STATUS.md): what works, what is next, retrospective · [docs/REAL-DATA-TEST.md](docs/REAL-DATA-TEST.md): checklist for the first real documents

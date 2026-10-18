@@ -13,12 +13,20 @@ class ScriptedAgent:
         self.stop_after_reading = stop_after_reading
         self.prompts = []
 
-    def run(self, task, model, root, write_dirs=("wiki",), progress=None, cancelled=None):
+    def run(self, task, model, root, write_dirs=("wiki",), progress=None, cancelled=None, read_roots=(), tools=(), attachments=()):
         self.prompts.append(task)
+        self.last = {"read_roots": list(read_roots), "tools": [t.name for t in tools], "attachments": list(attachments), "write_dirs": write_dirs}
         root = Path(root); w = root / "wiki"; tools = []
         say = progress or (lambda *_: None)
         if "QUESTION:" in task:
             q = task.split("QUESTION:", 1)[1].split("\n", 1)[0].lower()
+            if "FOCUS: this is a question about the code" in task and read_roots:
+                hits = [(f, i) for r in read_roots for f in Path(r).rglob("*.py")
+                        for i, l in enumerate(f.read_text(encoding="utf-8").splitlines(), 1) if "MIN_REST_HOME_BASE_HOURS" in l]
+                f, i = hits[0]
+                rel = f.relative_to(Path(read_roots[0])).as_posix()
+                return AgentResult(f"`required_hours` takes the larger of the parameter and the previous duty (rules/{rel}:{i}@abc1234).",
+                                   0.1, model, 100, 10, 1.0, [{"tool": "rg", "ok": True, "why": "read", "paths": [str(f)]}])
             hits = [p for p in w.rglob("*.md") if any(word in p.read_text(encoding="utf-8").lower() for word in q.split() if len(word) > 4)]
             src = next((p for p in hits if p.parent.name == "sources"), None)
             reply = (f"Minimum rest is 12 hours ([[{src.stem}]] p. 3; see [[minimum-rest]])." if src else

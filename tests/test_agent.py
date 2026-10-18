@@ -1,11 +1,12 @@
 """Ingest v2: sandbox policy, model-written pages with checks and commits, cancel, remove, ask, lint."""
 import json
+import re
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from kb.knowledge import agent, catalog, verify, wiki
+from kb.knowledge import agent, catalog, chat, verify, wiki
 from scripted_agent import ScriptedAgent
 
 SAMPLES = Path(__file__).resolve().parents[1] / "samples" / "sources"
@@ -84,10 +85,40 @@ def test_ask_v2_and_not_found(instance):
         catalog.add_file(f)
     sa = ScriptedAgent()
     wiki.ingest_pending(runner=sa)
-    a = wiki.ask("minimum rest before duty", runner=sa, save=True)
+    a = chat.ask("minimum rest before duty", runner=sa, save=True)
     assert not a["not_found"] and "[[" in a["answer_text"] and Path(a["saved"]).exists()
-    assert wiki.ask("catering policy zzzz", runner=sa)["not_found"]
+    assert sa.last["write_dirs"] == () and sa.last["tools"] == []  # read-only; no Jira configured
+    assert chat.ask("catering policy zzzz", runner=sa)["not_found"]
     assert "QUESTION: minimum rest before duty" in sa.prompts[-2]
+
+
+def test_code_ask_reads_configured_repos(instance, tmp_path):
+    import shutil
+    repo = tmp_path / "rules-repo"
+    shutil.copytree(Path(__file__).resolve().parents[1] / "samples" / "code-repo", repo)
+    for cmd in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"]):
+        subprocess.run(["git", "-C", str(repo), *cmd], check=True)
+    catalog.init()
+    (instance / "config").mkdir(exist_ok=True)
+    (instance / "config" / "profile.yaml").write_text(
+        f"code_repos:\n  - name: rules\n    path: '{repo.as_posix()}'\n    description: Fictional rules engine; rule classes and parameters.\n")
+    rs = chat.repos()
+    assert rs[0]["name"] == "rules" and rs[0]["commit"] and not rs[0]["dirty"]
+    sa = ScriptedAgent()
+    shot = tmp_path / "screen.png"; shot.write_bytes(b"\x89PNG")
+    a = chat.ask("How is minimum rest computed?", runner=sa, focus="code", attachments=[shot])
+    assert re.search(r"rules/rules/\w+\.py:\d+@", a["answer_text"])
+    assert sa.last["read_roots"] == [repo] and sa.last["attachments"] == [shot]
+    assert "Fictional rules engine" in sa.prompts[-1] and "ATTACHED: 1 image" in sa.prompts[-1]
+
+
+def test_sandbox_allows_reading_repos_only(tmp_path):
+    repo = tmp_path / "repo"; repo.mkdir()
+    box = agent.Sandbox(tmp_path / "inst", (), read_roots=(repo,), custom=("jira_get",))
+    assert box.decide("view", {"path": str(repo / "src/x.py")})[0]
+    assert not box.decide("view", {"path": str(tmp_path / "other/x.py")})[0]
+    assert not box.decide("create", {"path": str(repo / "src/x.py")})[0]
+    assert box.decide("jira_get", {"key": "PROJ-1"})[0] and not box.decide("jira_delete", {})[0]
 
 
 def test_lint_commits(instance):

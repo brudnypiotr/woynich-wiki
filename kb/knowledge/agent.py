@@ -40,6 +40,8 @@ class Sandbox:
     root: Path
     write_dirs: tuple[str, ...] = ("wiki",)
     log: list[dict] = field(default_factory=list)
+    read_roots: tuple = ()       # extra folders the model may read (code repositories), never write
+    custom: tuple = ()           # names of our own tools (e.g. jira_get) the model may call
     progress: object = None      # progress(step, detail): live view of what the model reads and writes
     cancelled: object = None     # cancelled() -> bool: deny every further tool call so the model stops
 
@@ -52,6 +54,20 @@ class Sandbox:
             return True
         except (ValueError, OSError):
             return False
+
+    def _readable(self, p: str) -> bool:
+        if self._inside(p):
+            return True
+        q = Path(p)
+        if not q.is_absolute():
+            return False
+        for r in self.read_roots:
+            try:
+                q.resolve().relative_to(Path(r).resolve())
+                return True
+            except (ValueError, OSError):
+                pass
+        return False
 
     def _rel(self, p: str) -> str:
         try:
@@ -79,9 +95,11 @@ class Sandbox:
     def decide(self, tool: str, args) -> tuple[bool, str]:
         """Policy for one tool call: (allowed, reason)."""
         paths = self.paths_in(tool, args)
+        if tool in self.custom:
+            return True, "custom tool"
         if tool in READ_TOOLS:
-            bad = [p for p in paths if not self._inside(p)]
-            return (not bad, f"reading outside the knowledge base is not allowed: {bad[0]}" if bad else "read")
+            bad = [p for p in paths if not self._readable(p)]
+            return (not bad, f"reading outside the knowledge base and the configured repositories is not allowed: {bad[0]}" if bad else "read")
         if tool in WRITE_TOOLS:
             if not self.write_dirs:
                 return False, "this task is read-only"
@@ -108,8 +126,10 @@ class Sandbox:
     def on_permission(self, req, invocation=None):
         """Second line of defence: the runtime may still ask for permission; apply the same path rules."""
         from copilot.rpc import PermissionDecisionApproveOnce, PermissionDecisionReject
-        from copilot.session_events import PermissionRequestRead, PermissionRequestWrite
-        if isinstance(req, PermissionRequestRead) and self._inside(req.path):
+        from copilot.session_events import PermissionRequestCustomTool, PermissionRequestRead, PermissionRequestWrite
+        if isinstance(req, PermissionRequestCustomTool) and req.tool_name in self.custom:
+            return PermissionDecisionApproveOnce()
+        if isinstance(req, PermissionRequestRead) and self._readable(req.path):
             return PermissionDecisionApproveOnce()
         if isinstance(req, PermissionRequestWrite) and any(self._inside(req.file_name, d) for d in self.write_dirs):
             return PermissionDecisionApproveOnce()
@@ -134,23 +154,38 @@ class AgentRunner:
     def __init__(self, timeout: int | None = None):
         self.timeout = timeout or int((config.load("models").get("agent") or {}).get("timeout_s", 1800))
 
-    def run(self, task_prompt: str, model: str, root: Path, write_dirs=("wiki",), progress=None, cancelled=None) -> AgentResult:
-        return asyncio.run(self._run(task_prompt, model, root, tuple(write_dirs), progress, cancelled))
+    def run(self, task_prompt: str, model: str, root: Path, write_dirs=("wiki",), progress=None, cancelled=None,
+            read_roots=(), tools=(), attachments=()) -> AgentResult:
+        return asyncio.run(self._run(task_prompt, model, root, tuple(write_dirs), progress, cancelled,
+                                     tuple(read_roots), list(tools), list(attachments)))
 
-    async def _run(self, task_prompt, model, root, write_dirs, progress=None, cancelled=None) -> AgentResult:
+    async def _run(self, task_prompt, model, root, write_dirs, progress=None, cancelled=None, read_roots=(), tools=(),
+                   attachments=()) -> AgentResult:
         from copilot import CopilotClient
-        box = Sandbox(Path(root), write_dirs, progress=progress, cancelled=cancelled)
+        loop = asyncio.get_running_loop()
+
+        def quiet(lp, ctx):  # SDK 1.0.22 cannot parse the echo of a user message with attachments; harmless
+            if isinstance(ctx.get("exception"), AssertionError) and "handle_notification" in str(ctx.get("handle", "")):
+                return
+            lp.default_exception_handler(ctx)
+        loop.set_exception_handler(quiet)
+        box = Sandbox(Path(root), write_dirs, progress=progress, cancelled=cancelled, read_roots=read_roots,
+                      custom=tuple(t.name for t in tools))
         t0 = time.perf_counter()
         client = CopilotClient(working_directory=str(root))
         await client.start()
         try:
             kw = dict(on_permission_request=box.on_permission, hooks={"on_pre_tool_use": box.pre_tool_use},
-                      available_tools=sorted(READ_TOOLS | (WRITE_TOOLS if write_dirs else set())), enable_skills=False,
+                      available_tools=sorted(READ_TOOLS | (WRITE_TOOLS if write_dirs else set()) | set(box.custom)),
+                      enable_skills=False,
                       skip_custom_instructions=True, enable_config_discovery=False, working_directory=str(root))
             if model and model != "auto":
                 kw["model"] = model
+            if tools:
+                kw["tools"] = list(tools)
             session = await client.create_session(**kw)
-            ev = await session.send_and_wait(task_prompt, timeout=float(self.timeout))
+            att = [{"type": "file", "path": str(Path(a).resolve())} for a in attachments]
+            ev = await session.send_and_wait(task_prompt, attachments=att or None, timeout=float(self.timeout))
             data = getattr(ev, "data", None)
             reply = getattr(data, "content", None) or str(data if data is not None else ev)
             tin = tout = premium = None

@@ -26,16 +26,14 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from kb.core import config, gitops
-from kb.knowledge import ask, catalog, ingest, pages, verify, wiki
+from kb.knowledge import catalog, chat, pages, verify, wiki
 from kb.llm.gateway import Gateway
 from kb.publish import site
 
 MAX_UPLOAD = 200_000_000
 WRITE_LOCK = threading.Lock()
 JOBS: dict[str, dict] = {}
-STEPS_FACTS = ["saved", "extracted", "facts", "summary", "topics", "glossary", "verify", "done"]
-STEPS_AGENT = ["saved", "extracted", "writing", "checking", "verify", "done"]
-STEPS = STEPS_AGENT
+STEPS = ["saved", "extracted", "writing", "checking", "verify", "done"]
 
 
 def _sessions_dir() -> Path:
@@ -56,7 +54,7 @@ def _save_session(s: dict) -> None:
 
 def _job_step(job: dict, step: str, detail: str = "") -> None:
     if job.get("cancel"):
-        raise ingest.Cancelled()
+        raise wiki.Cancelled()
     job["step"] = "writing" if step == "reading" else step  # the model reads and writes in one step
     job["log"].append({"at": time.strftime("%H:%M:%S"), "step": step, "detail": detail})
 
@@ -81,20 +79,18 @@ def run_ingest_job(job: dict, path: Path, gw: Gateway) -> None:
             if rec["status"] == "error":
                 raise RuntimeError(info.get("error") or "extraction failed")
             if created or rec["status"] == "extracted":
-                if wiki.mode() == "agent":
-                    res = wiki.ingest_pending([rec["id"]], runner=Handler.runner, cancelled=lambda: bool(job.get("cancel")),
-                                              progress=lambda st, d: _job_step(job, st, d) if not job.get("cancel") else None)
-                    if job.get("cancel"):
-                        raise ingest.Cancelled()
-                else:
-                    res = ingest.ingest_pending(gw, [rec["id"]], progress=lambda st, d: _job_step(job, st, d))
+                res = wiki.ingest_pending([rec["id"]], runner=Handler.runner, cancelled=lambda: bool(job.get("cancel")),
+                                          progress=lambda st, d: _job_step(job, st, d) if not job.get("cancel") else None)
+                if job.get("cancel"):
+                    raise wiki.Cancelled()
                 job["result"] = res[0] if res else None
             v = verify.verify_all()
-            _job_step(job, "verify", f"{v['ok']}/{v['facts']} citations verified, {len(v['problems'])} problems")
+            _job_step(job, "verify", f"{v['citations_ok']}/{v['citations']} citations found in sources, {v['broken_links']} broken links, "
+                                     f"{v['contradictions']} contradictions")
             site.build()
         _job_step(job, "done", rec["title"])
         job["state"] = "done"
-    except ingest.Cancelled:
+    except wiki.Cancelled:
         with WRITE_LOCK:
             catalog.rollback()
             note = "cancelled; unfinished changes rolled back"
@@ -168,7 +164,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "no such session"})
         if url.path == "/api/status":
             srcs = catalog.all_sources()
-            return self._send(200, {"sources": len(srcs), "topics": len(pages.topic_index()), "busy": WRITE_LOCK.locked(),
+            return self._send(200, {"sources": len(srcs), "pages": sum(1 for _ in pages.wiki().rglob("*.md")) if pages.wiki().exists() else 0, "busy": WRITE_LOCK.locked(),
                                     "model": self.gw.model_for("query")[1]})
         return self._send(404, {"error": "not found"})
 
@@ -229,32 +225,34 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 f.write(chunk); left -= len(chunk)
         job = {"id": uuid.uuid4().hex[:12], "filename": name, "bytes": n, "state": "running", "step": "queued",
-               "started": catalog.now(), "log": [], "steps": STEPS_AGENT if wiki.mode() == "agent" else STEPS_FACTS}
+               "started": catalog.now(), "log": [], "steps": STEPS}
         JOBS[job["id"]] = job
         threading.Thread(target=run_ingest_job, args=(job, tmp, self.gw), daemon=True).start()
         return self._send(200, job)
 
     def _ask(self, s: dict):
-        q = (self._json_body().get("question") or "").strip()[:1000]
+        import base64
+        body = self._json_body()
+        q = (body.get("question") or "").strip()[:2000]
         if not q:
             return self._send(400, {"error": "question is required"})
+        att = []
+        for i, img in enumerate((body.get("images") or [])[:4]):
+            ext = (Path(str(img.get("name") or "image.png")).suffix.lower() or ".png")
+            if ext not in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+                return self._send(400, {"error": f"unsupported image type {ext}"})
+            data = base64.b64decode(str(img.get("data") or "").split(",")[-1])
+            if len(data) > 10_000_000:
+                return self._send(400, {"error": "image larger than 10 MB"})
+            p = _sessions_dir() / s["id"] / f"{len(s['turns']) + 1:03d}-{i + 1}{ext}"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data); att.append(p)
         hist = [{"question": t["question"], "answer_text": t["answer_text"]} for t in s["turns"]]
-        if wiki.mode() == "agent":
-            r = wiki.ask(q, runner=Handler.runner, history=hist, topic=s["topic"])
-            turn = {"question": q, "at": catalog.now(), "not_found": r["not_found"], "seconds": r["seconds"], "sentences": [],
-                    "answer_text": r["answer_text"], "markdown": r["answer_text"], "pages_read": r["pages_read"], "premium": r["premium"]}
-            s["turns"].append(turn); s["updated"] = catalog.now()
-            _save_session(s)
-            return self._send(200, turn)
-        res = ask.answer(q, self.gw, history=hist, topic=s["topic"])
-        ev = res["evidence"]
-        sentences = []
-        for x in res["answer"]:
-            sentences.append({"text": x["sentence"].strip(), "cites": [
-                {"title": ev[n - 1]["title"], "locator": ev[n - 1]["locator"] or "top", "source_id": ev[n - 1]["source_id"],
-                 "excerpt": ev[n - 1]["text"][:400]} for n in x["evidence"]]})
-        turn = {"question": q, "at": catalog.now(), "not_found": res["not_found"], "seconds": res.get("seconds"),
-                "sentences": sentences, "answer_text": " ".join(x["text"] for x in sentences), "markdown": ask.render(res)}
+        r = chat.ask(q, runner=Handler.runner, history=hist, topic=s["topic"], attachments=att,
+                     focus="code" if body.get("focus") == "code" else "wiki")
+        turn = {"question": q, "at": catalog.now(), "not_found": r["not_found"], "seconds": r["seconds"],
+                "answer_text": r["answer_text"], "markdown": r["answer_text"], "pages_read": r["pages_read"],
+                "tools_used": r["tools_used"], "premium": r["premium"], "images": [p.name for p in att]}
         s["turns"].append(turn); s["updated"] = catalog.now()
         _save_session(s)
         return self._send(200, turn)
@@ -268,8 +266,8 @@ class Handler(BaseHTTPRequestHandler):
             body += [f"## {t['question']}", "", t["markdown"], ""]
         with WRITE_LOCK:
             p.write_text("\n".join(body), encoding="utf-8")
-            written = pages.update_index_log_hot(f"discussion saved: {s['topic']} ({len(s['turns'])} questions)")
-            gitops.commit(catalog.instance(), [p] + written, gitops.message("ingest", f"discussion: {s['topic'][:80]}", scope="answer"))
+            wiki._log_line(f"discussion saved: [[{p.stem}]] ({len(s['turns'])} questions)")
+            gitops.commit(catalog.instance(), [pages.wiki()], gitops.message("ingest", f"discussion: {s['topic'][:80]}", scope="answer"))
         return self._send(200, {"saved": str(p.relative_to(catalog.instance()))})
 
 
@@ -342,7 +340,7 @@ const ACCESS='__ACCESS__',H={'X-KB-Token':ACCESS};const $=s=>document.querySelec
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const api=(p,o={})=>fetch(p,{...o,headers:{...H,...(o.headers||{})}}).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j});
 let STEPS=['saved','extracted','writing','checking','verify','done'];
-async function status(){try{const s=await api('/api/status');$('#st').textContent=`${s.sources} sources · ${s.topics} topics · model ${s.model}${s.busy?' · working…':''}`}catch(e){}}
+async function status(){try{const s=await api('/api/status');$('#st').textContent=`${s.sources} sources · ${s.pages} pages · model ${s.model}${s.busy?' · working…':''}`}catch(e){}}
 setInterval(status,5000);status();
 $('#nav').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.v==='dash'){window.open('/dashboard?t='+ACCESS);return}
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));V[b.dataset.v]()};
@@ -382,19 +380,24 @@ window.removeSrc=async(jid,sid)=>{if(!confirm('Delete this source, its facts and
 function mdl(src){return esc(src).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>')
   .replace(/\[\[([^\]|#]+)(?:[|#]([^\]]*))?\]\]/g,(m,a,l)=>`<a class="cite" href="/dashboard?t=${ACCESS}#w:${encodeURIComponent(a.trim())}" target="_blank">${esc(l||a.trim())}</a>`)
   .split(/\n{2,}/).map(p=>/^\s*[-*] /m.test(p)?'<ul>'+p.split('\n').filter(x=>x.trim()).map(x=>'<li>'+x.replace(/^\s*[-*] /,'')+'</li>').join('')+'</ul>':'<p>'+p.replace(/\n/g,'<br>')+'</p>').join('')}
-function renderTurn(t,i){if(t.markdown&&!t.sentences.length)return `<div class="turn"><div class="q">${esc(t.question)}</div><div class="a ${t.not_found?'nf':''}">${mdl(t.markdown)}</div>${t.pages_read&&t.pages_read.length?`<div class="sub" style="font-size:12px">read: ${t.pages_read.map(esc).join(', ')}</div>`:''}</div>`;
+function renderTurn(t,i){if(t.markdown)return `<div class="turn"><div class="q">${esc(t.question)}</div><div class="a ${t.not_found?'nf':''}">${mdl(t.markdown)}</div>${t.images&&t.images.length?`<div class="sub" style="font-size:12px">🖼 ${t.images.map(esc).join(', ')}</div>`:''}${t.pages_read&&t.pages_read.length?`<div class="sub" style="font-size:12px">read: ${t.pages_read.slice(0,12).map(esc).join(', ')}${t.pages_read.length>12?' …':''}</div>`:''}</div>`;
   return `<div class="turn"><div class="q">${esc(t.question)}</div><div class="a">${t.not_found?'<p class="nf">No answer found in the knowledge base. Try other words, or add a source that covers it.</p>':
   t.sentences.map((s,k)=>`<p>${esc(s.text)}${s.cites.map((c,m)=>`<span class="cite" onclick="tg('${i}-${k}-${m}')">[${esc(c.title)} · ${esc(c.locator)}]</span>`).join('')}</p>`+
    s.cites.map((c,m)=>`<div class="ex" id="ex-${i}-${k}-${m}">${esc(c.excerpt)}…</div>`).join('')).join('')}</div></div>`}
 window.tg=id=>{const e=document.getElementById('ex-'+id);e.style.display=e.style.display==='block'?'none':'block'};
 function chat(){history.replaceState(null,'','#s='+S.id);$('#main').innerHTML=`<div class="kicker">Discussion</div><h2>${esc(S.topic)}</h2><p class="sub">Click a citation to see the excerpt it comes from.</p>
   <div class="panel" id="turns">${S.turns.map(renderTurn).join('')||'<p class="sub">Ask the first question.</p>'}</div>
-  <div class="panel"><div class="row"><input type="text" id="q" placeholder="Your question…"><button class="pri" id="ask">Ask</button></div>
+  <div class="panel"><div class="row"><input type="text" id="q" placeholder="Your question… (paste a screenshot with Ctrl+V)"><button class="sec" id="att" title="Attach screenshot">📎</button><input type="file" id="img" accept="image/*" multiple hidden><button class="pri" id="ask">Ask</button></div>
+  <div style="margin-top:8px;display:flex;gap:14px;align-items:center"><label class="sub" style="margin:0"><input type="checkbox" id="code"> question about the code</label><span id="imgs" class="sub" style="margin:0"></span></div>
   <div style="margin-top:10px;display:flex;gap:8px"><button class="sec" id="save">Save as wiki page</button><button class="sec" id="back">All discussions</button><span id="msg" class="sub" style="margin:6px 0 0 6px"></span></div></div>`;
   $('#back').onclick=()=>{history.replaceState(null,'','#');V.discuss()};
   $('#save').onclick=async()=>{const r=await api('/api/sessions/'+S.id+'/save',{method:'POST'}).catch(e=>({error:e.message}));$('#msg').textContent=r.saved?'saved: '+r.saved:r.error};
-  const go=async()=>{const q=$('#q').value.trim();if(!q)return;$('#ask').disabled=true;$('#msg').textContent='thinking…';
-    try{const t=await api('/api/sessions/'+S.id+'/ask',{method:'POST',body:JSON.stringify({question:q})});S.turns.push(t);
+  let IM=[];const showIm=()=>$('#imgs').textContent=IM.length?('attached: '+IM.map(x=>x.name).join(', ')):'';
+  const addFiles=fs=>{for(const f of fs){if(!f.type.startsWith('image/'))continue;const r=new FileReader();r.onload=()=>{IM.push({name:f.name||'screenshot.png',data:r.result});showIm()};r.readAsDataURL(f)}};
+  $('#att').onclick=()=>$('#img').click();$('#img').onchange=()=>addFiles([...$('#img').files]);
+  $('#q').onpaste=e=>{const fs=[...(e.clipboardData||{}).files||[]];if(fs.length){e.preventDefault();addFiles(fs)}};
+  const go=async()=>{const q=$('#q').value.trim();if(!q)return;$('#ask').disabled=true;$('#msg').textContent='thinking… (the model reads the wiki'+($('#code').checked?' and the code':'')+')';
+    try{const t=await api('/api/sessions/'+S.id+'/ask',{method:'POST',body:JSON.stringify({question:q,images:IM,focus:$('#code').checked?'code':'wiki'})});IM=[];showIm();S.turns.push(t);
       $('#turns').innerHTML=S.turns.map(renderTurn).join('');$('#q').value='';$('#msg').textContent=t.seconds?t.seconds+' s':''}
     catch(e){$('#msg').textContent=e.message}finally{$('#ask').disabled=false;$('#q').focus()}};
   $('#ask').onclick=go;$('#q').onkeydown=e=>{if(e.key==='Enter')go()};$('#q').focus()}

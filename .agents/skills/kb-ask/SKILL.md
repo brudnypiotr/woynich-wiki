@@ -9,4 +9,6 @@ allowed-tools: ["shell"]
 3. If the output starts with `NOT FOUND`, say so plainly and suggest which kind of source could be added.
 4. If the answer mentions disagreeing sources, say so; do not pick a winner.
 5. If the user wants to keep the answer, re-run with `--save` (it becomes a wiki page and a commit).
-6. Use `--evidence` to show what excerpts were read when the user asks "why" or "where from".
+6. Use `--evidence` to show which pages, sources and code files were read.
+7. For a screenshot, pass `--image <path>`: the model describes the screen and explains it with the wiki.
+8. For a longer conversation, suggest `kb chat` (terminal) or `kb serve` → Discuss (browser, paste screenshots).

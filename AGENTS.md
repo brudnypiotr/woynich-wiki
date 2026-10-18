@@ -5,7 +5,7 @@ Knowledge lives in the **instance** folder (`instance/`, its own git repository,
 
 ## How to run the tool
 - Windows: `.\kb.cmd <command>` (created by `setup.cmd`) · macOS/Linux: `.venv/bin/python -m kb <command>`
-- Commands: `add <file|folder>`, `collect inbox|git|jira`, `ingest` (the model writes the wiki), `ask "<question>"`, `code-ask "<question>"`, `lint`, `remove <id>`, `rollback`, `serve` (local web app),
+- Commands: `add <file|folder>`, `collect inbox|git|jira`, `ingest` (the model writes the wiki), `ask "<question>"` (`--image`), `code-ask "<question>"`, `chat`, `repos`, `lint`, `remove <id>`, `rollback`, `serve` (local web app),
   `search <words>`, `verify`, `site`, `status`. Add `--json` for machine-readable output where supported.
 
 ## Rules (always)
@@ -20,5 +20,6 @@ Knowledge lives in the **instance** folder (`instance/`, its own git repository,
 6. Keep answers short. Use the user's language; keep citations unchanged.
 
 ## Code questions
-`kb code-ask` searches the repositories listed under `code_repos` in `instance/config/profile.yaml`
-(read-only `git grep` at a fixed ref) and cites `repo/path:line@commit`. You may open the cited lines to show them.
+`kb code-ask` lets the model read the repositories listed under `code_repos` in `instance/config/profile.yaml`
+(read-only, each with a description of what it contains) together with the wiki, and cites `repo/path:line@commit`.
+You may open the cited lines to show them.

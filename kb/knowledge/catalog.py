@@ -177,7 +177,6 @@ def rollback() -> list[str]:
     commit; untracked files are deleted only if they are newer than that commit (older untracked files come from
     earlier versions that did not commit every page and are kept). Settings (config/, branding/, sessions/) are
     not touched. Returns the paths restored or removed."""
-    import os
     inst = init()
     _git("reset", "-q", "--", "raw", "wiki")
     changed = [l for l in _git("diff", "--name-only", "HEAD", "--", "raw", "wiki").stdout.splitlines() if l]
@@ -215,7 +214,7 @@ def ingest_finished() -> None:
 
 def remove(sid: str, commit: bool = True, agent_cleanup: bool = True, runner=None) -> dict:
     """Remove one source completely: original (raw/ or store/), extracted text, its wiki page, its facts on topic
-    pages and in the glossary. Works for sources that were never or only partly ingested. One commit."""
+    pages (the model removes knowledge only that source supported). Works for sources never or only partly ingested."""
     from kb.knowledge import pages
     inst = init()
     rec = load(sid) if find(sid) else None
@@ -238,8 +237,7 @@ def remove(sid: str, commit: bool = True, agent_cleanup: bool = True, runner=Non
                 cleanup = wiki.cleanup_after_remove(rec, slug, runner)
             except Exception as e:  # pages keep a broken link; kb verify shows it
                 cleanup = {"error": f"{type(e).__name__}: {e}"[:300]}
-    pages.drop_source(sid)
-    pages.update_index_log_hot(f"removed source {rec['title']} ({sid})")
+    wiki._log_line(f"removed source {rec['title']} ({sid})")
     if commit:
         _git("add", "-A", "--", "raw", "wiki")
         _git("commit", "-q", "-m", gitops.message("fix", f"remove source {rec['title']}", scope=sid,

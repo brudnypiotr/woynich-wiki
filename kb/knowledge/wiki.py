@@ -5,12 +5,11 @@
 """
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from kb.core import config, gitops
+from kb.core import gitops
 from kb.knowledge import agent, catalog, pages
 
 SKELETON = {
@@ -22,11 +21,10 @@ FOLDERS = ("sources", "entities", "concepts", "decisions", "answers", "meta")
 LARGE_SOURCE_CHARS = 300_000
 
 
-from kb.knowledge.ingest import Cancelled  # noqa: E402  (one exception type for both ingest modes)
 
 
-def mode() -> str:
-    return ((config.load("profile").get("ingest") or {}).get("mode") or "agent").lower()
+class Cancelled(Exception):
+    """Raised to stop an ingest; everything not yet committed is rolled back."""
 
 
 def ensure_skeleton() -> Path:
@@ -135,35 +133,6 @@ def ingest_pending(only: list[str] | None = None, runner=None, progress=None, ca
         if not only and rec["status"] != "extracted":
             continue
         out.append(ingest_source(rec["id"], runner, progress, cancelled))
-    return out
-
-
-def ask(question: str, runner=None, history: list[dict] | None = None, topic: str | None = None, save: bool = False) -> dict:
-    """Karpathy query: the model reads the index, the relevant pages and, if needed, the sources. Read-only."""
-    import time
-    inst = catalog.instance()
-    ensure_skeleton()
-    ctx = ""
-    if topic:
-        ctx += f"DISCUSSION TOPIC: {topic}\n"
-    if history:
-        ctx += "EARLIER IN THIS DISCUSSION:\n" + "\n".join(f"Q: {h['question']}\nA: {h.get('answer_text', '')[:800]}" for h in history[-4:]) + "\n"
-    t0 = time.perf_counter()
-    runner = runner or agent.AgentRunner()
-    res = runner.run(agent.prompt("query", question=question, context=ctx), agent.model_for("query"), inst, write_dirs=())
-    agent.meter("agent_query", res)
-    reply = res.reply.strip()
-    not_found = reply.upper().startswith("NOT FOUND")
-    out = {"question": question, "answer_text": reply, "not_found": not_found, "seconds": round(time.perf_counter() - t0, 1),
-           "premium": res.premium, "pages_read": sorted({p for t in res.tools for p in t.get("paths", []) if t["ok"] and p.endswith(".md")
-                                  and (catalog.instance() / p).exists()})}
-    log = inst / "catalog" / "queries.jsonl"
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("a", encoding="utf-8") as f:
-        f.write(json.dumps({"at": catalog.now(), "question": question, "sentences": reply.count(". ") + 1,
-                            "not_found": not_found, "seconds": out["seconds"], "mode": "agent"}, ensure_ascii=False) + "\n")
-    if save and not not_found:
-        out["saved"] = str(save_answer(question, reply))
     return out
 
 

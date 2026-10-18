@@ -58,67 +58,78 @@ def cmd_collect(a) -> int:
 
 
 def cmd_ingest(a) -> int:
-    from kb.knowledge import ingest, verify, wiki
-    use = (a.mode or wiki.mode())
+    from kb.knowledge import verify, wiki
     show = lambda step, detail: print(f"  {step}: {detail}", flush=True)
     try:
-        if use == "agent":
-            res = wiki.ingest_pending(a.ids or None, progress=show)
-            for r in res:
-                print(f"ingested {r['id']}: {len(r['created'])} pages created, {len(r['updated'])} updated, "
-                      f"{r.get('premium')} premium request(s), {r.get('seconds')} s")
-                if r.get("reply"):
-                    print("  " + r["reply"].strip().replace("\n", "\n  ")[:1500])
-        else:
-            from kb.llm.gateway import Gateway
-            res = ingest.ingest_pending(Gateway(adapter=a.adapter), a.ids or None, progress=show)
-            for r in res:
-                print(f"ingested {r['id']}: {r['claims']} verified facts, {r['rejected']} rejected, topics: {', '.join(r['topics']) or '-'}")
+        res = wiki.ingest_pending(a.ids or None, progress=show)
     except KeyboardInterrupt:
         print("\ninterrupted: unfinished changes were rolled back; the source stays registered.\n"
               "Run `kb ingest` to continue, or `kb remove <id>` to delete it (`kb status --sources` lists ids).")
         return 130
+    for r in res:
+        print(f"ingested {r['id']}: {len(r['created'])} pages created, {len(r['updated'])} updated, "
+              f"{r.get('premium')} premium request(s), {r.get('seconds')} s")
+        if r.get("reply"):
+            print("  " + r["reply"].strip().replace("\n", "\n  ")[:1500])
     if not res:
         print("nothing to ingest (all sources already ingested; pass ids to re-ingest)")
     v = verify.verify_all()
-    print(f"check: {v.get('citations_ok', 0)}/{v.get('citations', 0)} citations found in sources, {v.get('broken_links', 0)} broken links, "
-          f"{v.get('uncited_lines', 0)} lines without citation, {v.get('contradictions', 0)} contradictions"
-          + (f"; v1 facts {v['ok']}/{v['facts']}" if v["facts"] else ""))
+    print(f"check: {v['citations_ok']}/{v['citations']} citations found in sources, {v['broken_links']} broken links, "
+          f"{v['uncited_lines']} long lines without citation, {v['contradictions']} contradictions")
     return 0
 
 
-def cmd_ask(a) -> int:
-    from kb.knowledge import ask, wiki
-    from kb.llm.gateway import Gateway
-    q = " ".join(a.question)
-    if (a.mode or wiki.mode()) == "agent":
-        res = wiki.ask(q, save=a.save)
-        text = res["answer_text"]
-        if a.evidence:
-            text += "\n\nRead: " + ", ".join(res["pages_read"])
-        if res.get("saved"):
-            text += f"\n\nsaved: {res['saved']}"
-        _out(a, res, text)
-        return 0 if not res["not_found"] else 3
-    res = ask.answer(q, Gateway(adapter=a.adapter), save=a.save)
-    text = ask.render(res, rel=str(Path(config.paths().instance / "wiki").resolve().as_posix()))
-    if a.evidence and res["evidence"]:
-        text += "\n\nEvidence:\n" + "\n".join(f"[{i}] {e['title']} · {e['locator']}: {e['text'][:200]}" for i, e in enumerate(res["evidence"], 1))
+def _answer(a, focus: str) -> int:
+    from kb.knowledge import chat
+    res = chat.ask(" ".join(a.question), focus=focus, save=getattr(a, "save", False), attachments=a.image or [])
+    text = res["answer_text"]
+    if a.evidence:
+        text += "\n\nRead: " + (", ".join(res["pages_read"]) or "-") + f"\nTools: {', '.join(res['tools_used'])}"
     if res.get("saved"):
         text += f"\n\nsaved: {res['saved']}"
     _out(a, res, text)
     return 0 if not res["not_found"] else 3
 
 
+def cmd_ask(a) -> int:
+    return _answer(a, "wiki")
+
+
 def cmd_code_ask(a) -> int:
-    from kb.knowledge import code
-    from kb.llm.gateway import Gateway
-    res = code.code_ask(" ".join(a.question), Gateway(adapter=a.adapter))
-    text = code.render(res)
-    if a.evidence and res.get("snippets"):
-        text += "\n\nSnippets read:\n" + "\n".join(f"[{i}] {s['repo']}/{s['path']}:{s['hit_line']} (term: {s['term']})" for i, s in enumerate(res["snippets"], 1))
-    _out(a, res, text)
-    return 0 if not res["not_found"] else 3
+    return _answer(a, "code")
+
+
+def cmd_chat(a) -> int:
+    """Conversation in the terminal. Commands: /image <path> attaches a screenshot to the next question, /save saves
+    the last answer as a wiki page, /exit ends."""
+    from kb.knowledge import chat, wiki
+    topic = " ".join(a.topic) if a.topic else None
+    hist, pending = [], []
+    print("Ask about the project, the product, the code or a Jira ticket. /image <path>, /save, /exit")
+    while True:
+        try:
+            q = input("\n> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print(); return 0
+        if not q:
+            continue
+        if q in ("/exit", "/quit"):
+            return 0
+        if q.startswith("/image "):
+            p = Path(q[7:].strip().strip('"'))
+            if p.is_file():
+                pending.append(p); print(f"  attached {p.name} (sent with the next question)")
+            else:
+                print("  no such file")
+            continue
+        if q == "/save":
+            if hist:
+                print("  saved: " + str(wiki.save_answer(hist[-1]["question"], hist[-1]["answer_text"], kind="discussion")))
+            continue
+        res = chat.ask(q, history=hist, topic=topic, attachments=pending)
+        pending = []
+        print("\n" + res["answer_text"] + f"\n  ({res['seconds']} s, {res.get('premium')} premium request)")
+        hist.append({"question": q, "answer_text": res["answer_text"]})
 
 
 def cmd_search(a) -> int:
@@ -132,7 +143,8 @@ def cmd_search(a) -> int:
 def cmd_verify(a) -> int:
     from kb.knowledge import verify
     v = verify.verify_all()
-    text = f"{v['pages']} pages, {v['facts']} cited facts, {v['ok']} verified, {len(v['problems'])} problems"
+    text = (f"{v['pages']} pages, {v['citations_ok']}/{v['citations']} citations found in sources, {v['broken_links']} broken links, "
+            f"{v['uncited_lines']} long lines without citation, {v['contradictions']} contradictions")
     text += "".join(f"\n  {p['page']}:{p['line']}  {p['issue']}" for p in v["problems"][:50])
     _out(a, v, text)
     return 0 if not v["problems"] else 1
@@ -188,6 +200,20 @@ def cmd_remove(a) -> int:
         except KeyError as e:
             print(e); rc = 1
     return rc
+
+
+def cmd_repos(a) -> int:
+    from kb.knowledge import chat
+    rs = chat.repos()
+    if not rs:
+        print("no code repositories configured. Add to instance/config/profile.yaml:\n"
+              "code_repos:\n  - name: inventory-service\n    path: C:/Users/you/DEV/inventory-service\n"
+              "    description: Inventory backend; rules engine, orders. Look here for rule logic.")
+        return 1
+    for r in rs:
+        state = "MISSING" if not r["exists"] else f"{r.get('branch') or '?'}@{r['commit'] or '?'}" + (" (local changes)" if r["dirty"] else "")
+        print(f"  {r['name']:<18} {state:<24} {r['path']}\n  {'':<18} {r['description']}")
+    return 0
 
 
 def cmd_lint(a) -> int:
@@ -323,19 +349,20 @@ def main(argv=None) -> int:
     s.add_argument("what", choices=["inbox", "git", "jira"]); s.add_argument("--path"); s.add_argument("--ref", default="HEAD")
     s.add_argument("--glob", action="append"); s.add_argument("--jql"); s.add_argument("--limit", type=int); s.set_defaults(fn=cmd_collect)
     s = sub.add_parser("ingest", help="the model reads new sources and writes the wiki (one agent session per source)")
-    s.add_argument("ids", nargs="*"); s.add_argument("--adapter")
-    s.add_argument("--mode", choices=["agent", "facts"], help="agent (default): model-written pages; facts: v1 verified fact lists")
-    s.set_defaults(fn=cmd_ingest)
+    s.add_argument("ids", nargs="*"); s.set_defaults(fn=cmd_ingest)
     sub.add_parser("lint", help="the model checks and repairs the wiki (links, index, duplicates, contradictions)").set_defaults(fn=cmd_lint)
-    for name, fn, hlp in (("ask", cmd_ask, "answer a question from the knowledge base, with citations"),
-                          ("code-ask", cmd_code_ask, "answer a technical question from the configured code repositories")):
+    for name, fn, hlp in (("ask", cmd_ask, "ask the knowledge base (wiki first; code, Jira and images when needed)"),
+                          ("code-ask", cmd_code_ask, "ask about the code in the configured repositories (cites file:line@commit)")):
         s = sub.add_parser(name, help=hlp)
-        s.add_argument("question", nargs="+"); s.add_argument("--adapter"); s.add_argument("--json", action="store_true")
+        s.add_argument("question", nargs="+"); s.add_argument("--json", action="store_true")
         s.add_argument("--evidence", action="store_true", help="also print what was read")
+        s.add_argument("--image", action="append", type=Path, help="attach a screenshot (repeatable)")
         if name == "ask":
             s.add_argument("--save", action="store_true", help="save the answer as a wiki page")
-            s.add_argument("--mode", choices=["agent", "facts"])
         s.set_defaults(fn=fn)
+    s = sub.add_parser("chat", help="conversation with the knowledge base in the terminal (/image, /save, /exit)")
+    s.add_argument("topic", nargs="*"); s.set_defaults(fn=cmd_chat)
+    sub.add_parser("repos", help="list the code repositories the model may read").set_defaults(fn=cmd_repos)
     s = sub.add_parser("search", help="full-text search (no model)")
     s.add_argument("query", nargs="+"); s.add_argument("--limit", type=int, default=8); s.add_argument("--pages", action="store_true")
     s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_search)

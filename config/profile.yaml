@@ -22,16 +22,17 @@ scope_default: client           # core | client
 store:
   max_git_bytes: 20000000        # 20 MB
 
-# Code repositories for `kb code-ask` (read-only git grep at a fixed ref). Paths relative to the blueprint folder.
+# Code repositories the model may READ (never write) in kb ask / code-ask / chat. Describe what each contains so the
+# model knows where to look. Paths absolute or relative to the blueprint folder. Check with `kb repos`.
 code_repos: []
-#  - {name: inventory-service, path: ../inventory-service, ref: main, globs: ["*.java", "*.xml"]}
+#  - name: inventory-service
+#    path: C:/Users/you/DEV/inventory-service
+#    description: Inventory backend (Java). Rules engine, stock and orders; look here for rule logic and parameters.
+#  - name: rules-config
+#    path: ../rules-config
+#    description: rule definitions per client; look here for rule configuration and values.
 
 # Jira for `kb collect jira --jql "..."`. Token: `kb secrets set jira-token` (never in this file).
 jira: {}
 #  base_url: https://jira.example.com      # Data Center: personal access token, no email
 #  email: you@example.com                  # Jira Cloud only (basic auth with API token)
-
-# Ingest (ADR-0018): "agent" = the model reads each source and writes the wiki pages (default);
-# "facts" = v1 pipeline of verified atomic facts (kept for comparison).
-ingest:
-  mode: agent

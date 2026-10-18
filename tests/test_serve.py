@@ -12,7 +12,7 @@ from kb.llm.gateway import Gateway
 from kb.publish import serve
 
 SAMPLE = Path(__file__).resolve().parents[1] / "samples" / "sources" / "example-air-om-a-ch7.pdf"
-CFG = {"default_adapter": "s", "adapters": {"s": {"module": "scripted_llm:Scripted"}},
+CFG = {"default_adapter": "fake", "adapters": {"fake": {"module": "kb.llm.adapters:FakeAdapter"}},
        "tiers": {"standard": {"model": "m"}, "basic": {"model": "m"}}, "tasks": {}}
 
 
@@ -48,7 +48,7 @@ def test_upload_steps_then_discussion(app):
             break
         time.sleep(0.1)
     assert job["state"] == "done", job
-    assert [s for s in serve.STEPS_AGENT if s in {l["step"] for l in job["log"]}] == serve.STEPS_AGENT
+    assert [s for s in serve.STEPS if s in {l["step"] for l in job["log"]}] == serve.STEPS
     s = call(base, token, "/api/sessions", json.dumps({"topic": "Minimum rest"}).encode())
     t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest home base"}).encode())
     assert not t["not_found"] and "[[" in t["markdown"]
