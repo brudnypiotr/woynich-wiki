@@ -7,5 +7,7 @@ This repository is the **blueprint**: generic code, templates and instructions w
 - [docs/PITCH.md](docs/PITCH.md): what it is and why (for managers)
 - [docs/DESIGN.md](docs/DESIGN.md): decisions, modules, locators
 - [docs/CRITICAL-ANALYSIS.md](docs/CRITICAL-ANALYSIS.md): risks and mitigations
+- [docs/VISION.md](docs/VISION.md): rollout, demo ideas, business model, related work
+- [pitch/index.html](pitch/index.html): 14-slide pitch deck (open in a browser; ← → to navigate, N for speaker notes)
 
 Status: design phase.

@@ -19,13 +19,15 @@ Status: **draft**, nothing implemented yet. Pitch: [PITCH.md](PITCH.md). Risks: 
 | D12 | **Audience split** (internal / client-shareable): designed, not enabled | future, for a client edition |
 | D13 | **Core vs client knowledge** with a promotion workflow | future |
 | D14 | **Local transcription (Whisper) is not part of setup**; optional personal module | most laptops have no suitable GPU |
+| D15 | **Rollout order:** Orders rules KB → Inventory System product Q&A → one client / one area → product | see [VISION.md](VISION.md) §1 |
+| D16 | **Images are sources:** figures and screenshots extracted from PDFs with page, caption and nearby text | enables "where do I click?" answers |
 
 ## Modules
 | Module | Purpose | PoC |
 |---|---|---|
 | `setup/` | bootstrap: Python per-user, venv, packages (proxy/offline), Git check/portable, Copilot CLI check, plain-language report | ✅ |
 | `collect/` | inbox folder, Jira (token/export), Confluence/SharePoint export, local repo, `.msg/.eml` files | inbox + Jira + repo |
-| `pdf/` | long/complex PDFs: text layer with page markers → table-aware → OCR fallback; per-page quality metrics | ✅ (no OCR at first) |
+| `pdf/` | long/complex PDFs: text layer with page markers → table-aware → OCR fallback; per-page quality metrics; figure/screenshot extraction with captions; permissive libraries by default (AGPL optional) | ✅ (no OCR at first) |
 | `transcripts/` | Teams `.vtt/.docx` transcripts → time-stamped text with speakers; glossary correction; optional local Whisper | Teams transcripts |
 | `extract/` | DOCX, XLSX, HTML, email, code files → `text.md` with locators | ✅ |
 | `classify/` | rules first (path, type, Jira key, metadata), model only for leftovers | ✅ |
