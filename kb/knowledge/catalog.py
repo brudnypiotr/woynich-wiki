@@ -21,7 +21,7 @@ from kb.core import config, gitops, schemas
 from kb import extractors
 
 INSTANCE_DIRS = ["inbox", "raw", "store", "wiki/sources", "wiki/topics", "wiki/answers", "catalog", "queue", "reports", "config"]
-INSTANCE_GITIGNORE = "store/\ninbox/processed/\n.cache/\nsite/\nreports/\nbranding/\n*.tmp\n"
+INSTANCE_GITIGNORE = "store/\ninbox/processed/\n.cache/\nsite/\nreports/\nbranding/\ncatalog/\nsessions/\n*.tmp\n"
 
 
 def now() -> str:
@@ -39,6 +39,13 @@ def init() -> Path:
     gi = inst / ".gitignore"
     if not gi.exists():
         gi.write_text(INSTANCE_GITIGNORE, encoding="utf-8")
+    else:  # instances created by older versions: add new ignore rules (local logs, sessions, branding)
+        have = gi.read_text(encoding="utf-8").splitlines()
+        missing = [l for l in INSTANCE_GITIGNORE.splitlines() if l not in have]
+        if missing:
+            gi.write_text("\n".join(have + missing) + "\n", encoding="utf-8")
+            if (inst / ".git").exists():
+                gitops.commit(inst, [gi], gitops.message("config", "ignore local logs, sessions and branding"))
     if not (inst / ".git").exists():
         subprocess.run(["git", "init", "-q", str(inst)], check=True)
         hooks = config.paths().root / ".githooks"
@@ -206,7 +213,7 @@ def ingest_finished() -> None:
     (instance() / ".cache" / "ingest-running.json").unlink(missing_ok=True)
 
 
-def remove(sid: str, commit: bool = True) -> dict:
+def remove(sid: str, commit: bool = True, agent_cleanup: bool = True, runner=None) -> dict:
     """Remove one source completely: original (raw/ or store/), extracted text, its wiki page, its facts on topic
     pages and in the glossary. Works for sources that were never or only partly ingested. One commit."""
     from kb.knowledge import pages
@@ -220,11 +227,21 @@ def remove(sid: str, commit: bool = True) -> dict:
     if rec.get("stored_in") == "store":
         for p in (inst / "store").glob(f"{rec['sha256']}*"):
             p.unlink()
+    from kb.knowledge import wiki
+    slug = next((s for s, i in wiki.source_pages().items() if i == sid), None)
     (pages.wiki() / "sources" / f"{sid}.md").unlink(missing_ok=True)
+    cleanup = None
+    if slug:  # ingest v2: the model removes knowledge that only this source supported
+        (pages.wiki() / "sources" / f"{slug}.md").unlink(missing_ok=True)
+        if agent_cleanup:
+            try:
+                cleanup = wiki.cleanup_after_remove(rec, slug, runner)
+            except Exception as e:  # pages keep a broken link; kb verify shows it
+                cleanup = {"error": f"{type(e).__name__}: {e}"[:300]}
     pages.drop_source(sid)
     pages.update_index_log_hot(f"removed source {rec['title']} ({sid})")
     if commit:
         _git("add", "-A", "--", "raw", "wiki")
         _git("commit", "-q", "-m", gitops.message("fix", f"remove source {rec['title']}", scope=sid,
                                                    body=f"kind: {rec['kind']}\nsha256: {rec['sha256']}\nstatus was: {rec['status']}"))
-    return {"id": sid, "title": rec["title"], "status_was": rec["status"]}
+    return {"id": sid, "title": rec["title"], "status_was": rec["status"], "cleanup": cleanup}

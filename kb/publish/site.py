@@ -55,7 +55,20 @@ def collect_data() -> dict:
         t = json.loads(f.read_text(encoding="utf-8"))
         topics.append({"slug": t["slug"], "title": t["title"], "claims": len(t.get("claims", [])), "conflicts": t.get("conflicts", [])})
     vr = inst / "reports" / "verify.json"
+    import re as _re
+    meta, contra = [], []
+    for rel, text in pages.items():
+        m = _re.search(r"^type:\s*(\w+)", text[:400], _re.M)
+        t = _re.search(r"^# (.+)$", text, _re.M)
+        folder = rel.split("/")[0] if "/" in rel else "top"
+        meta.append({"path": rel, "stem": rel.rsplit("/", 1)[-1][:-3], "folder": folder, "type": m.group(1) if m else "",
+                     "title": t.group(1).strip() if t else rel})
+        for cm in _re.finditer(r"^>\s*\[!contradiction\]\s*(.*)$", text, _re.M):
+            contra.append({"page": rel, "title": t.group(1).strip() if t else rel, "text": cm.group(1).strip()})
+    from kb.knowledge import wiki as _wiki
+    slugs = {v: k for k, v in _wiki.source_pages().items()}
     return {
+        "page_meta": meta, "contradictions": contra, "source_slugs": slugs,
         "sources": [{"id": r["id"], "title": r["title"], "kind": r["kind"], "status": r["status"], "collected": r["collected_at"][:10],
                      "via": ", ".join(r.get("found_via") or []), **claims.get(r["id"], {"verified": 0, "rejected": 0})} for r in srcs],
         "topics": topics,
@@ -167,6 +180,7 @@ function md(src,base){ // minimal Markdown: headings, lists, quotes, tables, lin
   src=src.replace(/^---[\s\S]*?\n---\n/,'');
   const lines=src.split('\n');let out='',inList=false,inTable=false;
   const inline=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\[\[([^\]|#]+)(?:[|#]([^\]]*))?\]\]/g,(m,a,l)=>`<a data-stem="${a.trim()}">${l||a.trim()}</a>`)
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,a,h)=>`<a data-href="${h}">${a}</a>`);
   for(const l of lines){
     if(/^\|/.test(l)){if(/^\|[-| ]+\|$/.test(l))continue;if(!inTable){out+='<table>';inTable=true}
@@ -174,6 +188,7 @@ function md(src,base){ // minimal Markdown: headings, lists, quotes, tables, lin
     if(inTable){out+='</table>';inTable=false}
     let m;
     if(m=l.match(/^(#{1,3}) (.*)/)){out+=`<h${m[1].length+1}>${inline(m[2])}</h${m[1].length+1}>`;continue}
+    if(m=l.match(/^\s*> ?\[!(\w+)\]\s*(.*)/)){out+=`<div class="conf"><b>${m[1]==='contradiction'?'⚖️ Contradiction':esc(m[1])}:</b> ${inline(m[2])}</div>`;continue}
     if(m=l.match(/^\s*> ?(.*)/)){out+='<blockquote>'+inline(m[1])+'</blockquote>';continue}
     if(m=l.match(/^\s*- (.*)/)){if(!inList){out+='<ul>';inList=true}out+='<li>'+inline(m[1])+'</li>';continue}
     if(inList&&!l.trim()){out+='</ul>';inList=false;continue}
@@ -186,46 +201,55 @@ function resolve(base,h){const parts=(base.split('/').slice(0,-1)).concat(h.spli
 function openPage(path){if(!D.pages[path]){return}
   $('#main').innerHTML=`<p><a onclick="history.back()">← back</a> · <small>${esc(path)}</small></p><div class="page">${md(D.pages[path])}</div>`;
   $('#main').querySelectorAll('a[data-href]').forEach(a=>a.onclick=()=>{const t=resolve(path,a.dataset.href);if(D.pages[t]){location.hash='p:'+t}});
+  $('#main').querySelectorAll('a[data-stem]').forEach(a=>{const t=byStem(a.dataset.stem);if(t)a.onclick=()=>location.hash='p:'+t;else a.style.color='var(--bad)'});
 }
 const head=(k,t,sub)=>`<div class="kicker">${k}</div><h2>${t}</h2><p class="sub">${sub}</p>`;
+const byStem=st=>{const m=D.page_meta.find(x=>x.stem===st);return m?m.path:null};
+const FOLDERS=[['entities','Entities'],['concepts','Concepts'],['decisions','Decisions'],['sources','Sources'],['answers','Answers'],['topics','Topics (v1)'],['meta','Meta']];
 const sum=(o,k)=>Object.values(o).reduce((a,u)=>a+(u[k]||0),0);
 const T={
- Overview(){const v=D.verify, conf=D.topics.reduce((a,t)=>a+t.conflicts.length,0), facts=D.sources.reduce((a,s)=>a+s.verified,0), rej=D.sources.reduce((a,s)=>a+s.rejected,0);
-  const recent=(D.pages['hot.md']||'').split('\n').filter(l=>l.startsWith('- ')).slice(0,6);
-  return head('Overview','State of the knowledge base','Every fact on these pages links to its exact source; quotes are checked by code.')+`<div class="cards">
+ Overview(){const v=D.verify||{}, conf=D.topics.reduce((a,t)=>a+t.conflicts.length,0)+D.contradictions.length,
+   kp=D.page_meta.filter(m=>['entities','concepts','decisions'].includes(m.folder)).length+D.topics.length, prem=sum(D.usage,'premium');
+  const recent=(D.pages['hot.md']||'').replace(/^---[\s\S]*?\n---\n/,'').split('\n').filter(l=>!l.startsWith('# ')).join('\n');
+  return head('Overview','State of the knowledge base','Written by the model from your sources; every statement cites its source and place.')+`<div class="cards">
    <div class="card blue"><b>${D.sources.length}</b><span>sources</span></div>
-   <div class="card"><b>${facts}</b><span>verified facts · ${rej} rejected</span></div>
-   <div class="card"><b>${D.topics.length}</b><span>topics</span></div>
-   <div class="card ${conf?'warn':'ok'}"><b>${conf}</b><span>discrepancies ⚖️</span></div>
-   <div class="card ${v&&v.problems.length?'bad':'ok'}"><b>${v?v.ok+'/'+v.facts:'–'}</b><span>citations verified</span></div>
-   <div class="card blue"><b>${Object.keys(D.glossary).length}</b><span>glossary terms</span></div>
-   <div class="card"><b>${(sum(D.usage,'tokens_in')+sum(D.usage,'tokens_out')).toLocaleString()}</b><span>model tokens · ${sum(D.usage,'calls')} calls · ${sum(D.usage,'premium')||'–'} premium</span></div>
+   <div class="card"><b>${kp}</b><span>knowledge pages</span></div>
+   <div class="card ${conf?'warn':'ok'}"><b>${conf}</b><span>contradictions ⚖️</span></div>
+   <div class="card ${v.citations&&v.citations_ok<v.citations?'warn':'ok'}"><b>${v.citations!=null?v.citations_ok+'/'+v.citations:(v.facts?v.ok+'/'+v.facts:'–')}</b><span>citations found in sources</span></div>
+   <div class="card ${v.broken_links?'warn':'ok'}"><b>${v.broken_links||0}</b><span>broken links</span></div>
+   <div class="card blue"><b>${prem||'–'}</b><span>premium requests used</span></div>
+   <div class="card"><b>${(sum(D.usage,'tokens_in')+sum(D.usage,'tokens_out')).toLocaleString()}</b><span>model tokens · ${sum(D.usage,'calls')} sessions</span></div>
    <div class="card blue"><b>${D.queries.length}</b><span>recent questions</span></div></div>
-   <div class="panel"><h3>Start here</h3><div class="links">${[['index.md','Index'],['discrepancies.md','Discrepancies ⚖️'],['glossary.md','Glossary']].filter(p=>D.pages[p[0]]).map(p=>`<a href="#p:${p[0]}">${p[1]}</a>`).join('')}</div></div>
-   <div class="panel"><h3>Recent activity</h3>${recent.length?'<ul>'+recent.map(l=>'<li>'+esc(l.slice(2))+'</li>').join('')+'</ul>':'<p class="sub">Nothing yet.</p>'}</div>`},
+   <div class="panel"><h3>Start here</h3><div class="links">${[['index.md','Index'],['overview.md','Overview'],['glossary.md','Glossary']].filter(p=>D.pages[p[0]]).map(p=>`<a href="#p:${p[0]}">${p[1]}</a>`).join('')}<a href="#Contradictions">Contradictions ⚖️</a></div></div>
+   <div class="panel"><h3>Recent context</h3><div class="page" style="border:0;padding:0" id="hot">${recent.trim()?md(recent):'<p class="sub">Nothing yet.</p>'}</div></div>`},
+ Pages(){const g=FOLDERS.map(([f,t])=>[t,D.page_meta.filter(m=>m.folder===f)]).filter(x=>x[1].length);
+  return head('Pages','Wiki pages','Pages written and maintained by the model. Click to read; links lead to related pages.')+
+   (g.length?g.map(([t,ms])=>`<div class="panel"><h3>${t} <span class="tag">${ms.length}</span></h3><div class="links">${ms.map(m=>`<a href="#p:${m.path}">${esc(m.title)}</a>`).join('')}</div></div>`).join(''):'<p class="sub">No pages yet.</p>')},
  Sources(){return head('Sources','Sources','Originals are kept unchanged; each one is a commit in the knowledge base.')+`<table><tr><th>Title</th><th>Kind</th><th>Status</th><th>Facts</th><th>Rejected</th><th>Collected</th><th>Found via</th></tr>`+
-  D.sources.map(s=>`<tr><td><a href="#p:sources/${s.id}.md">${esc(s.title)}</a></td><td><span class="tag">${s.kind}</span></td><td>${s.status}</td><td>${s.verified}</td><td class="${s.rejected?'warn':''}">${s.rejected}</td><td>${s.collected}</td><td>${esc(s.via)}</td></tr>`).join('')+'</table>'},
- Topics(){return head('Topics','Topics','Pages built from verified facts across all sources.')+`<table><tr><th>Topic</th><th>Facts</th><th>Discrepancies</th></tr>`+D.topics.map(t=>`<tr><td><a href="#p:topics/${t.slug}.md">${esc(t.title)}</a></td><td>${t.claims}</td><td class="${t.conflicts.length?'warn':''}">${t.conflicts.length?'⚖️ '+t.conflicts.length:''}</td></tr>`).join('')+'</table>'},
- Discrepancies(){const rows=D.topics.flatMap(t=>t.conflicts.map(c=>`<tr><td><a href="#p:topics/${t.slug}.md">${esc(t.title)}</a></td><td>⚖️ ${esc(c.explanation)}</td></tr>`));
-  return head('Discrepancies','Discrepancies ⚖️','Sources that disagree. Experts decide which one wins (authority, validity date).')+(rows.length?`<table><tr><th>Topic</th><th>What disagrees</th></tr>${rows.join('')}</table>`:'<p class="sub">No discrepancies found yet.</p>')},
- Glossary(){return head('Glossary','Glossary','Terms and acronyms found in the sources, by rules (not by the model).')+`<table><tr><th>Term</th><th>Meaning</th><th>Defined in</th></tr>`+Object.entries(D.glossary).map(([k,e])=>`<tr><td><b>${esc(k)}</b></td><td>${esc(e.expansion)}</td><td>${e.cites.slice(0,3).map(c=>`<a href="#p:sources/${c.source_id}.md">${esc((D.sources.find(s=>s.id===c.source_id)||{}).title||c.source_id)}</a> · ${esc(c.locator)}`).join('<br>')}</td></tr>`).join('')+'</table>'},
+  D.sources.map(s=>`<tr><td><a href="#p:sources/${D.source_slugs[s.id]?D.source_slugs[s.id]:s.id}.md">${esc(s.title)}</a></td><td><span class="tag">${s.kind}</span></td><td>${s.status}</td><td>${s.verified}</td><td class="${s.rejected?'warn':''}">${s.rejected}</td><td>${s.collected}</td><td>${esc(s.via)}</td></tr>`).join('')+'</table>'},
+ Contradictions(){const rows=D.contradictions.map(c=>`<tr><td><a href="#p:${c.page}">${esc(c.title)}</a></td><td>⚖️ ${esc(c.text)}</td></tr>`)
+   .concat(D.topics.flatMap(t=>t.conflicts.map(c=>`<tr><td><a href="#p:topics/${t.slug}.md">${esc(t.title)}</a></td><td>⚖️ ${esc(c.explanation)}</td></tr>`)));
+  return head('Contradictions','Contradictions ⚖️','Sources that disagree, as marked by the model on the pages. Experts decide which source wins.')+(rows.length?`<table><tr><th>Page</th><th>What disagrees</th></tr>${rows.join('')}</table>`:'<p class="sub">None found yet.</p>')},
+ Glossary(){if(!Object.keys(D.glossary).length&&D.pages['glossary.md'])return head('Glossary','Glossary','Terms and acronyms, maintained by the model.')+`<div class="page">${md(D.pages['glossary.md'])}</div>`;return head('Glossary','Glossary','Terms and acronyms found in the sources, by rules (not by the model).')+`<table><tr><th>Term</th><th>Meaning</th><th>Defined in</th></tr>`+Object.entries(D.glossary).map(([k,e])=>`<tr><td><b>${esc(k)}</b></td><td>${esc(e.expansion)}</td><td>${e.cites.slice(0,3).map(c=>`<a href="#p:sources/${c.source_id}.md">${esc((D.sources.find(s=>s.id===c.source_id)||{}).title||c.source_id)}</a> · ${esc(c.locator)}`).join('<br>')}</td></tr>`).join('')+'</table>'},
  Usage(){const rows=Object.entries(D.usage);return head('Usage','AI usage','Every model call is metered: tokens, time, and cost when prices are set in config/models.yaml.')+`<table><tr><th>Stage</th><th>Calls</th><th>Tokens in</th><th>Tokens out</th><th>Premium requests</th><th>Cost</th><th>Time (s)</th><th>Errors</th></tr>`+
   rows.map(([k,u])=>`<tr><td>${esc(k)}</td><td>${u.calls}</td><td>${u.tokens_in.toLocaleString()}</td><td>${u.tokens_out.toLocaleString()}</td><td>${u.premium||'–'}</td><td>${u.cost?u.cost.toFixed(4):'–'}</td><td>${u.seconds.toFixed(1)}</td><td class="${u.errors?'bad':''}">${u.errors}</td></tr>`).join('')+'</table>'},
  Questions(){return head('Questions','Recent questions','Asked with kb ask or /kb-ask in Copilot CLI.')+(D.queries.length?`<table><tr><th>When</th><th>Question</th><th>Answered</th><th>Time (s)</th></tr>`+D.queries.map(q=>`<tr><td>${esc(q.at.slice(0,16))}</td><td>${esc(q.question)}</td><td class="${q.not_found?'warn':'ok'}">${q.not_found?'not found':q.sentences+' sentences'}</td><td>${q.seconds}</td></tr>`).join('')+'</table>':'<p class="sub">No questions yet.</p>')},
  Verify(){const v=D.verify;if(!v)return head('Verify','Citation check','')+'<p>Run <code>kb verify</code>.</p>';
-  return head('Verify','Citation check','Every quote on every page is matched against its source.')+`<p>${v.pages} pages · ${v.facts} cited facts · <b class="${v.problems.length?'bad':'ok'}">${v.ok} verified</b> · ${v.problems.length} problems</p>`+(v.problems.length?`<table><tr><th>Page</th><th>Line</th><th>Issue</th></tr>${v.problems.map(p=>`<tr><td><a href="#p:${p.page}">${esc(p.page)}</a></td><td>${p.line}</td><td>${esc(p.issue)}</td></tr>`).join('')}</table>`:'')},
+  return head('Verify','Citation check','Every citation must point to an existing place in its source; links must resolve. Warnings, not deletions.')+`<p>${v.pages} pages · <b class="${v.citations_ok<v.citations?'warn':'ok'}">${v.citations_ok||0}/${v.citations||0} citations found</b> · ${v.broken_links||0} broken links · ${v.uncited_lines||0} long lines without citation · ${v.contradictions||0} contradictions${v.facts?` · v1 facts ${v.ok}/${v.facts}`:''}</p>`+(v.problems.length?`<table><tr><th>Page</th><th>Line</th><th>Issue</th></tr>${v.problems.map(p=>`<tr><td><a href="#p:${p.page}">${esc(p.page)}</a></td><td>${p.line}</td><td>${esc(p.issue)}</td></tr>`).join('')}</table>`:'')},
  Search(){setTimeout(()=>{const i=$('#q');i.focus();i.oninput=()=>{const w=i.value.toLowerCase().split(/\s+/).filter(x=>x.length>1);
    const res=w.length?Object.entries(D.pages).map(([p,t])=>{const l=t.toLowerCase();return [p,t,w.reduce((a,x)=>a+(l.split(x).length-1),0)]}).filter(r=>r[2]).sort((a,b)=>b[2]-a[2]).slice(0,30):[];
    $('#res').innerHTML=res.map(([p,t,n])=>{const k=t.toLowerCase().indexOf(w[0]);return `<div class="hit"><a href="#p:${p}">${esc((t.match(/^# (.*)$/m)||[,p])[1])}</a> <small>${esc(p)} · ${n} hits</small><br><small>${esc(t.slice(Math.max(0,k-80),k+160))}</small></div>`}).join('')||'<p><small>No matches.</small></p>'}},0);
   return head('Search','Search','All wiki pages, in this browser, offline.')+'<input type="search" id="q" placeholder="Search all wiki pages…"><div id="res"></div>'},
  Log(){return head('Log','Change log','Newest first. Every change is also a Git commit.')+(D.pages['log.md']?`<div class="page">${md(D.pages['log.md'])}</div>`:'<p>No log yet.</p>')}
 };
-const N={Sources:D.sources.length,Topics:D.topics.length,Discrepancies:D.topics.reduce((a,t)=>a+t.conflicts.length,0),Glossary:Object.keys(D.glossary).length,Questions:D.queries.length};
+const N={Sources:D.sources.length,Pages:D.page_meta.filter(m=>!['top'].includes(m.folder)).length,Contradictions:D.contradictions.length+D.topics.reduce((a,t)=>a+t.conflicts.length,0),Questions:D.queries.length};
 $('#nav').innerHTML=Object.keys(T).map(k=>`<button data-t="${k}">${k}${N[k]?`<span class="n">${N[k]}</span>`:''}</button>`).join('');
 $('#nav').onclick=e=>{const b=e.target.closest('button');if(b)location.hash=b.dataset.t};
 function route(){const h=decodeURIComponent(location.hash.slice(1))||'Overview';
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===h));
-  if(h.startsWith('p:'))return openPage(h.slice(2));$('#main').innerHTML=(T[h]||T.Overview)()}
+  if(h.startsWith('w:')){const t=byStem(h.slice(2));if(t)return openPage(t)}
+  if(h.startsWith('p:'))return openPage(h.slice(2));$('#main').innerHTML=(T[h]||T.Overview)();
+  $('#main').querySelectorAll('a[data-stem]').forEach(a=>{const t=byStem(a.dataset.stem);if(t)a.onclick=()=>location.hash='p:'+t})}
 window.onhashchange=route;route();
 </script></body></html>
 """

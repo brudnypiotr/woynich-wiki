@@ -1,5 +1,10 @@
 # Ingest analysis: why the pages read badly, and what to change
 
+> **Decision (2026-10-19):** go further than the scripted v2 below: the model writes the wiki in an agent session
+> per source, as in claude-obsidian; scripts sandbox, check and commit. See [ADR-0018](decisions/ADR-0018-the-model-writes-the-wiki.md).
+> First result on the samples (GPT-6 Luna): 4 sources → source, concept and glossary pages in prose, 104/104 citations
+> found in sources, 0 broken links, contradictions marked; 1 premium request per source.
+
 Trigger: first real test (four knowledge-sharing session transcripts). The facts were technically correct and
 verified, but useless to a reader ("Person X said …"), and the pages did not read like a wiki.
 

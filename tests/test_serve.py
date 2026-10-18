@@ -18,7 +18,9 @@ CFG = {"default_adapter": "s", "adapters": {"s": {"module": "scripted_llm:Script
 
 @pytest.fixture
 def app(instance):
+    from scripted_agent import ScriptedAgent
     httpd = serve.make_server(0, gw=Gateway(cfg=CFG, log_path=instance / "catalog" / "metering.jsonl"))
+    serve.Handler.runner = ScriptedAgent()
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{httpd.server_address[1]}", serve.Handler.token
     httpd.shutdown()
@@ -46,8 +48,8 @@ def test_upload_steps_then_discussion(app):
             break
         time.sleep(0.1)
     assert job["state"] == "done", job
-    assert [s for s in serve.STEPS if s in {l["step"] for l in job["log"]}] == serve.STEPS
+    assert [s for s in serve.STEPS_AGENT if s in {l["step"] for l in job["log"]}] == serve.STEPS_AGENT
     s = call(base, token, "/api/sessions", json.dumps({"topic": "Minimum rest"}).encode())
     t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest home base"}).encode())
-    assert not t["not_found"] and t["sentences"][0]["cites"][0]["locator"].startswith("p. ")
+    assert not t["not_found"] and "[[" in t["markdown"]
     assert call(base, token, f"/api/sessions/{s['id']}/save", b"")["saved"].startswith("wiki/answers/discussion-")

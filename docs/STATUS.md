@@ -2,7 +2,8 @@
 
 ## Update 2026-10-19: first real test
 Four knowledge-sharing transcripts: facts verified but useless to a reader ("Person X said …"), pages read as lists.
-Diagnosis and the proposed ingest v2 are in [INGEST-ANALYSIS.md](INGEST-ANALYSIS.md). Added: stop/rollback/remove
+Diagnosis in [INGEST-ANALYSIS.md](INGEST-ANALYSIS.md); decision [ADR-0018](decisions/ADR-0018-the-model-writes-the-wiki.md):
+**the model now writes the wiki** (agent session per source, sandboxed; `kb ingest`, `kb ask`, `kb lint`). Added: stop/rollback/remove
 (`kb rollback`, `kb remove`, Cancel in `kb serve`); fixed: topic data was never committed.
 
 ## Where we are
@@ -44,7 +45,7 @@ Jira JSON, code, text) · `knowledge` (catalog, search, ingest, pages, glossary,
 | Decision log (ADR page type), corrections workflow | D20, trust slide | |
 | Review workflow (draft → reviewed) | ADR-0005 | all pages stay `draft` |
 | Gold-set evaluation script (30 questions) | PRODUCT.md B1 | template only |
-| Ingest v2 (model-written pages) | INGEST-ANALYSIS.md | v1 produces fact lists |
+| Figures read by the model, OCR for scans | ADR-0018 | figures are offered to the model; scans still unread |
 | Semantic search (embeddings) | D19 | only if FTS5 measurably misses |
 
 ## Architecture assumptions deferred

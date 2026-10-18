@@ -58,28 +58,48 @@ def cmd_collect(a) -> int:
 
 
 def cmd_ingest(a) -> int:
-    from kb.knowledge import ingest, verify
-    from kb.llm.gateway import Gateway
+    from kb.knowledge import ingest, verify, wiki
+    use = (a.mode or wiki.mode())
+    show = lambda step, detail: print(f"  {step}: {detail}", flush=True)
     try:
-        res = ingest.ingest_pending(Gateway(adapter=a.adapter), a.ids or None,
-                                    progress=lambda step, detail: print(f"  {step}: {detail}", flush=True))
+        if use == "agent":
+            res = wiki.ingest_pending(a.ids or None, progress=show)
+            for r in res:
+                print(f"ingested {r['id']}: {len(r['created'])} pages created, {len(r['updated'])} updated, "
+                      f"{r.get('premium')} premium request(s), {r.get('seconds')} s")
+                if r.get("reply"):
+                    print("  " + r["reply"].strip().replace("\n", "\n  ")[:1500])
+        else:
+            from kb.llm.gateway import Gateway
+            res = ingest.ingest_pending(Gateway(adapter=a.adapter), a.ids or None, progress=show)
+            for r in res:
+                print(f"ingested {r['id']}: {r['claims']} verified facts, {r['rejected']} rejected, topics: {', '.join(r['topics']) or '-'}")
     except KeyboardInterrupt:
         print("\ninterrupted: unfinished changes were rolled back; the source stays registered.\n"
               "Run `kb ingest` to continue, or `kb remove <id>` to delete it (`kb status --sources` lists ids).")
         return 130
-    for r in res:
-        print(f"ingested {r['id']}: {r['claims']} verified facts, {r['rejected']} rejected, topics: {', '.join(r['topics']) or '-'}")
     if not res:
         print("nothing to ingest (all sources already ingested; pass ids to re-ingest)")
     v = verify.verify_all()
-    print(f"verify: {v['ok']}/{v['facts']} citations ok, {len(v['problems'])} problems")
-    return 0 if not v["problems"] else 1
+    print(f"check: {v.get('citations_ok', 0)}/{v.get('citations', 0)} citations found in sources, {v.get('broken_links', 0)} broken links, "
+          f"{v.get('uncited_lines', 0)} lines without citation, {v.get('contradictions', 0)} contradictions"
+          + (f"; v1 facts {v['ok']}/{v['facts']}" if v["facts"] else ""))
+    return 0
 
 
 def cmd_ask(a) -> int:
-    from kb.knowledge import ask
+    from kb.knowledge import ask, wiki
     from kb.llm.gateway import Gateway
     q = " ".join(a.question)
+    if (a.mode or wiki.mode()) == "agent":
+        res = wiki.ask(q, save=a.save)
+        text = res["answer_text"]
+        if a.evidence:
+            text += "\n\nRead: " + ", ".join(res["pages_read"])
+        if res.get("saved"):
+            text += f"\n\nsaved: {res['saved']}"
+        _out(a, res, text)
+        return 0 if not res["not_found"] else 3
     res = ask.answer(q, Gateway(adapter=a.adapter), save=a.save)
     text = ask.render(res, rel=str(Path(config.paths().instance / "wiki").resolve().as_posix()))
     if a.evidence and res["evidence"]:
@@ -163,9 +183,18 @@ def cmd_remove(a) -> int:
         try:
             r = catalog.remove(sid)
             print(f"removed {r['id']}  {r['title']}  (was {r['status_was']})")
+            if r.get("cleanup"):
+                print("  " + (r["cleanup"].get("error") or f"model cleaned {r['cleanup']['pages_citing']} page(s) that cited it"))
         except KeyError as e:
             print(e); rc = 1
     return rc
+
+
+def cmd_lint(a) -> int:
+    from kb.knowledge import wiki
+    r = wiki.lint()
+    print(r["reply"])
+    return 0
 
 
 def cmd_rollback(a) -> int:
@@ -293,8 +322,11 @@ def main(argv=None) -> int:
     s = sub.add_parser("collect", help="collect sources: inbox folder, a git repository or Jira (JQL)")
     s.add_argument("what", choices=["inbox", "git", "jira"]); s.add_argument("--path"); s.add_argument("--ref", default="HEAD")
     s.add_argument("--glob", action="append"); s.add_argument("--jql"); s.add_argument("--limit", type=int); s.set_defaults(fn=cmd_collect)
-    s = sub.add_parser("ingest", help="build wiki pages from new sources (model + quote verification)")
-    s.add_argument("ids", nargs="*"); s.add_argument("--adapter"); s.set_defaults(fn=cmd_ingest)
+    s = sub.add_parser("ingest", help="the model reads new sources and writes the wiki (one agent session per source)")
+    s.add_argument("ids", nargs="*"); s.add_argument("--adapter")
+    s.add_argument("--mode", choices=["agent", "facts"], help="agent (default): model-written pages; facts: v1 verified fact lists")
+    s.set_defaults(fn=cmd_ingest)
+    sub.add_parser("lint", help="the model checks and repairs the wiki (links, index, duplicates, contradictions)").set_defaults(fn=cmd_lint)
     for name, fn, hlp in (("ask", cmd_ask, "answer a question from the knowledge base, with citations"),
                           ("code-ask", cmd_code_ask, "answer a technical question from the configured code repositories")):
         s = sub.add_parser(name, help=hlp)
@@ -302,6 +334,7 @@ def main(argv=None) -> int:
         s.add_argument("--evidence", action="store_true", help="also print what was read")
         if name == "ask":
             s.add_argument("--save", action="store_true", help="save the answer as a wiki page")
+            s.add_argument("--mode", choices=["agent", "facts"])
         s.set_defaults(fn=fn)
     s = sub.add_parser("search", help="full-text search (no model)")
     s.add_argument("query", nargs="+"); s.add_argument("--limit", type=int, default=8); s.add_argument("--pages", action="store_true")

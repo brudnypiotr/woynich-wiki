@@ -16,11 +16,12 @@ This repository is the **blueprint**: generic code, templates and instructions w
 ## First test: from a PDF to a cited answer (about 5 minutes)
 ```
 kb add samples\sources                 # fictional Example Air sources: OM PDF, meeting, Jira ticket, e-mail
-kb ingest                              # model builds pages; every quote is checked; one commit per source
+kb ingest                              # the model reads each source and writes the wiki; checks; one commit per source
 kb ask "What is the minimum rest before a duty at home base?"
 kb site --open                         # dashboard: sources, topics, discrepancies ⚖️, glossary, tokens
 ```
-Expected: an answer citing `p. 3` of the OM and `t. 00:01:10` of the meeting, and one discrepancy (12 h vs 10 h).
+Expected: pages for the sources and concepts (e.g. minimum rest at home base), an answer citing `p. 3` of the OM and
+`t. 00:01:10` of the meeting, and a contradiction (12 h vs 10 h). About one premium request per source and per question.
 Then with your own files: `kb add C:\path\to\document.pdf` (or drop files into `instance\inbox\` and run `kb collect inbox`).
 
 ### Dashboard branding (optional)
@@ -47,7 +48,7 @@ Then `kb code-ask "How is minimum rest computed? EXA-142" --evidence` (or `/kb-c
 topic and ask follow-up questions with citations. Stop it with Ctrl+C.
 
 ### All commands
-`add`, `collect inbox|git|jira`, `ingest`, `ask`, `code-ask`, `serve`, `search`, `verify`, `site`, `status`, `model list|set|show`, `secrets set|check`, `login`, `llm-smoke`, `plugins`.
+`add`, `collect inbox|git|jira`, `ingest`, `ask`, `code-ask`, `lint`, `remove`, `rollback`, `serve`, `search`, `verify`, `site`, `status`, `model list|set|show`, `secrets set|check`, `login`, `llm-smoke`, `plugins`.
 
 ## Documentation
 - [docs/STATUS.md](docs/STATUS.md): what works, what is next, retrospective · [docs/REAL-DATA-TEST.md](docs/REAL-DATA-TEST.md): checklist for the first real documents

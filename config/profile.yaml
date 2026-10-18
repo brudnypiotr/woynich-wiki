@@ -30,3 +30,8 @@ code_repos: []
 jira: {}
 #  base_url: https://jira.example.com      # Data Center: personal access token, no email
 #  email: you@example.com                  # Jira Cloud only (basic auth with API token)
+
+# Ingest (ADR-0018): "agent" = the model reads each source and writes the wiki pages (default);
+# "facts" = v1 pipeline of verified atomic facts (kept for comparison).
+ingest:
+  mode: agent

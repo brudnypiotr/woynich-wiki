@@ -26,14 +26,16 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from kb.core import config, gitops
-from kb.knowledge import ask, catalog, ingest, pages, verify
+from kb.knowledge import ask, catalog, ingest, pages, verify, wiki
 from kb.llm.gateway import Gateway
 from kb.publish import site
 
 MAX_UPLOAD = 200_000_000
 WRITE_LOCK = threading.Lock()
 JOBS: dict[str, dict] = {}
-STEPS = ["saved", "extracted", "facts", "summary", "topics", "glossary", "verify", "done"]
+STEPS_FACTS = ["saved", "extracted", "facts", "summary", "topics", "glossary", "verify", "done"]
+STEPS_AGENT = ["saved", "extracted", "writing", "checking", "verify", "done"]
+STEPS = STEPS_AGENT
 
 
 def _sessions_dir() -> Path:
@@ -55,7 +57,7 @@ def _save_session(s: dict) -> None:
 def _job_step(job: dict, step: str, detail: str = "") -> None:
     if job.get("cancel"):
         raise ingest.Cancelled()
-    job["step"] = step
+    job["step"] = "writing" if step == "reading" else step  # the model reads and writes in one step
     job["log"].append({"at": time.strftime("%H:%M:%S"), "step": step, "detail": detail})
 
 
@@ -79,7 +81,13 @@ def run_ingest_job(job: dict, path: Path, gw: Gateway) -> None:
             if rec["status"] == "error":
                 raise RuntimeError(info.get("error") or "extraction failed")
             if created or rec["status"] == "extracted":
-                res = ingest.ingest_pending(gw, [rec["id"]], progress=lambda st, d: _job_step(job, st, d))
+                if wiki.mode() == "agent":
+                    res = wiki.ingest_pending([rec["id"]], runner=Handler.runner, cancelled=lambda: bool(job.get("cancel")),
+                                              progress=lambda st, d: _job_step(job, st, d) if not job.get("cancel") else None)
+                    if job.get("cancel"):
+                        raise ingest.Cancelled()
+                else:
+                    res = ingest.ingest_pending(gw, [rec["id"]], progress=lambda st, d: _job_step(job, st, d))
                 job["result"] = res[0] if res else None
             v = verify.verify_all()
             _job_step(job, "verify", f"{v['ok']}/{v['facts']} citations verified, {len(v['problems'])} problems")
@@ -107,6 +115,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "woynich-wiki"
     token = ""
     gw: Gateway | None = None
+    runner = None  # agent runner (tests replace it)
 
     def log_message(self, fmt, *args):  # quiet console
         pass
@@ -220,7 +229,7 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 f.write(chunk); left -= len(chunk)
         job = {"id": uuid.uuid4().hex[:12], "filename": name, "bytes": n, "state": "running", "step": "queued",
-               "started": catalog.now(), "log": [], "steps": STEPS}
+               "started": catalog.now(), "log": [], "steps": STEPS_AGENT if wiki.mode() == "agent" else STEPS_FACTS}
         JOBS[job["id"]] = job
         threading.Thread(target=run_ingest_job, args=(job, tmp, self.gw), daemon=True).start()
         return self._send(200, job)
@@ -230,6 +239,13 @@ class Handler(BaseHTTPRequestHandler):
         if not q:
             return self._send(400, {"error": "question is required"})
         hist = [{"question": t["question"], "answer_text": t["answer_text"]} for t in s["turns"]]
+        if wiki.mode() == "agent":
+            r = wiki.ask(q, runner=Handler.runner, history=hist, topic=s["topic"])
+            turn = {"question": q, "at": catalog.now(), "not_found": r["not_found"], "seconds": r["seconds"], "sentences": [],
+                    "answer_text": r["answer_text"], "markdown": r["answer_text"], "pages_read": r["pages_read"], "premium": r["premium"]}
+            s["turns"].append(turn); s["updated"] = catalog.now()
+            _save_session(s)
+            return self._send(200, turn)
         res = ask.answer(q, self.gw, history=hist, topic=s["topic"])
         ev = res["evidence"]
         sentences = []
@@ -325,7 +341,7 @@ input:focus,textarea:focus{border-color:var(--vio);box-shadow:0 0 0 3px var(--vi
 const ACCESS='__ACCESS__',H={'X-KB-Token':ACCESS};const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const api=(p,o={})=>fetch(p,{...o,headers:{...H,...(o.headers||{})}}).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j});
-const STEPS=['saved','extracted','facts','summary','topics','glossary','verify','done'];
+let STEPS=['saved','extracted','writing','checking','verify','done'];
 async function status(){try{const s=await api('/api/status');$('#st').textContent=`${s.sources} sources · ${s.topics} topics · model ${s.model}${s.busy?' · working…':''}`}catch(e){}}
 setInterval(status,5000);status();
 $('#nav').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.v==='dash'){window.open('/dashboard?t='+ACCESS);return}
@@ -341,7 +357,7 @@ const V={
    api('/api/sessions').then(l=>{$('#sl').innerHTML=l.length?l.map(s=>`<a data-id="${s.id}">${esc(s.topic)} <small>· ${s.turns} questions · ${esc((s.updated||'').slice(0,16))}</small></a>`).join(''):'<p class="sub">None yet.</p>';
      $('#sl').querySelectorAll('a').forEach(a=>a.onclick=async()=>{S=await api('/api/sessions/'+a.dataset.id);chat()})})},
  add(){$('#main').innerHTML=`<div class="kicker">Add sources</div><h2>Add documents to the knowledge base</h2>
-   <p class="sub">PDF, Word, e-mail (.eml), Teams transcripts (.vtt), Jira exports (.jira.json), text or code. Each file is saved unchanged, read, turned into verified facts and topic pages, and committed.</p>
+   <p class="sub">PDF, Word, e-mail (.eml), Teams transcripts (.vtt), Jira exports (.jira.json), text or code. Each file is saved unchanged; the model reads it and writes or updates the wiki pages; links and citations are checked; everything is committed. Cancel at any time.</p>
    <div class="drop" id="drop"><b>Drop files here</b> or click to choose<input type="file" id="file" multiple hidden></div><div id="jobs"></div>`;
    const d=$('#drop'),f=$('#file');d.onclick=()=>f.click();f.onchange=()=>upload([...f.files]);
    d.ondragover=e=>{e.preventDefault();d.classList.add('over')};d.ondragleave=()=>d.classList.remove('over');
@@ -350,7 +366,7 @@ const V={
 };
 async function upload(files){for(const file of files){const j=await api('/api/upload',{method:'POST',headers:{'X-Filename':encodeURIComponent(file.name)},body:file}).catch(e=>({error:e.message,filename:file.name,state:'error',log:[]}));showJob(j)}}
 function showJob(j,once){let el=document.getElementById('job-'+j.id);if(!el){el=document.createElement('div');el.className='panel';el.id='job-'+j.id;$('#jobs')&&$('#jobs').prepend(el)}
-  const at=STEPS.indexOf(j.step);
+  if(j.steps)STEPS=j.steps;const at=STEPS.indexOf(j.step);
   el.innerHTML=`<b>${esc(j.filename)}</b> <small class="sub">${j.bytes?Math.round(j.bytes/1024)+' KB':''}</small>
    <div class="steps">${STEPS.map((s,i)=>`<span class="${(j.state==='error'||j.state==='cancelled')&&i===Math.max(at,0)?'err':(i<at||j.state==='done'?'done':(i===at?'now':''))}">${s}</span>`).join('')}</div>
    ${j.error?`<p style="color:var(--bad)">${esc(j.error)}</p>`:''}
@@ -363,7 +379,11 @@ window.cancelJob=async(id,rm)=>{if(rm&&!confirm('Stop and delete this file from 
   await api('/api/jobs/'+id+'/cancel',{method:'POST',body:JSON.stringify({remove:rm})}).catch(e=>alert(e.message))};
 window.removeSrc=async(jid,sid)=>{if(!confirm('Delete this source, its facts and pages from the knowledge base? (one commit, can be undone with Git)'))return;
   try{await api('/api/sources/'+sid+'/remove',{method:'POST'});api('/api/jobs/'+jid).then(x=>showJob(x))}catch(e){alert(e.message)}};
-function renderTurn(t,i){return `<div class="turn"><div class="q">${esc(t.question)}</div><div class="a">${t.not_found?'<p class="nf">No answer found in the knowledge base. Try other words, or add a source that covers it.</p>':
+function mdl(src){return esc(src).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>')
+  .replace(/\[\[([^\]|#]+)(?:[|#]([^\]]*))?\]\]/g,(m,a,l)=>`<a class="cite" href="/dashboard?t=${ACCESS}#w:${encodeURIComponent(a.trim())}" target="_blank">${esc(l||a.trim())}</a>`)
+  .split(/\n{2,}/).map(p=>/^\s*[-*] /m.test(p)?'<ul>'+p.split('\n').filter(x=>x.trim()).map(x=>'<li>'+x.replace(/^\s*[-*] /,'')+'</li>').join('')+'</ul>':'<p>'+p.replace(/\n/g,'<br>')+'</p>').join('')}
+function renderTurn(t,i){if(t.markdown&&!t.sentences.length)return `<div class="turn"><div class="q">${esc(t.question)}</div><div class="a ${t.not_found?'nf':''}">${mdl(t.markdown)}</div>${t.pages_read&&t.pages_read.length?`<div class="sub" style="font-size:12px">read: ${t.pages_read.map(esc).join(', ')}</div>`:''}</div>`;
+  return `<div class="turn"><div class="q">${esc(t.question)}</div><div class="a">${t.not_found?'<p class="nf">No answer found in the knowledge base. Try other words, or add a source that covers it.</p>':
   t.sentences.map((s,k)=>`<p>${esc(s.text)}${s.cites.map((c,m)=>`<span class="cite" onclick="tg('${i}-${k}-${m}')">[${esc(c.title)} · ${esc(c.locator)}]</span>`).join('')}</p>`+
    s.cites.map((c,m)=>`<div class="ex" id="ex-${i}-${k}-${m}">${esc(c.excerpt)}…</div>`).join('')).join('')}</div></div>`}
 window.tg=id=>{const e=document.getElementById('ex-'+id);e.style.display=e.style.display==='block'?'none':'block'};
