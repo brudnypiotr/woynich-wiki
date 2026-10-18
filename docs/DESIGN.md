@@ -1,6 +1,6 @@
 # Design: decisions so far
 
-Status: **draft**, nothing implemented yet. Pitch: [PITCH.md](PITCH.md). Risks: [CRITICAL-ANALYSIS.md](CRITICAL-ANALYSIS.md).
+Status: **M0 implemented** (2026-10-18). Decisions are now maintained as ADRs in [decisions/](decisions/README.md); the table below is the original summary. Changes: D4 → ADR-0004 (Copilot as engine via SDK), D10 → ADR-0007 (simplified queue), PDF → ADR-0009, store → ADR-0010, ids → ADR-0011, commits → ADR-0012. Pitch: [PITCH.md](PITCH.md). Risks: [CRITICAL-ANALYSIS.md](CRITICAL-ANALYSIS.md).
 
 ## Decisions
 | # | Decision | Notes |

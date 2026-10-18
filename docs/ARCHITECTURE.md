@@ -55,5 +55,15 @@ Personal API token or PAT (depending on Jira Cloud or Data Center), stored in Cr
 - **MVP: SQLite FTS5** (built into Python's `sqlite3`, no extra install). It indexes `text.md` chunks by locator, plus wiki pages and the glossary. It is fast, deterministic, works offline and costs no tokens. The query skill **searches first, then reads only the top hits**, which is essential with a weak model and a small context window.
 - **Later, optional:** embedding-based retrieval (RAG) as a second `SearchIndex` adapter, merged with FTS results (hybrid). Added only if FTS + glossary synonyms prove insufficient on the test question set.
 
+## LLM adapters (verified, spike S1 on macOS)
+- **`copilot-sdk` (default):** `github-copilot-sdk` for Python 3.11+. The SDK downloads its own Copilot runtime (`python -m copilot download-runtime`), so no Node.js is needed. Isolation for ingest:
+  - `available_tools=[]`,
+  - skills, custom instructions and config discovery off,
+  - an empty temporary working directory,
+  - every permission request rejected.
+  
+  Structured output via `send_and_wait(response_schema=…)` (strict JSON schema: every object needs `additionalProperties: false`). Token usage from `session.rpc.usage.get_metrics()`.
+- **`copilot-cli` (fallback):** `copilot -p <prompt> --output-format json [--usage-output-file]`. Flags are detected from `--help`, because CLI versions differ. Limits: Windows command-line length (~32k characters) and weaker isolation (it loads skills and MCP servers).
+
 ## Model constraint (current)
 The MVP runs on the **one model available today**, which is weak. The architecture assumes this: tiny tasks, strict schemas, validators after every step, search before reading. Because the model sits behind the gateway, a stronger model can later **re-run ingest on the same sources** (the originals and the catalog do not change) and the wiki improves without changing anything else.

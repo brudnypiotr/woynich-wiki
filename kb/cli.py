@@ -38,6 +38,17 @@ def cmd_llm_smoke(a) -> int:
     return 0 if any(e.get("ok") for e in report["adapters"].values()) else 1
 
 
+def cmd_login(a) -> int:
+    """Sign in to GitHub Copilot with the runtime downloaded by the Copilot SDK (device / browser flow)."""
+    import subprocess
+    try:
+        from copilot import _cli_download as dl
+    except ImportError:
+        print("Copilot SDK not installed. Run setup.cmd first."); return 2
+    cli = dl.get_cached_cli_path() or dl.download_cli()
+    return subprocess.call([cli, "login"])
+
+
 def cmd_secrets(a) -> int:
     store = registry.create("secret_stores", a.store)
     if a.action == "set":
@@ -55,6 +66,7 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("init", help="create the instance folders").set_defaults(fn=cmd_init)
     sub.add_parser("plugins", help="list registered plugins").set_defaults(fn=cmd_plugins)
+    sub.add_parser("login", help="sign in to GitHub Copilot (once)").set_defaults(fn=cmd_login)
     sub.add_parser("llm-smoke", help="spike S1: test model access from scripts").set_defaults(fn=cmd_llm_smoke)
     s = sub.add_parser("secrets", help="store or check a secret (Jira token, ...)")
     s.add_argument("action", choices=["set", "check"]); s.add_argument("name")

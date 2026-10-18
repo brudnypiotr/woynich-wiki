@@ -1,0 +1,5 @@
+id,category,question,expected_answer,source,locator,asked_by_role
+Q01,where-what,"Example: Where is the minimum rest rule for home base defined?","Example: Ops Manual section 4.2","Ops Manual rev 7","p. 47",specialist
+Q02,why,"Example: Why does an early start extend minimum rest?","Example: decided in workshop, implemented in ticket","PROJ-1234","#c5",specialist
+Q03,conflict,"Example: Do the specification and the code agree on minimum rest?","Example: no, spec v2 still has the old value","Spec v2; RestRule.cs","p. 12; :120",specialist
+Q04,how-do-i,"Example: How do I change a rule parameter for one client?","Example: Settings > Rules > Parameters > Edit","User Guide","p. 112",newcomer

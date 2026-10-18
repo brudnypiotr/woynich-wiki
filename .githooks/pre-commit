@@ -1,0 +1,4 @@
+#!/bin/sh
+# woynich-wiki: block secrets and invalid records. Uses the repo virtualenv if present.
+if [ -x .venv/Scripts/python.exe ]; then PY=.venv/Scripts/python.exe; elif [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python; fi
+exec "$PY" -m kb.core.precommit
