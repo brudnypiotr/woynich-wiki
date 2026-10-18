@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SourceRecord",
+  "description": "One registered source (document, ticket, code snapshot, transcript, email, image). Produced by connectors; enriched by later stages.",
+  "type": "object",
+  "required": ["id", "kind", "title", "origin", "sha256", "collected_at", "found_via"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9]{12}$", "description": "short ASCII id = folder name (avoids long Windows paths)"},
+    "key": {"type": ["string", "null"], "description": "human-readable key, e.g. 'OM-A rev 7'; metadata only"},
+    "kind": {"enum": ["document", "ticket", "code", "transcript", "email", "image", "spreadsheet", "web", "other"]},
+    "title": {"type": "string", "minLength": 1},
+    "origin": {"type": "object", "description": "where it came from", "required": ["connector", "ref"],
+      "properties": {"connector": {"type": "string"}, "ref": {"type": "string"}, "url": {"type": ["string", "null"]}}},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "bytes": {"type": "integer", "minimum": 0},
+    "mime": {"type": ["string", "null"]},
+    "version": {"type": ["string", "null"], "description": "revision / commit / issue updated timestamp"},
+    "valid_from": {"type": ["string", "null"], "format": "date"},
+    "authority": {"type": ["integer", "null"], "minimum": 1, "maximum": 9},
+    "audience": {"enum": ["internal", "client-shareable"], "default": "internal"},
+    "scope": {"type": "string", "default": "client", "description": "core | client:<id>"},
+    "stored_in": {"enum": ["git", "store"], "description": "large originals live in store/ by hash"},
+    "collected_at": {"type": "string"},
+    "found_via": {"type": "array", "items": {"type": "string"}},
+    "supersedes": {"type": ["string", "null"], "description": "id of the previous version of this source"},
+    "status": {"enum": ["new", "extracted", "ingested", "error"], "default": "new"}
+  }
+}

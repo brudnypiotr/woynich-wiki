@@ -1,0 +1,20 @@
+# Example imagery for the internal pitch: company property, never in the blueprint
+pitch/assets/
+# instance data (client/project content) and large originals: never in the blueprint
+instance/
+store/
+# secrets
+.env
+*.env
+*.pem
+*.key
+# local tooling
+.venv/
+local/
+wheels/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+doctor-report.json
+.DS_Store

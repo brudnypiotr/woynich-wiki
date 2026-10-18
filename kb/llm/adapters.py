@@ -1,0 +1,190 @@
+"""LLM adapters. All of them run the model WITHOUT tool access: source text is data, never instructions."""
+from __future__ import annotations
+
+import asyncio
+import json
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
+from kb.core.ports import LLM, LLMResult
+
+# Windows limits a command line to ~32k characters; long prompts must go through the SDK.
+CLI_MAX_PROMPT_CHARS = 28000
+
+
+class FakeAdapter(LLM):
+    """Deterministic adapter for tests: returns a canned reply or echoes a JSON wrapper of the prompt."""
+    name = "fake"
+
+    def __init__(self, reply: str | None = None, **_):
+        self.reply = reply
+
+    def complete(self, prompt, model, attachments=None, response_schema=None):
+        text = self.reply if self.reply is not None else json.dumps({"echo": prompt[:80]})
+        return LLMResult(text=text, model=model or "fake", tokens_in=len(prompt) // 4, tokens_out=len(text) // 4)
+
+
+class CopilotCLIAdapter(LLM):
+    """`copilot -p <prompt> --output-format json --model <m> --usage-output-file <f>` (non-interactive prompt mode).
+
+    No --allow-* flags are passed, so the CLI cannot approve tool use in prompt mode.
+    """
+    name = "copilot-cli"
+
+    def __init__(self, command: str = "copilot", extra_args: list[str] | None = None, timeout: int = 600, **_):
+        self.command = command
+        self.extra_args = list(extra_args or [])
+        self.timeout = timeout
+
+    def available(self) -> bool:
+        return shutil.which(self.command) is not None
+
+    def _supports(self, flag: str) -> bool:
+        """CLI versions differ (e.g. --usage-output-file appeared in 1.0.81); detect from --help once."""
+        if not hasattr(self, "_help"):
+            try:
+                r = subprocess.run([self.command, "--help"], capture_output=True, text=True, timeout=60)
+                self._help = r.stdout + r.stderr
+            except Exception:
+                self._help = ""
+        return flag in self._help
+
+    def complete(self, prompt, model, attachments=None, response_schema=None):
+        if len(prompt) > CLI_MAX_PROMPT_CHARS:
+            raise ValueError(f"prompt has {len(prompt)} chars; command-line limit is ~{CLI_MAX_PROMPT_CHARS}. Use the copilot-sdk adapter.")
+        with tempfile.TemporaryDirectory() as td:
+            usage = Path(td) / "usage.json"
+            cmd = [self.command, "-p", prompt, *self.extra_args]
+            if self._supports("--output-format"):
+                cmd += ["--output-format", "json"]
+            if self._supports("--usage-output-file"):
+                cmd += ["--usage-output-file", str(usage)]
+            if model and model != "auto":
+                cmd += ["--model", model]
+            for a in attachments or []:
+                cmd += ["--attachment", str(a)]
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=self.timeout)
+            if r.returncode != 0:
+                raise RuntimeError(f"copilot exited {r.returncode}: {r.stderr.strip()[:500]}")
+            events = []
+            for line in r.stdout.splitlines():
+                if line.strip().startswith("{"):
+                    try:
+                        events.append(json.loads(line))
+                    except ValueError:
+                        pass
+            usage_data = json.loads(usage.read_text(encoding="utf-8")) if usage.exists() else None
+        tin, tout = _sum_tokens(usage_data)
+        return LLMResult(text=_final_text(events) or r.stdout.strip(), model=model, tokens_in=tin, tokens_out=tout,
+                         raw={"events": events, "usage": usage_data})
+
+
+class CopilotSDKAdapter(LLM):
+    """GitHub Copilot SDK for Python (`pip install github-copilot-sdk`, Python 3.11+, bundles the CLI).
+
+    Isolation for ingest (source text is data): no tools at all (`available_tools=[]`), no skills, no custom
+    instructions or config discovery, an empty temporary working directory, and every permission request rejected.
+    """
+    name = "copilot-sdk"
+
+    def __init__(self, timeout: int = 600, **_):
+        self.timeout = timeout
+
+    async def _run(self, prompt, model, attachments, response_schema=None):
+        import tempfile
+        from copilot import CopilotClient  # optional dependency
+        with tempfile.TemporaryDirectory() as workdir:
+            client = CopilotClient(working_directory=workdir)
+            await client.start()
+            try:
+                kwargs = dict(on_permission_request=_reject_permission, available_tools=[], enable_skills=False,
+                              skip_custom_instructions=True, enable_config_discovery=False, working_directory=workdir)
+                if model and model != "auto":
+                    kwargs["model"] = model
+                session = await client.create_session(**kwargs)
+                send = {"timeout": float(self.timeout)}
+                if response_schema:
+                    send["response_schema"] = response_schema
+                event = await session.send_and_wait(prompt, **send)
+                data = getattr(event, "data", None)
+                text = getattr(data, "content", None)
+                if text is None:
+                    text = str(data if data is not None else event)
+                tin = tout = None
+                try:
+                    m = await session.rpc.usage.get_metrics()
+                    tin = sum((mm.usage.input_tokens or 0) for mm in m.model_metrics.values())
+                    tout = sum((mm.usage.output_tokens or 0) for mm in m.model_metrics.values())
+                except Exception:
+                    pass
+                return LLMResult(text=text, model=model, tokens_in=tin, tokens_out=tout)
+            finally:
+                await client.stop()
+
+    def complete(self, prompt, model, attachments=None, response_schema=None):
+        return asyncio.run(self._run(prompt, model, attachments, response_schema))
+
+    def auth_status(self):
+        async def go():
+            from copilot import CopilotClient
+            client = CopilotClient()
+            await client.start()
+            try:
+                return await client.get_auth_status()
+            finally:
+                await client.stop()
+        return asyncio.run(go())
+
+    def list_models(self) -> list[dict]:
+        async def go():
+            from copilot import CopilotClient
+            client = CopilotClient()
+            await client.start()
+            try:
+                models = await client.list_models()
+                return [{"id": m.id, "name": m.name, "policy": getattr(getattr(m, "policy", None), "state", None)} for m in models]
+            finally:
+                await client.stop()
+        return asyncio.run(go())
+
+
+def _reject_permission(request, invocation):
+    """Never approve anything: woynich-wiki runs the model without tools."""
+    from copilot.generated.rpc import PermissionDecisionReject
+    return PermissionDecisionReject(feedback="woynich-wiki runs the model without tools")
+
+
+def _final_text(events: list[dict]) -> str | None:
+    """Best effort: last assistant message content in the JSONL event stream (format verified in spike S1)."""
+    found = None
+    for ev in events:
+        t = str(ev.get("type", ""))
+        data = ev.get("data") if isinstance(ev.get("data"), dict) else ev
+        content = data.get("content") or data.get("text") or data.get("message")
+        if isinstance(content, str) and ("assistant" in t or "message" in t or "result" in t):
+            found = content
+    return found
+
+
+def _sum_tokens(obj) -> tuple[int | None, int | None]:
+    tin = tout = 0
+    seen = False
+
+    def walk(o):
+        nonlocal tin, tout, seen
+        if isinstance(o, dict):
+            for k, v in o.items():
+                kl = k.lower().replace("_", "")
+                if isinstance(v, (int, float)) and kl in ("inputtokens", "prompttokens"):
+                    tin += int(v); seen = True
+                elif isinstance(v, (int, float)) and kl in ("outputtokens", "completiontokens"):
+                    tout += int(v); seen = True
+                else:
+                    walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+    walk(obj)
+    return (tin, tout) if seen else (None, None)

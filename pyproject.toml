@@ -1,0 +1,22 @@
+[project]
+name = "woynich-wiki"
+version = "0.1.0"
+description = "Project knowledge base with a paper trail (LLM Wiki with strict provenance)"
+requires-python = ">=3.11"
+dependencies = ["pyyaml>=6", "jsonschema>=4"]
+
+[project.optional-dependencies]
+pdf = ["pypdfium2>=4", "pdfplumber>=0.11"]
+pdf-agpl = ["pymupdf>=1.24"]
+secrets = ["keyring>=25"]
+copilot-sdk = ["github-copilot-sdk"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+kb = "kb.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["kb*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

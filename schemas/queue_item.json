@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QueueItem",
+  "description": "A submission to the single-writer queue (ingest as a service).",
+  "type": "object",
+  "required": ["id", "type", "submitted_at", "submitted_by", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string"},
+    "type": {"enum": ["add_source", "correction", "promote", "reingest"]},
+    "submitted_at": {"type": "string"},
+    "submitted_by": {"type": "string"},
+    "payload": {"type": "object"},
+    "note": {"type": ["string", "null"]}
+  }
+}

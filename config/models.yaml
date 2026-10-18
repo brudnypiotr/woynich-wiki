@@ -1,0 +1,32 @@
+# Model routing per task (D5). One weak model today; change one line to upgrade.
+default_adapter: copilot-sdk      # copilot-sdk | copilot-cli | fake
+adapters:
+  copilot-sdk: {module: kb.llm.adapters:CopilotSDKAdapter}
+  copilot-cli:
+    module: kb.llm.adapters:CopilotCLIAdapter
+    command: copilot
+    # Extra flags verified in spike S1 (tool restriction for ingest: no tools at all).
+    extra_args: ["--no-color"]
+  fake: {module: kb.llm.adapters:FakeAdapter}
+
+tiers:
+  basic:    {model: auto}
+  standard: {model: auto}
+  premium:  {model: auto}
+
+tasks:                     # task -> tier
+  classify: basic
+  glossary: basic
+  summarize: standard
+  claims: standard
+  write_page: standard
+  verify_support: basic
+  query: standard
+  decision_draft: standard
+
+# Prices per 1M tokens for the cost meter (fill in from your plan; 0 = unknown).
+prices:
+  auto: {input: 0, output: 0}
+
+budget:
+  max_tokens_per_run: 2000000

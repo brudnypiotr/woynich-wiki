@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Claim",
+  "description": "A statement extracted from one source, with a machine-checkable locator and verbatim quote.",
+  "type": "object",
+  "required": ["text", "source_id", "locator", "quote"],
+  "additionalProperties": false,
+  "properties": {
+    "text": {"type": "string", "minLength": 5},
+    "source_id": {"type": "string"},
+    "locator": {"type": "string", "description": "p. N | ¶ N | t. HH:MM:SS | PROJ-1#c5 | path:line@commit | Sheet!A1"},
+    "quote": {"type": "string", "minLength": 5, "maxLength": 400}
+  }
+}

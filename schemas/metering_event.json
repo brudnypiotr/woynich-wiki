@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MeteringEvent",
+  "description": "One LLM call recorded by the cost meter.",
+  "type": "object",
+  "required": ["at", "task", "adapter", "model", "ok", "duration_s"],
+  "properties": {
+    "at": {"type": "string"}, "task": {"type": "string"}, "stage": {"type": ["string", "null"]},
+    "source_id": {"type": ["string", "null"]}, "adapter": {"type": "string"}, "model": {"type": "string"},
+    "tier": {"type": ["string", "null"]}, "tokens_in": {"type": ["integer", "null"]}, "tokens_out": {"type": ["integer", "null"]},
+    "cost": {"type": ["number", "null"]}, "duration_s": {"type": "number"}, "ok": {"type": "boolean"}, "error": {"type": ["string", "null"]}
+  }
+}

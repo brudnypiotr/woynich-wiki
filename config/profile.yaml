@@ -1,0 +1,23 @@
+# Instance profile. Copy to instance/config/profile.yaml and adapt per client / project.
+instance:
+  name: example
+  title: Example knowledge base
+  language: en
+  client: null            # e.g. "acme" — one instance = one client (D11)
+
+# Authority hierarchy (D8): lower rank wins when sources conflict. Configurable per project.
+authority:
+  - {level: 1, name: signed-client-document, examples: [contract, signed specification, approved OM]}
+  - {level: 2, name: decision,               examples: [Jira resolution, change board, accepted ADR]}
+  - {level: 3, name: production-code,        examples: [code at a released tag, deployed configuration]}
+  - {level: 4, name: internal-documentation, examples: [Confluence, design docs, user guides]}
+  - {level: 5, name: meeting,                examples: [workshop transcript, meeting minutes]}
+  - {level: 6, name: note,                   examples: [personal notes, chat]}
+
+# Reserved for later (D12, D13): fields exist in the schema from day one, no logic yet.
+audience_default: internal      # internal | client-shareable
+scope_default: client           # core | client
+
+# Large originals live outside git, addressed by hash.
+store:
+  max_git_bytes: 20000000        # 20 MB

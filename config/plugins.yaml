@@ -1,0 +1,9 @@
+# Plugin registry: add a module here to add a connector / extractor / publisher.
+# No change in kb/core is needed (fitness function: tests/test_registry.py).
+connectors:
+  folder_inbox: kb.connectors.folder_inbox:FolderInbox
+extractors: {}
+publishers: {}
+secret_stores:
+  keyring: kb.core.secrets:KeyringStore
+  env: kb.core.secrets:EnvStore

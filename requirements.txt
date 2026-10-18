@@ -1,0 +1,8 @@
+# Runtime dependencies installed by setup.ps1 (permissive licences only).
+pyyaml>=6
+jsonschema>=4
+keyring>=25
+pypdfium2>=4
+pdfplumber>=0.11
+github-copilot-sdk
+pytest>=8
