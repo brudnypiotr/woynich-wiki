@@ -10,6 +10,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+from kb.core import config
 from kb.knowledge import catalog
 
 
@@ -62,7 +63,7 @@ def collect_data() -> dict:
         "verify": json.loads(vr.read_text(encoding="utf-8")) if vr.exists() else None,
         "pages": pages,
         "generated": catalog.now(),
-        "name": inst.name,
+        "name": ((config.load("profile").get("instance") or {}).get("title") or inst.name),
     }
 
 
@@ -103,7 +104,7 @@ input[type=search]{width:100%;padding:10px 12px;border:1px solid var(--line);bor
 .hit{padding:10px 0;border-bottom:1px solid var(--line)}.hit small{color:var(--mute)}
 h2{font-size:16px;margin:4px 0 10px}
 </style></head><body>
-<header><h1>__TITLE__ · knowledge base</h1><small id="gen"></small></header>
+<header><h1>__TITLE__</h1><small id="gen"></small></header>
 <nav id="nav"></nav><main id="main"></main>
 <script>
 const D=__DATA__;
