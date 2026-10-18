@@ -35,8 +35,26 @@ class CopilotCLIAdapter(LLM):
 
     def __init__(self, command: str = "copilot", extra_args: list[str] | None = None, timeout: int = 600, **_):
         self.command = command
+        self._argv = None
         self.extra_args = list(extra_args or [])
         self.timeout = timeout
+
+    def argv(self) -> list[str]:
+        """How to start the CLI. On Windows an npm install is a `copilot.CMD` shim: Python cannot start it by name, and
+        running it through cmd.exe would mangle long prompts (quoting, 8 KB limit). Run its JavaScript with node instead."""
+        if self._argv is None:
+            path = shutil.which(self.command) or self.command
+            self._argv = [path]
+            if path.lower().endswith((".cmd", ".bat")):
+                import re
+                from pathlib import Path
+                shim = Path(path)
+                m = re.search(r'%~?dp0%?\\?([^"%]+?\.(?:js|mjs|cjs))', shim.read_text(encoding="utf-8", errors="replace"), re.I)
+                if m:
+                    script = shim.parent / m.group(1).lstrip("\\")
+                    node = shim.parent / "node.exe"
+                    self._argv = [str(node) if node.exists() else (shutil.which("node") or "node"), str(script)]
+        return self._argv
 
     def available(self) -> bool:
         return shutil.which(self.command) is not None
@@ -45,7 +63,7 @@ class CopilotCLIAdapter(LLM):
         """CLI versions differ (e.g. --usage-output-file appeared in 1.0.81); detect from --help once."""
         if not hasattr(self, "_help"):
             try:
-                r = subprocess.run([self.command, "--help"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+                r = subprocess.run([*self.argv(), "--help"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
                 self._help = r.stdout + r.stderr
             except Exception:
                 self._help = ""
@@ -56,7 +74,7 @@ class CopilotCLIAdapter(LLM):
             raise ValueError(f"prompt has {len(prompt)} chars; command-line limit is ~{CLI_MAX_PROMPT_CHARS}. Use the copilot-sdk adapter.")
         with tempfile.TemporaryDirectory() as td:
             usage = Path(td) / "usage.json"
-            cmd = [self.command, "-p", prompt, *self.extra_args]
+            cmd = [*self.argv(), "-p", prompt, *self.extra_args]
             if self._supports("--output-format"):
                 cmd += ["--output-format", "json"]
             if self._supports("--usage-output-file"):

@@ -31,3 +31,15 @@ def test_model_override(tmp_path, monkeypatch):
     assert gw.run("classify", "x").model == "one-model" and gw.run("summarize", "y").model == "one-model"
     monkeypatch.setenv("KB_MODEL", "env-model")
     assert gw.run("classify", "x").model == "env-model"
+
+
+def test_cli_npm_shim_runs_node(tmp_path, monkeypatch):
+    from kb.llm import adapters
+    shim = tmp_path / "copilot.CMD"
+    shim.write_text('@ECHO off\r\nIF EXIST "%dp0%\\node.exe" (\r\n  SET "_prog=%dp0%\\node.exe"\r\n)\r\n'
+                    'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  '
+                    '"%dp0%\\node_modules\\@github\\copilot\\npm-loader.js" %*\r\n', encoding="utf-8")
+    (tmp_path / "node.exe").write_text("")
+    monkeypatch.setattr(adapters.shutil, "which", lambda c: str(shim) if c == "copilot" else None)
+    argv = adapters.CopilotCLIAdapter().argv()
+    assert argv[0].endswith("node.exe") and argv[1].replace("\\", "/").endswith("node_modules/@github/copilot/npm-loader.js")
