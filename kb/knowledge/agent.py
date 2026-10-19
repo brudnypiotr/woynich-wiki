@@ -156,10 +156,14 @@ def _quiet(lp, ctx):  # SDK 1.0.22 cannot parse the echo of a user message with 
     lp.default_exception_handler(ctx)
 
 
-def _session_kwargs(box: Sandbox, model: str, root: Path, tools) -> dict:
+def _session_kwargs(box: Sandbox, model: str, root: Path, tools, streaming: bool = False) -> dict:
+    # reasoning_summary: without it the runtime sends no thinking events (the CLI asks for it itself)
     kw = dict(on_permission_request=box.on_permission, hooks={"on_pre_tool_use": box.pre_tool_use},
               available_tools=sorted(READ_TOOLS | (WRITE_TOOLS if box.write_dirs else set()) | set(box.custom)),
-              enable_skills=False, skip_custom_instructions=True, enable_config_discovery=False, working_directory=str(root))
+              enable_skills=False, skip_custom_instructions=True, enable_config_discovery=False, working_directory=str(root),
+              reasoning_summary="concise")
+    if streaming:
+        kw["streaming"] = True
     if model and model != "auto":
         kw["model"] = model
     if tools:
@@ -231,6 +235,7 @@ class LiveSession:
         self.loop.set_exception_handler(_quiet)
         threading.Thread(target=self.loop.run_forever, daemon=True, name="kb-live-session").start()
         self._seen = (0, 0, 0.0)
+        self._thinking: dict[str, str] = {}
         try:
             self._call(self._start(Path(root), list(tools), resume), 120)
         except Exception:
@@ -244,7 +249,7 @@ class LiveSession:
         from copilot import CopilotClient
         self.client = CopilotClient(working_directory=str(root))
         await self.client.start()
-        kw = _session_kwargs(self.box, self.model, root, tools)
+        kw = _session_kwargs(self.box, self.model, root, tools, streaming=True)
         if resume:
             try:
                 self.session = await self.client.resume_session(resume, **kw)
@@ -263,20 +268,30 @@ class LiveSession:
 
     def _event(self, ev) -> None:
         """Thinking and intent from the runtime, for the live view (tool calls come from the sandbox hook)."""
+        kind = str(getattr(getattr(ev, "type", None), "value", getattr(ev, "type", "")))
+        data = getattr(ev, "data", None)
+        if kind == "assistant.message" and getattr(data, "content", None):
+            self._final = data.content  # with streaming on, keep the answer even if send_and_wait returns no message
+        elif kind == "assistant.message_delta" and getattr(data, "delta_content", None):
+            self._partial += data.delta_content
         say = self.box.progress
         if not say:
             return
-        kind = str(getattr(getattr(ev, "type", None), "value", getattr(ev, "type", "")))
-        data = getattr(ev, "data", None)
-        if kind == "assistant.reasoning" and getattr(data, "content", None):
+        if kind == "assistant.reasoning_delta" and getattr(data, "delta_content", None):
+            rid = getattr(data, "reasoning_id", "")
+            self._thinking[rid] = self._thinking.get(rid, "") + data.delta_content
+            say("thinking", self._thinking[rid].strip())  # the live view replaces the growing entry
+        elif kind == "assistant.reasoning" and getattr(data, "content", None):
             say("thinking", data.content.strip())
         elif kind == "assistant.intent" and getattr(data, "intent", None):
             say("intent", data.intent.strip())
 
     async def _send(self, prompt, attachments):
+        self._final, self._partial, self._thinking = None, "", {}
         att = [{"type": "file", "path": str(Path(a).resolve())} for a in attachments]
         ev = await self.session.send_and_wait(prompt, attachments=att or None, timeout=float(self.timeout))
-        return _reply(ev), await _usage(self.session)
+        reply = getattr(getattr(ev, "data", None), "content", None) or self._final or self._partial or _reply(ev)
+        return reply, await _usage(self.session)
 
     def send(self, prompt: str, attachments=(), progress=None, cancelled=None) -> AgentResult:
         self.box.progress, self.box.cancelled = progress, cancelled

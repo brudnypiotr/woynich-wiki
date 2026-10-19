@@ -50,7 +50,8 @@ def _tracer(sid: str):
         ev = TRACE[sid]["events"]
         kind = {"reading": "read", "writing": "write"}.get(step, step)
         text = str(detail or "")[:1500]
-        if ev and ev[-1]["kind"] == kind == "thinking" and ev[-1]["text"] == text:
+        if ev and ev[-1]["kind"] == kind == "thinking" and text.startswith(ev[-1]["text"][:200]):
+            ev[-1]["text"] = text  # streamed thinking grows in place
             return
         if len(ev) < 80:
             ev.append({"s": round(time.time() - t0, 1), "kind": kind, "text": text})
@@ -479,8 +480,10 @@ iframe{flex:1;border:0;width:100%;min-height:0;background:var(--bg)}
 .md .callout{border-left:4px solid #d98a1b;background:rgba(217,138,27,.09);padding:8px 12px;border-radius:0 10px 10px 0;margin:0 0 10px}
 .md .tbl{overflow:auto;margin:0 0 10px}.md table{border-collapse:collapse;font-size:14px}
 .md th,.md td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}.md th{background:var(--soft)}
-a.wl{display:inline-block;font-size:12.5px;font-weight:700;line-height:1.4;color:var(--vio);background:var(--vio-soft);border-radius:999px;padding:0 8px;text-decoration:none;vertical-align:1px}
-a.wl:hover{background:var(--vio);color:#fff}
+.cg{color:var(--mute);font-size:.82em;opacity:.85}
+a.wl{color:inherit;font-weight:500;text-decoration:underline dotted;text-decoration-color:color-mix(in srgb,currentColor 45%,transparent);text-underline-offset:2px}
+a.wl:hover{color:var(--vio);text-decoration-color:currentColor;opacity:1}
+.meta a.wl{margin-right:6px}
 .nf{color:var(--warn)}
 .meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12px;color:var(--mute)}
 .meta details summary{cursor:pointer;list-style:none}.meta details summary::-webkit-details-marker{display:none}
@@ -631,7 +634,8 @@ $('#sl').onclick=e=>{const a=e.target.closest('a');if(a)location.hash='s='+a.dat
 $('#navp').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.v==='new'&&!location.hash.slice(1))return V.chat(null);location.hash=b.dataset.v==='new'?'':b.dataset.v};
 
 // ---------------------------------------------------------------- markdown (answers)
-function inl(t){return esc(t).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*\w])\*([^*\n]+)\*/g,'$1<i>$2</i>')
+const CITEGRP=/\(([^()]*?(?:\[\[|:\d+@[0-9a-f]{6,}|\b[A-Z][A-Z0-9]+-\d+#)[^()]*)\)/g; // "(…source…)": a footnote, shown muted
+function inl(t){return esc(t).replace(CITEGRP,'<span class="cg">($1)</span>').replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*\w])\*([^*\n]+)\*/g,'$1<i>$2</i>')
   .replace(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g,(m,a,l)=>`<a class="wl" href="#wiki/w:${encodeURIComponent(a.trim())}" title="Open in the wiki">${l||a.trim()}</a>`)}
 const BLOCK=/^(```|#{1,4}\s|\s*\||\s*>|\s*([-*]|\d+\.)\s)/;
 function mdl(src){const L=String(src||'').replace(/\r/g,'').split('\n');let o='',i=0,m;
