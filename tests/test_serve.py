@@ -53,3 +53,37 @@ def test_upload_steps_then_discussion(app):
     t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest home base"}).encode())
     assert not t["not_found"] and "[[" in t["markdown"]
     assert call(base, token, f"/api/sessions/{s['id']}/save", b"")["saved"].startswith("wiki/answers/discussion-")
+
+
+def test_settings_models_profile_and_secrets(app, instance, monkeypatch):
+    from kb.core.ports import SecretStore
+    from kb.publish import settings
+
+    class Mem(SecretStore):
+        data: dict = {}
+        def get(self, name): return self.data.get(name)
+        def set(self, name, value): self.data[name] = value
+        def delete(self, name): self.data.pop(name, None)
+    monkeypatch.setattr(settings, "store", Mem)
+    monkeypatch.delenv("KB_MODEL", raising=False)
+    monkeypatch.delenv("COPILOT_GITHUB_TOKEN", raising=False)
+    base, token = app
+    s = call(base, token, "/api/settings", json.dumps({"model": {"override": "gpt-6-luna", "tiers": {"basic": "small-1"}, "timeout_s": 600},
+                                                       "profile": {"title": "Orders rules", "jira_base_url": "https://jira.example.com/"}}).encode())
+    assert s["model"] == {**s["model"], "effective": "gpt-6-luna", "source": "override", "timeout_s": 600}
+    assert s["model"]["tiers"]["basic"] == "small-1" and s["profile"]["jira_base_url"] == "https://jira.example.com"
+    assert call(base, token, "/api/status")["model"] == "gpt-6-luna"
+    s = call(base, token, "/api/settings", json.dumps({"model": {"override": ""}}).encode())
+    assert s["model"]["source"] == "tiers"
+    with pytest.raises(urllib.error.HTTPError) as e:
+        call(base, token, "/api/settings", json.dumps({"model": {"override": "x; rm -rf /"}}).encode())
+    assert e.value.code == 400
+    st = call(base, token, "/api/secrets/copilot-github-token", json.dumps({"value": "ghp_secret"}).encode())
+    assert {"name": "copilot-github-token", "set": True}.items() <= st["items"][0].items()
+    assert "ghp_secret" not in json.dumps(call(base, token, "/api/settings"))  # never sent back
+    import os
+    assert os.environ["COPILOT_GITHUB_TOKEN"] == "ghp_secret"
+    st = call(base, token, "/api/secrets/confluence-token", json.dumps({"value": "c"}).encode())
+    assert any(x["name"] == "confluence-token" and x["set"] for x in st["items"])
+    st = call(base, token, "/api/secrets/copilot-github-token/delete", b"")
+    assert not st["items"][0]["set"] and "COPILOT_GITHUB_TOKEN" not in os.environ

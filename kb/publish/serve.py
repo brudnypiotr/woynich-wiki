@@ -4,6 +4,7 @@
   (saved → text extracted → facts → summary → topic pages → glossary → citation check) as a background job.
 - Discuss: open a session on a topic and ask follow-up questions; every answer is cited and checked like `kb ask`.
   Sessions are kept in instance/sessions/<id>.json and can be saved as a wiki page.
+- Settings: models, GitHub Copilot sign-in, keys and tokens (never sent back to the browser), Jira and title.
 - Wiki: the same static dashboard, rebuilt on request and shown inside the app (`/dashboard?embed=1`).
 
 One job writes at a time (single writer, ADR on the queue). Every request needs the session token printed at start,
@@ -28,7 +29,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from kb.core import config, gitops
 from kb.knowledge import catalog, chat, pages, verify, wiki
 from kb.llm.gateway import Gateway
-from kb.publish import site
+from kb.publish import settings, site
 
 MAX_UPLOAD = 200_000_000
 WRITE_LOCK = threading.Lock()
@@ -169,10 +170,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, _load_session(url.path.rsplit("/", 1)[-1]))
             except (KeyError, FileNotFoundError):
                 return self._send(404, {"error": "no such session"})
+        if url.path == "/api/settings":
+            return self._send(200, settings.state())
+        if url.path in ("/api/settings/models", "/api/settings/account"):
+            try:
+                return self._send(200, settings.models_available(self.gw) if url.path.endswith("models") else settings.account(self.gw))
+            except Exception as e:
+                return self._send(502, {"error": f"{type(e).__name__}: {e}"[:500]})
         if url.path == "/api/status":
             srcs = catalog.all_sources()
             return self._send(200, {"sources": len(srcs), "pages": sum(1 for _ in pages.wiki().rglob("*.md")) if pages.wiki().exists() else 0, "busy": WRITE_LOCK.locked(),
-                                    "model": self.gw.model_for("query")[1]})
+                                    "model": settings.state()["model"]["effective"]})
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -190,6 +198,14 @@ class Handler(BaseHTTPRequestHandler):
                 s = {"id": uuid.uuid4().hex[:12], "topic": topic, "created": catalog.now(), "updated": catalog.now(), "turns": []}
                 _save_session(s)
                 return self._send(200, s)
+            if url.path == "/api/settings":
+                return self._send(200, settings.save(self._json_body()))
+            if url.path == "/api/settings/login":
+                return self._send(200, settings.login())
+            m = re.fullmatch(r"/api/secrets/([a-z0-9-]{1,40})(/delete)?", url.path)
+            if m:
+                return self._send(200, settings.secret_delete(m.group(1)) if m.group(2) else
+                                  settings.secret_set(m.group(1), str(self._json_body().get("value") or "")))
             m = re.fullmatch(r"/api/jobs/([0-9a-f]{12})/cancel", url.path)
             if m:
                 job = JOBS.get(m.group(1))
@@ -214,6 +230,8 @@ class Handler(BaseHTTPRequestHandler):
             if m:
                 s = _load_session(m.group(1))
                 return self._ask(s) if m.group(2) == "ask" else self._save_page(s)
+        except ValueError as e:
+            return self._send(400, {"error": str(e)[:500]})
         except Exception as e:
             return self._send(500, {"error": f"{type(e).__name__}: {e}"[:500]})
         return self._send(404, {"error": "not found"})
@@ -452,13 +470,40 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
 .job pre{font:12px/1.5 ui-monospace,Consolas,monospace;color:var(--mute);white-space:pre-wrap;max-height:200px;overflow:auto;background:var(--soft);border-radius:10px;padding:10px;margin:6px 0 0}
 .empty{color:var(--mute);font-size:14px}
 
+/* settings */
+.set{border:1px solid var(--line);border-radius:18px;background:var(--card);padding:20px 22px;margin-bottom:18px}
+.set h3{margin:0 0 2px;font-size:17px;font-weight:800;display:flex;align-items:center;gap:10px}
+.set>p.d{margin:0 0 16px;color:var(--mute);font-size:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}
+.f label{display:block;font-size:13px;font-weight:700;margin-bottom:5px;color:var(--ink2)}
+.f small{display:block;font-size:12px;color:var(--mute);margin-top:4px}
+.f input,.f select{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px;outline:none}
+.f input:focus{border-color:var(--vio);box-shadow:0 0 0 3px var(--vio-soft)}
+.f input[readonly]{background:var(--soft);color:var(--mute)}
+.eff{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--soft);border-radius:14px;padding:12px 14px;margin-bottom:16px}
+.eff b{font-size:18px}.eff .badge{margin-left:auto}
+.btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:16px}
+.pri{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:10px;padding:8px 16px;font-weight:700;font-size:14px;background:var(--vio);color:#fff}
+.pri:hover{filter:brightness(1.08)}
+.okmsg{font-size:13px;color:var(--ok)}.errmsg{font-size:13px;color:var(--bad)}
+.sec-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,260px) auto;gap:10px 14px;align-items:center;padding:14px 0;border-top:1px solid var(--line)}
+.sec-row:first-of-type{border-top:0;padding-top:4px}
+.sec-row .nm b{display:flex;align-items:center;gap:8px}.sec-row .nm code{font:12px ui-monospace,Consolas,monospace;color:var(--mute)}
+.sec-row .nm small{display:block;color:var(--mute);font-size:12.5px;margin-top:2px}
+.sec-row input{width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px;outline:none}
+.sec-row .b{display:flex;gap:6px}
+.badge.off{background:var(--soft);color:var(--mute)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px;margin-top:12px}.kv span{color:var(--mute)}
+.meter{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:4px;max-width:260px}.meter i{display:block;height:100%;background:var(--vio)}
+.repos{font-size:14px}.repos div{padding:8px 0;border-top:1px solid var(--line)}.repos code{font:12px ui-monospace,Consolas,monospace;color:var(--mute)}
+
 /* phone */
 .scrim{display:none}
 @media (max-width:820px){
   body{grid-template-columns:1fr}
   aside{position:fixed;inset:0 auto 0 0;width:280px;transform:translateX(-100%);transition:transform .2s}
   body.side aside{transform:none}body.side .scrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:10}
-  .menu{display:inline-grid}.col{padding:20px 16px 10px}.cwrap{padding:6px 12px 12px}.how{grid-template-columns:1fr}
+  .menu{display:inline-grid}.col{padding:20px 16px 10px}.grid2,.sec-row{grid-template-columns:1fr}.cwrap{padding:6px 12px 12px}.how{grid-template-columns:1fr}
   .stepper li{font-size:0}.top .ghost span{display:none}}
 </style></head><body>
 <aside>
@@ -467,6 +512,7 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
   <button class="new" data-v="new"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New discussion</button>
   <button data-v="add"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Add sources</button>
   <button data-v="wiki"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 5h6a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H3zM21 5h-6a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h7z"/></svg>Wiki</button>
+  <button data-v="settings"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
  </div>
  <div class="label">Discussions</div>
  <div class="sl" id="sl"></div>
@@ -554,6 +600,62 @@ const V={
   $('#rl').onclick=()=>$('#wf').contentWindow.location.reload()}
 };
 
+// ---------------------------------------------------------------- settings
+V.settings=async function(){mark('settings');
+  $('#main').innerHTML=topbar('Settings')+`<div class="scroll"><div class="col wide" id="setc"><p class="empty">Loading…</p></div></div>`;
+  let C;try{C=await api('/api/settings')}catch(e){$('#setc').innerHTML=`<p class="errmsg">${esc(e.message)}</p>`;return}
+  const m=C.model,p=C.profile,inp=(id,v,ph='',extra='')=>`<input id="${id}" value="${esc(v)}" placeholder="${esc(ph)}" list="mlist" ${extra}>`;
+  const SRC={env:'set by KB_MODEL',override:'one model for all tasks',tiers:'per task tier'};
+  $('#setc').innerHTML=`<div class="pagehead"><div class="kicker">Settings</div><h2>Models, sign-in and keys</h2>
+    <p>Saved in this knowledge base's own config (<code>instance/config</code>). Keys go to Windows Credential Manager and are never shown again.</p></div>
+   <datalist id="mlist"><option value="auto"></option></datalist>
+   <section class="set"><h3>Model</h3><p class="d">Which model writes the wiki and answers questions. Every call is one premium request.</p>
+    <div class="eff"><span class="sub" style="margin:0">Now in use</span><b id="effm">${esc(m.effective)}</b><span class="badge">${SRC[m.source]}</span></div>
+    ${m.env?`<p class="errmsg">The environment variable KB_MODEL=${esc(m.env)} overrides everything below until it is removed.</p>`:''}
+    <div class="grid2"><div class="f" style="grid-column:1/-1"><label for="ov">One model for every task</label>${inp('ov',m.override,'empty = use the tiers below')}<small>Like <code>kb model set</code>. Leave empty to choose per tier.</small></div>
+     ${['basic','standard','premium'].map(t=>`<div class="f"><label for="t-${t}">${t[0].toUpperCase()+t.slice(1)} tier</label>${inp('t-'+t,m.tiers[t],'auto')}<small>${Object.entries(m.tasks).filter(x=>x[1]===t).map(x=>x[0]).join(', ')||'no tasks'}</small></div>`).join('')}
+     <div class="f"><label for="tmo">Agent time limit (minutes)</label><input id="tmo" type="number" min="1" max="240" value="${Math.round(m.timeout_s/60)}"><small>Per source or question; long documents need more.</small></div></div>
+    <div class="btns"><button class="pri" id="msave">Save model settings</button><button class="ghost" id="mload">Load available models</button><span id="mmsg"></span></div></section>
+   <section class="set"><h3>GitHub Copilot account</h3><p class="d">The models run through your GitHub Copilot subscription.</p>
+    <div class="btns" style="margin-top:0"><button class="ghost" id="acheck">Check sign-in</button><button class="ghost" id="alogin">Sign in with GitHub…</button><span id="amsg"></span></div><div id="acc"></div></section>
+   <section class="set"><h3>Keys and tokens</h3><p class="d">Stored for your Windows user only. This page can tell whether a key is set, never what it is.</p>
+    <div id="secs"></div>
+    <div class="sec-row"><div class="nm"><b>Another key</b><small>Name: lowercase letters, digits, dashes.</small></div><input id="nk-name" placeholder="name, e.g. confluence-token"><div class="b"></div>
+     <div></div><input id="nk-val" type="password" placeholder="value" autocomplete="off"><div class="b"><button class="ghost" id="nk-add">Add</button></div></div></section>
+   <section class="set"><h3>Knowledge base</h3><p class="d">Name shown in the sidebar, and the Jira the assistant may read.</p>
+    <div class="grid2"><div class="f" style="grid-column:1/-1"><label for="ptitle">Title</label><input id="ptitle" value="${esc(p.title)}"></div>
+     <div class="f"><label for="pjira">Jira URL</label><input id="pjira" value="${esc(p.jira_base_url)}" placeholder="https://jira.example.com"><small>Token: <b>Jira token</b> under Keys and tokens.</small></div>
+     <div class="f"><label for="pmail">Jira e-mail</label><input id="pmail" value="${esc(p.jira_email)}" placeholder="Jira Cloud only"><small>Leave empty for Jira Data Center.</small></div></div>
+    <div class="btns"><button class="pri" id="psave">Save</button><span id="pmsg"></span></div>
+    <div class="f" style="margin-top:18px"><label>Code repositories (read only for the assistant)</label><div class="repos">${p.code_repos.length?p.code_repos.map(r=>`<div><b>${esc(r.name)}</b> <code>${esc(r.path)}</code><br><small class="sub">${esc(r.description)}</small></div>`).join(''):'<p class="empty">None configured.</p>'}</div>
+     <small>Edit <code>code_repos</code> in ${esc(C.files.profile)}.</small></div></section>`;
+  const msg=(id,t,ok=true)=>{const e=$('#'+id);e.className=ok?'okmsg':'errmsg';e.textContent=t;if(ok)setTimeout(()=>{if(e.textContent===t)e.textContent=''},4000)};
+  const post=(path,body)=>api(path,{method:'POST',body:JSON.stringify(body||{})});
+  $('#msave').onclick=async()=>{try{const r=await post('/api/settings',{model:{override:$('#ov').value,tiers:{basic:$('#t-basic').value,standard:$('#t-standard').value,premium:$('#t-premium').value},timeout_s:Math.round(+$('#tmo').value*60)}});
+    $('#effm').textContent=r.model.effective;$('.eff .badge').textContent=SRC[r.model.source];msg('mmsg','Saved. The next question or ingest uses '+r.model.effective+'.');status()}catch(e){msg('mmsg',e.message,false)}};
+  $('#mload').onclick=async()=>{const b=$('#mload');b.disabled=true;msg('mmsg','Asking GitHub Copilot… (a few seconds)');
+    try{const l=await api('/api/settings/models');$('#mlist').innerHTML='<option value="auto"></option>'+l.map(x=>`<option value="${esc(x.id)}">${esc(x.name||'')}${x.policy&&x.policy!=='enabled'?' ('+esc(x.policy)+')':''}</option>`).join('');
+      msg('mmsg',l.length+' models available: click a model field to pick one.')}catch(e){msg('mmsg',e.message,false)}finally{b.disabled=false}};
+  $('#acheck').onclick=async()=>{const b=$('#acheck');b.disabled=true;msg('amsg','Checking…');
+    try{const a=await api('/api/settings/account');$('#amsg').textContent='';const au=a.auth||{},q=a.quota||{};
+      const ok=au.is_authenticated??au.isAuthenticated,who=au.login||au.user||'';
+      $('#acc').innerHTML=`<div class="kv"><span>Signed in</span><b class="${ok?'okmsg':'errmsg'}" style="font-size:14px">${au.error?esc(au.error):(ok?'yes'+(who?' as '+esc(who):''):'no')}</b>
+        ${au.auth_type||au.authType?`<span>Method</span><span style="color:var(--ink)">${esc(au.auth_type||au.authType)}</span>`:''}
+        ${a.token_from_store?'<span>Token</span><span style="color:var(--ink)">GitHub token from Keys and tokens</span>':''}
+        ${q.error?`<span>Quota</span><span class="errmsg">${esc(q.error)}</span>`:Object.entries(q).map(([k,v])=>`<span>${esc(k.replace(/_/g,' '))}</span><div>${v.entitlement?`${v.used??'?'} of ${v.entitlement} used`:'unlimited'}${v.resets?` · resets ${esc(String(v.resets).slice(0,10))}`:''}${v.remaining_pct!=null&&v.entitlement?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,100-v.remaining_pct))}%"></i></div>`:''}</div>`).join('')}</div>`}
+    catch(e){msg('amsg',e.message,false)}finally{b.disabled=false}};
+  $('#alogin').onclick=async()=>{try{const r=await post('/api/settings/login');msg('amsg',r.message,r.ok)}catch(e){msg('amsg',e.message,false)}};
+  const secs=st=>{$('#secs').innerHTML=(st.error?`<p class="errmsg">Secret store not available: ${esc(st.error)}</p>`:'')+st.items.map(x=>`<div class="sec-row" data-n="${esc(x.name)}"><div class="nm"><b>${esc(x.label)} <span class="badge ${x.set?'done':'off'}">${x.set?'Set':x.set===null?'?':'Not set'}</span></b><code>${esc(x.name)}</code><small>${esc(x.help)}</small></div>
+     <input type="password" placeholder="${x.set?'Paste a new value to replace':'Paste the value'}" autocomplete="off"><div class="b"><button class="ghost" data-a="set">Save</button>${x.set?'<button class="ghost" data-a="del">Remove</button>':''}</div></div>`).join('')};
+  secs(C.secrets);
+  $('#secs').onclick=async e=>{const b=e.target.closest('button');if(!b)return;const row=b.closest('.sec-row'),n=row.dataset.n,v=row.querySelector('input').value;
+    try{if(b.dataset.a==='del'){if(!confirm('Remove '+n+' from Windows Credential Manager?'))return;secs(await post('/api/secrets/'+n+'/delete'))}
+      else{if(!v.trim())return row.querySelector('input').focus();secs(await post('/api/secrets/'+n,{value:v}))}}catch(err){alert(err.message)}};
+  $('#nk-add').onclick=async()=>{const n=$('#nk-name').value.trim(),v=$('#nk-val').value;if(!n||!v)return;
+    try{secs(await post('/api/secrets/'+encodeURIComponent(n),{value:v}));$('#nk-name').value=$('#nk-val').value=''}catch(e){alert(e.message)}};
+  $('#psave').onclick=async()=>{try{const r=await post('/api/settings',{profile:{title:$('#ptitle').value,jira_base_url:$('#pjira').value,jira_email:$('#pmail').value}});
+    document.querySelector('aside header h1').textContent=r.profile.title;msg('pmsg','Saved.')}catch(e){msg('pmsg',e.message,false)}}};
+
 // ---------------------------------------------------------------- chat
 let IM=[];
 function addImgs(fs){for(const f of fs){if(!f.type.startsWith('image/'))continue;const r=new FileReader();r.onload=()=>{IM.push({name:f.name||'screenshot.png',data:r.result});showImgs()};r.readAsDataURL(f)}}
@@ -601,10 +703,10 @@ window.cancelJob=async(id,rm)=>{if(rm&&!confirm('Stop and delete this file from 
 window.removeSrc=async(jid,sid)=>{if(!confirm('Delete this source and its pages from the knowledge base? (one commit, can be undone with Git)'))return;
   try{await api('/api/sources/'+sid+'/remove',{method:'POST'});api('/api/jobs/'+jid).then(showJob)}catch(e){alert(e.message)}};
 
-// ---------------------------------------------------------------- routing: #s=<id> · #add · #wiki[/<dashboard hash>] · (empty) new discussion
+// ---------------------------------------------------------------- routing: #s=<id> · #add · #settings · #wiki[/<dashboard hash>] · (empty) new discussion
 async function route(){document.body.classList.remove('side');const h=location.hash.slice(1),m=h.match(/^s=([0-9a-f]{12})$/);
   if(m){if(S&&S.id===m[1]&&$('#turns'))return;try{V.chat(await api('/api/sessions/'+m[1]))}catch(e){location.hash=''}}
-  else if(h==='add')V.add();else if(h==='wiki'||h.startsWith('wiki/'))V.wiki(h.slice(5));else V.chat(null)}
+  else if(h==='add')V.add();else if(h==='settings')V.settings();else if(h==='wiki'||h.startsWith('wiki/'))V.wiki(h.slice(5));else V.chat(null)}
 window.onhashchange=route;loadSessions();route();
 </script></body></html>
 """

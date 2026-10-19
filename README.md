@@ -46,7 +46,8 @@ Check with `kb repos`. Then:
 - `kb code-ask "How is minimum rest computed?" --evidence` → answer from wiki + code, citing `file:line@commit`;
 - `kb ask "What does this screen show?" --image screenshot.png` → the model explains the screen with the wiki;
 - `kb chat` → a conversation in the terminal (`/image <file>`, `/save`, `/exit`); in the browser: `kb serve` → a chat
-  (paste a screenshot with Ctrl+V, toggle "Code" to include the repositories);
+  (paste a screenshot with Ctrl+V, toggle "Code" to include the repositories). **Settings** in `kb serve`: model per
+  task tier or one model for all, GitHub Copilot sign-in and quota, keys and tokens (Windows Credential Manager), Jira URL;
 - with Jira configured (`jira.base_url` in the profile, `kb secrets set jira-token`) the model can fetch tickets
   (`jira_get`, `jira_search`) during the conversation.
 

@@ -70,6 +70,9 @@ class SecretStore(ABC):
     @abstractmethod
     def set(self, name: str, value: str) -> None: ...
 
+    def delete(self, name: str) -> None:
+        raise NotImplementedError(f"{type(self).__name__} cannot delete secrets")
+
 
 class Publisher(ABC):
     @abstractmethod

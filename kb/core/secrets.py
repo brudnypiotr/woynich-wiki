@@ -20,6 +20,12 @@ class KeyringStore(SecretStore):
     def set(self, name: str, value: str) -> None:
         self._k.set_password(self.service, name, value)
 
+    def delete(self, name: str) -> None:
+        try:
+            self._k.delete_password(self.service, name)
+        except self._k.errors.PasswordDeleteError:
+            pass  # already gone
+
 
 class EnvStore(SecretStore):
     """Read-only fallback: KB_SECRET_<NAME> environment variables (CI, service accounts)."""
@@ -31,3 +37,19 @@ class EnvStore(SecretStore):
 
     def set(self, name: str, value: str) -> None:
         raise PermissionError("EnvStore is read-only; set the environment variable instead")
+
+
+# Secrets that tools read from the environment: filled from the store when the variable is not set already.
+ENV = {"copilot-github-token": "COPILOT_GITHUB_TOKEN"}
+
+
+def apply_env(store: SecretStore | None = None) -> None:
+    for name, var in ENV.items():
+        if os.environ.get(var):
+            continue
+        try:
+            value = (store or KeyringStore()).get(name)
+        except Exception:  # keyring missing or locked: the Copilot CLI login still works
+            return
+        if value:
+            os.environ[var] = value

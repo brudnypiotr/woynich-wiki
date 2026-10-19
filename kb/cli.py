@@ -339,6 +339,8 @@ def main(argv=None) -> int:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError):
             pass
+    from kb.core.secrets import apply_env
+    apply_env()  # a GitHub token stored in Settings / `kb secrets set copilot-github-token`
     ap = argparse.ArgumentParser(prog="kb", description="woynich-wiki knowledge base")
     ap.add_argument("--version", action="version", version=f"woynich-wiki {__version__}")
     sub = ap.add_subparsers(dest="cmd", required=True)
