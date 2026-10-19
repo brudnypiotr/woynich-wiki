@@ -678,6 +678,7 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
 .sec-row input{width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px;outline:none}
 .sec-row .b{display:flex;gap:6px}
 .badge.off{background:var(--soft);color:var(--mute)}
+.sec-row .chk{display:block;margin-top:4px;font-size:12.5px;font-weight:600}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px;margin-top:12px}.kv span{color:var(--mute)}
 .meter{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:4px;max-width:260px}.meter i{display:block;height:100%;background:var(--vio)}
 .repos{font-size:14px}.repos div{padding:8px 0;border-top:1px solid var(--line)}.repos code{font:12px ui-monospace,Consolas,monospace;color:var(--mute)}
@@ -858,17 +859,21 @@ V.settings=async function(){mark('settings');
         ${a.token_from_store?'<span>Token</span><span style="color:var(--ink)">GitHub token from Keys and tokens</span>':''}
         ${q.error?`<span>Quota</span><span class="errmsg">${esc(q.error)}</span>`:Object.entries(q).map(([k,v])=>`<span>${esc(k.replace(/_/g,' '))}</span><div>${v.entitlement?`${v.used??'?'} of ${v.entitlement} used`:'unlimited'}${v.resets?` · resets ${esc(String(v.resets).slice(0,10))}`:''}${v.remaining_pct!=null&&v.entitlement?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,100-v.remaining_pct))}%"></i></div>`:''}</div>`).join('')}</div>`}
     catch(e){msg('amsg',e.message,false)}finally{b.disabled=false}};
-  $('#ctest').onclick=async()=>{const b=$('#ctest');b.disabled=true;$('#cres').innerHTML='<span>Testing…</span><span></span>';
-    try{const r=await api('/api/settings/check');const L={copilot:'GitHub Copilot',jira:'Jira'};
-      $('#cres').innerHTML=Object.entries(r).map(([k,v])=>`<span>${L[k]||k}</span><b class="${v.ok===true?'okmsg':v.ok===false?'errmsg':'sub'}" style="font-size:14px;margin:0">${v.ok===true?'✓':v.ok===false?'✗':'–'} ${esc(v.detail)}</b>`).join('')}
-    catch(e){$('#cres').innerHTML=`<span>Error</span><b class="errmsg">${esc(e.message)}</b>`}finally{b.disabled=false}};
+  $('#ctest').onclick=()=>{runCheck('copilot');runCheck('jira')};
   $('#alogin').onclick=async()=>{try{const r=await post('/api/settings/login');msg('amsg',r.message,r.ok)}catch(e){msg('amsg',e.message,false)}};
-  const secs=st=>{$('#secs').innerHTML=(st.error?`<p class="errmsg">Secret store not available: ${esc(st.error)}</p>`:'')+st.items.map(x=>`<div class="sec-row" data-n="${esc(x.name)}"><div class="nm"><b>${esc(x.label)} <span class="badge ${x.set?'done':'off'}">${x.set?'Set':x.set===null?'?':'Not set'}</span></b><code>${esc(x.name)}</code><small>${esc(x.help)}</small></div>
+  const CHK={},SVC={'jira-token':'jira','copilot-github-token':'copilot'},LBL={copilot:'GitHub Copilot',jira:'Jira'};let LASTSEC=C.secrets;
+  const chkLine=name=>{const v=CHK[SVC[name]];if(!SVC[name]||!v)return '';
+    return v.running?'<small class="sub chk">testing…</small>':`<small class="chk ${v.ok===true?'okmsg':v.ok===false?'errmsg':'sub'}">${v.ok===true?'✓':v.ok===false?'✗':'–'} ${esc(v.detail)}</small>`};
+  const showChecks=()=>{$('#cres').innerHTML=Object.entries(CHK).map(([k,v])=>`<span>${LBL[k]||k}</span><b class="${v.running?'sub':v.ok===true?'okmsg':v.ok===false?'errmsg':'sub'}" style="font-size:14px;margin:0">${v.running?'testing…':(v.ok===true?'✓ ':v.ok===false?'✗ ':'– ')+esc(v.detail)}</b>`).join('');secs(LASTSEC)};
+  const runCheck=async what=>{CHK[what]={running:true};showChecks();
+    try{const r=await api('/api/settings/check?what='+what);Object.assign(CHK,r)}catch(e){CHK[what]={ok:false,detail:e.message}}showChecks()};
+  const secs=st=>{LASTSEC=st;$('#secs').innerHTML=(st.error?`<p class="errmsg">Secret store not available: ${esc(st.error)}</p>`:'')+st.items.map(x=>`<div class="sec-row" data-n="${esc(x.name)}"><div class="nm"><b>${esc(x.label)} <span class="badge ${x.set?'done':'off'}">${x.set?'Set':x.set===null?'?':'Not set'}</span></b><code>${esc(x.name)}</code><small>${esc(x.help)}</small>${chkLine(x.name)}</div>
      <input type="password" placeholder="${x.set?'Paste a new value to replace':'Paste the value'}" autocomplete="off"><div class="b"><button class="ghost" data-a="set">Save</button>${x.set?'<button class="ghost" data-a="del">Remove</button>':''}</div></div>`).join('')};
   secs(C.secrets);
   $('#secs').onclick=async e=>{const b=e.target.closest('button');if(!b)return;const row=b.closest('.sec-row'),n=row.dataset.n,v=row.querySelector('input').value;
     try{if(b.dataset.a==='del'){if(!confirm('Remove '+n+' from Windows Credential Manager?'))return;secs(await post('/api/secrets/'+n+'/delete'))}
-      else{if(!v.trim())return row.querySelector('input').focus();secs(await post('/api/secrets/'+n,{value:v}))}}catch(err){alert(err.message)}};
+      else{if(!v.trim())return row.querySelector('input').focus();secs(await post('/api/secrets/'+n,{value:v}))}
+      if(SVC[n])runCheck(SVC[n])}catch(err){alert(err.message)}};
   $('#nk-add').onclick=async()=>{const n=$('#nk-name').value.trim(),v=$('#nk-val').value;if(!n||!v)return;
     try{secs(await post('/api/secrets/'+encodeURIComponent(n),{value:v}));$('#nk-name').value=$('#nk-val').value=''}catch(e){alert(e.message)}};
   let RP=p.code_repos.map(r=>({...r}));
@@ -887,7 +892,9 @@ V.settings=async function(){mark('settings');
     RP=r.profile.code_repos.map(x=>({...x}));rrender();const bad=RP.filter(x=>!x.exists).length;
     msg('rmsg',bad?`Saved; ${bad} folder${bad>1?'s':''} not found on this computer.`:'Saved. The next question uses them.',!bad)}catch(e){msg('rmsg',e.message,false)}};
   $('#psave').onclick=async()=>{try{const r=await post('/api/settings',{profile:{title:$('#ptitle').value,jira_base_url:$('#pjira').value,jira_email:$('#pmail').value}});
-    document.querySelector('aside header h1').textContent=r.profile.title;msg('pmsg','Saved.')}catch(e){msg('pmsg',e.message,false)}}};
+    document.querySelector('aside header h1').textContent=r.profile.title;msg('pmsg','Saved.');
+    if(r.profile.jira_base_url)runCheck('jira')}catch(e){msg('pmsg',e.message,false)}};
+  runCheck('copilot');if(p.jira_base_url)runCheck('jira')};  // test what is configured as soon as Settings opens
 
 // ---------------------------------------------------------------- chat
 let IM=[];

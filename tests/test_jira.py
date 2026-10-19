@@ -142,3 +142,19 @@ def test_heartbeat(monkeypatch, instance):
         raise PermissionError("Jira refused the credentials (401); check the token and e-mail")
     monkeypatch.setattr(jira.Jira, "_request", refused)
     assert settings.check(gw, "jira")["jira"] == {"ok": False, "detail": "Jira refused the credentials (401); check the token and e-mail"}
+
+
+def test_heartbeat_explains_errors(monkeypatch):
+    import urllib.error
+
+    def not_found(self, url, accept):
+        raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+    monkeypatch.setattr(jira.Jira, "_request", not_found)
+    with pytest.raises(RuntimeError, match="check the Jira URL"):
+        jira.Jira(**CFG).whoami()
+
+    def offline(self, url, accept):
+        raise urllib.error.URLError("getaddrinfo failed")
+    monkeypatch.setattr(jira.Jira, "_request", offline)
+    with pytest.raises(RuntimeError, match="cannot reach https://example.atlassian.net: getaddrinfo failed"):
+        jira.Jira(**CFG).whoami()

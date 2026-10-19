@@ -101,7 +101,14 @@ class Jira(Connector):
     # ------------------------------------------------------------------ reading
     def whoami(self) -> dict:
         """One cheap authenticated request: who the credentials belong to (heartbeat)."""
-        me = self._get("myself", {})
+        try:
+            me = self._get("myself", {})
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                raise RuntimeError(f"{self.base} is not a Jira site (404): check the Jira URL, e.g. https://<site>.atlassian.net") from e
+            raise RuntimeError(f"Jira answered {e.code} {e.reason}") from e
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"cannot reach {self.base}: {e.reason} (network, VPN or proxy?)") from e
         return {"name": me.get("displayName") or me.get("name"), "email": me.get("emailAddress"), "source": self.source}
 
     def issue_xml(self, key: str) -> str:
