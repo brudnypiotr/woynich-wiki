@@ -83,15 +83,6 @@ def cmd_jira(a) -> int:
     return 0
 
 
-def cmd_completion(a) -> int:
-    from kb import completion
-    if a.action == "show":
-        print(completion.script())
-        return 0
-    print(completion.install())
-    return 0
-
-
 def cmd_ingest(a) -> int:
     from kb.knowledge import verify, wiki
     show = lambda step, detail: print(f"  {step}: {detail}", flush=True)
@@ -411,12 +402,6 @@ def main(argv=None) -> int:
             pass
     from kb.core.secrets import apply_env
     apply_env()  # a GitHub token stored in Settings / `kb secrets set copilot-github-token`
-    a = build_parser().parse_args(argv)
-    return a.fn(a)
-
-
-def build_parser() -> argparse.ArgumentParser:
-    """All commands and options (also the source of Tab completion, `kb completion`)."""
     ap = argparse.ArgumentParser(prog="kb", description="woynich-wiki knowledge base")
     ap.add_argument("--version", action="version", version=f"woynich-wiki {__version__}")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -471,9 +456,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("secrets", help="store or check a secret (Jira token, ...)")
     s.add_argument("action", choices=["set", "check"]); s.add_argument("name")
     s.add_argument("--store", default="keyring"); s.set_defaults(fn=cmd_secrets)
-    s = sub.add_parser("completion", help="type `kb` in any PowerShell window, with Tab completion of commands and options")
-    s.add_argument("action", choices=["install", "show"], nargs="?", default="install"); s.set_defaults(fn=cmd_completion)
-    return ap
+    a = ap.parse_args(argv)
+    return a.fn(a)
 
 
 if __name__ == "__main__":

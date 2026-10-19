@@ -56,12 +56,8 @@ Check with `kb repos`. Then:
   figures, documents their own sources). Credentials: the Windows credential `copilot-jira` (as the jira-snapshot
   skill stores it) or Settings → Jira token; Jira URL in Settings. The assistant also fetches tickets while answering.
 
-### Typing `kb` with Tab completion
-Run `.\kb.cmd completion` once: the folder goes on your user PATH (no admin) and your PowerShell profile gets Tab
-completion of commands and options. Open a new window, type `kb ` and press Tab. Run it again after `git pull`.
-
 ### All commands
-`add`, `collect inbox|git|jira`, `jira get|search|add`, `ingest`, `ask`, `code-ask`, `chat`, `repos`, `lint`, `remove`, `rollback`, `serve`, `search`, `check-answer`, `verify`, `site`, `status`, `model list|set|show`, `secrets set|check`, `login`, `llm-smoke`, `plugins`, `completion`.
+`add`, `collect inbox|git|jira`, `jira get|search|add`, `ingest`, `ask`, `code-ask`, `chat`, `repos`, `lint`, `remove`, `rollback`, `serve`, `search`, `check-answer`, `verify`, `site`, `status`, `model list|set|show`, `secrets set|check`, `login`, `llm-smoke`, `plugins`.
 
 ## Documentation
 - [docs/architecture.html](docs/architecture.html): architecture (who decides what, workflows, source processing, modules, status) — open in a browser

@@ -238,7 +238,6 @@ else { Write-Host 'Setup finished.' -ForegroundColor Green }
 Write-Host 'Next steps:'
 Write-Host '  1. kb login        (sign in to GitHub Copilot once, in the browser)'
 Write-Host '  2. kb llm-smoke    (checks that scripts can use the model; send instance\reports\llm-smoke.json)'
-Write-Host '  3. .\kb.cmd completion   (optional: type kb without .\ in any window, Tab shows commands and options)'
 $script:Steps | ConvertTo-Json | Set-Content (Join-Path $Base 'setup-result.json') -Encoding UTF8
 try { Stop-Transcript | Out-Null } catch { Write-Verbose 'no transcript' }
 if ($failed) { exit 2 } else { exit 0 }
