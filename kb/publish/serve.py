@@ -799,7 +799,8 @@ async function upload(files){for(const file of files){const j=await api('/api/up
   .catch(e=>({id:'x'+Math.random().toString(16).slice(2),error:e.message,filename:file.name,state:'error',log:[]}));showJob(j)}}
 function showJob(j){const box=$('#jobs');if(!box)return;box.querySelector('.empty')?.remove();
   let el=document.getElementById('job-'+j.id);if(!el){el=document.createElement('div');el.className='job';el.id='job-'+j.id;box.prepend(el)}
-  const open=el.querySelector('details')?.open;if(j.steps)STEPS=j.steps;const at=STEPS.indexOf(j.step),bad=j.state==='error'||j.state==='cancelled';
+  const open=el.querySelector('details')?.open,pre=el.querySelector('pre'),top=pre?pre.scrollTop:0,
+    atEnd=pre?pre.scrollTop+pre.clientHeight>=pre.scrollHeight-4:false;if(j.steps)STEPS=j.steps;const at=STEPS.indexOf(j.step),bad=j.state==='error'||j.state==='cancelled';
   const last=(j.log||[]).slice(-1)[0];
   el.innerHTML=`<div class="hd"><span class="fi">${ic(I.file)}</span><div class="nm"><b>${esc(j.filename)}</b><small>${j.bytes?(j.bytes>1e6?(j.bytes/1e6).toFixed(1)+' MB':Math.max(1,Math.round(j.bytes/1024))+' KB'):''}</small></div>
     <span class="badge ${j.state}">${{running:'Working…',done:'Done',error:'Failed',cancelled:'Cancelled'}[j.state]||esc(j.state)}</span></div>
@@ -808,6 +809,7 @@ function showJob(j){const box=$('#jobs');if(!box)return;box.querySelector('.empt
    <div class="acts">${j.state==='running'?`<button class="ghost" onclick="cancelJob('${j.id}',false)">Cancel</button><button class="ghost" onclick="cancelJob('${j.id}',true)">Cancel and remove file</button>`:
      (j.source_id&&!j.removed?`<button class="ghost" onclick="removeSrc('${j.id}','${j.source_id}')">Remove from knowledge base</button>`:(j.removed?'<span class="empty">removed</span>':''))}</div>
    ${(j.log||[]).length?`<details${open?' open':''}><summary>Details</summary><pre>${(j.log||[]).map(l=>`${l.at} ${l.step}: ${esc(l.detail)}`).join('\n')}</pre></details>`:''}`;
+  const np=el.querySelector('pre');if(np&&pre)np.scrollTop=atEnd?np.scrollHeight:top;  // keep the reader's place in the log
   if(j.state==='running')setTimeout(()=>{if(document.getElementById('job-'+j.id))api('/api/jobs/'+j.id).then(showJob).catch(()=>{})},1500)}
 window.cancelJob=async(id,rm)=>{if(rm&&!confirm('Stop and delete this file from the knowledge base?'))return;
   await api('/api/jobs/'+id+'/cancel',{method:'POST',body:JSON.stringify({remove:rm})}).catch(e=>alert(e.message))};
