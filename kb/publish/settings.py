@@ -21,7 +21,7 @@ KNOWN_SECRETS = [
     {"name": "copilot-github-token", "label": "GitHub token for Copilot",
      "help": "Only needed when copilot login is not possible: a GitHub token with Copilot access (used as COPILOT_GITHUB_TOKEN)."},
     {"name": "jira-token", "label": "Jira token",
-     "help": "Personal access token (Jira Data Center) or API token (Jira Cloud). Used by the assistant's Jira tools and kb collect jira."},
+     "help": "Personal access token (Jira Data Center) or API token (Jira Cloud). Not needed if the Windows credential copilot-jira (jira-snapshot skill) exists."},
 ]
 NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
 TIERS = ("basic", "standard", "premium")

@@ -57,6 +57,32 @@ def cmd_collect(a) -> int:
     return 0
 
 
+def cmd_jira(a) -> int:
+    """Jira, read-only: `get` prints one issue (nothing stored), `search` lists keys, `add` registers issues as sources."""
+    from kb.connectors import jira
+    cfg = config.load("profile").get("jira") or {}
+    try:
+        if a.action == "get":
+            for k in a.args:
+                print(jira.get_text(k, **cfg))
+        elif a.action == "search":
+            for i in jira.Jira(**cfg).search(" ".join(a.args), a.limit or 20):
+                print(f"{i['key']}: {i['fields'].get('summary', '')} [{(i['fields'].get('status') or {}).get('name', '')}]")
+        else:
+            res = jira.add(a.args, links=a.links, attachments=not a.no_attachments, **cfg)
+            for r in res:
+                rec = r["record"]
+                print(f"{'added  ' if r['created'] else 'exists '} {rec['id']}  {rec['title']}"
+                      + (f"  (+{r['figures']} screenshots, {len(r['attachments'])} document attachments)" if r["created"] else ""))
+                for w in r["warnings"]:
+                    print(f"  warning: {w}")
+            print(f"{sum(r['created'] for r in res)} new. Next: `kb ingest` (or Add sources in kb serve) writes them into the wiki.")
+    except (RuntimeError, PermissionError, ValueError) as e:
+        print(f"Jira: {e}")
+        return 2
+    return 0
+
+
 def cmd_ingest(a) -> int:
     from kb.knowledge import verify, wiki
     show = lambda step, detail: print(f"  {step}: {detail}", flush=True)
@@ -385,6 +411,10 @@ def main(argv=None) -> int:
     s = sub.add_parser("collect", help="collect sources: inbox folder, a git repository or Jira (JQL)")
     s.add_argument("what", choices=["inbox", "git", "jira"]); s.add_argument("--path"); s.add_argument("--ref", default="HEAD")
     s.add_argument("--glob", action="append"); s.add_argument("--jql"); s.add_argument("--limit", type=int); s.set_defaults(fn=cmd_collect)
+    s = sub.add_parser("jira", help="Jira, read-only: get KEY… (print), search JQL (list), add KEY… (register as sources)")
+    s.add_argument("action", choices=["get", "search", "add"]); s.add_argument("args", nargs="+")
+    s.add_argument("--limit", type=int); s.add_argument("--links", action="store_true", help="add: also linked issues and sub-tasks")
+    s.add_argument("--no-attachments", action="store_true"); s.set_defaults(fn=cmd_jira)
     s = sub.add_parser("ingest", help="the model reads new sources and writes the wiki (one agent session per source)")
     s.add_argument("ids", nargs="*"); s.set_defaults(fn=cmd_ingest)
     sub.add_parser("lint", help="the model checks and repairs the wiki (links, index, duplicates, contradictions)").set_defaults(fn=cmd_lint)

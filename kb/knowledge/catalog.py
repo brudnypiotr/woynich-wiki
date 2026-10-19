@@ -97,7 +97,7 @@ def add_file(path: Path, *, connector: str = "manual", ref: str | None = None, t
         return load(sid), False
     d = inst / "raw" / sid
     d.mkdir(parents=True, exist_ok=True)
-    suffix = "".join(path.suffixes[-2:]) if path.name.endswith(".jira.json") else path.suffix.lower()
+    suffix = "".join(path.suffixes[-2:]) if path.name.endswith((".jira.json", ".jira.xml")) else path.suffix.lower()
     limit = (config.load("profile").get("store") or {}).get("max_git_bytes", 20_000_000)
     size = path.stat().st_size
     if size > limit:
@@ -109,12 +109,12 @@ def add_file(path: Path, *, connector: str = "manual", ref: str | None = None, t
         original = d / f"original{suffix}"
         shutil.copy2(path, original)
         stored_in = "git"
-    rec = {"id": sid, "key": None, "kind": kind or KIND_BY_EXT.get(path.suffix.lower(), "document" if suffix == ".jira.json" else "other"),
+    rec = {"id": sid, "key": None, "kind": kind or KIND_BY_EXT.get(path.suffix.lower(), "document" if suffix in (".jira.json", ".jira.xml") else "other"),
            "title": title or path.stem, "origin": {"connector": connector, "ref": ref or path.name, "url": url},
            "sha256": digest, "bytes": size, "mime": None, "version": version, "valid_from": None,
            "authority": None, "audience": "internal", "scope": "client", "stored_in": stored_in,
            "collected_at": now(), "found_via": found_via or [connector], "supersedes": None, "status": "new"}
-    if suffix == ".jira.json":
+    if suffix in (".jira.json", ".jira.xml"):
         rec["kind"] = "ticket"
     rec = extract(rec, original, d)
     files = [d]

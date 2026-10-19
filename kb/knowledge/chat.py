@@ -63,26 +63,16 @@ def jira_tools() -> list:
     if not cfg:
         return []
     from copilot import define_tool
-    from kb.connectors.jira import Jira
-    from kb.extractors.office import JiraJsonExtractor
+    from kb.connectors import jira
 
-    def text_of(issue: dict) -> str:
-        import tempfile
-        with tempfile.TemporaryDirectory() as td:
-            p = Path(td) / f"{issue['key']}.jira.json"
-            p.write_text(json.dumps(issue), encoding="utf-8")
-            return JiraJsonExtractor().extract(p)["text"]
-
-    @define_tool(description="Fetch one Jira issue (description and comments) as text. Read-only.")
+    @define_tool(description="Fetch one Jira issue as compact text: fields, links, custom fields (e.g. found in release), "
+                             "description and comments (cite comments as KEY#cN). Read-only.")
     def jira_get(params: JiraGet) -> str:
-        j = Jira(**cfg)
-        issue = j._get(f"issue/{params.key.strip()}", {"fields": "summary,description,comment,status,updated,resolution"})
-        return text_of(issue)[:40_000]
+        return jira.get_text(params.key.strip(), **cfg)[:40_000]
 
     @define_tool(description="Search Jira with JQL; returns key, summary and status of matching issues. Read-only.")
     def jira_search(params: JiraSearch) -> str:
-        j = Jira(**cfg)
-        issues = j.search(params.jql, max(1, min(20, params.limit)))
+        issues = jira.Jira(**cfg).search(params.jql, max(1, min(20, params.limit)))
         return "\n".join(f"{i['key']}: {i['fields'].get('summary', '')} [{(i['fields'].get('status') or {}).get('name', '')}]"
                          for i in issues) or "no issues found"
 

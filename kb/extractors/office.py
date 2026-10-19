@@ -134,6 +134,101 @@ class JiraJsonExtractor(Extractor):
                                                         "status": (f.get("status") or {}).get("name")}}
 
 
+class _Rich(HTMLParser):
+    """Jira's rendered HTML (descriptions, comments) → plain text with lists, line breaks and simple tables."""
+    BLOCK = {"p", "div", "ul", "ol", "table", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out, self.pre, self.skip = [], 0, 0
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag in ("script", "style"):
+            self.skip += 1
+        elif tag == "br":
+            self.out.append("\n")
+        elif tag == "li":
+            self.out.append("\n- ")
+        elif tag == "tr":
+            self.out.append("\n|")
+        elif tag in ("td", "th"):
+            self.out.append(" ")
+        elif tag == "img":
+            src = (a.get("src") or "").split("?")[0].rstrip("/").rsplit("/", 1)[-1]
+            self.out.append(f" [image: {a.get('alt') or src}] ")
+        elif tag in self.BLOCK:
+            self.out.append("\n")
+            self.pre += tag == "pre"
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style"):
+            self.skip -= 1
+        elif tag in ("td", "th"):
+            self.out.append(" |")
+        elif tag in self.BLOCK:
+            self.out.append("\n")
+            self.pre -= tag == "pre"
+
+    def handle_data(self, data):
+        if not self.skip:
+            self.out.append(data if self.pre else re.sub(r"\s+", " ", data))
+
+    @classmethod
+    def text(cls, src: str | None) -> str:
+        p = cls(); p.feed(src or ""); p.close()
+        lines = [l.rstrip() for l in "".join(p.out).splitlines()]
+        return re.sub(r"\n{3,}", "\n\n", "\n".join(l if l.strip() else "" for l in lines)).strip()
+
+
+class JiraXmlExtractor(Extractor):
+    """Jira XML issue view (saved by the jira connector): fields, links, custom fields, description, comments."""
+    extensions = (".jira.xml",)
+    SKIP_FIELDS = {"rank", "development", "team", "flagged", "[chart] date of first response", "last viewed"}
+
+    def extract(self, path: Path) -> dict:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(path.read_bytes())
+        item = root.find(".//item")
+        item = root if item is None else item
+        g = lambda tag: (item.findtext(tag) or "").strip()
+        many = lambda tag: ", ".join(e.text.strip() for e in item.findall(tag) if e.text and e.text.strip())
+        key = g("key")
+        summary = g("summary") or re.sub(r"^\[[^\]]+\]\s*", "", g("title"))
+        facts = [("Type", g("type")), ("Status", g("status")), ("Resolution", g("resolution")), ("Priority", g("priority")),
+                 ("Assignee", g("assignee")), ("Reporter", g("reporter")), ("Created", g("created")), ("Updated", g("updated")),
+                 ("Resolved", g("resolved")), ("Affects versions", many("version")), ("Fix versions", many("fixVersion")),
+                 ("Components", many("component")), ("Labels", many("labels/label"))]
+        out = [f"# {key}: {summary}", " · ".join(f"{k}: {v}" for k, v in facts if v)]
+        links = []
+        for t in item.findall("issuelinks/issuelinktype"):
+            for side in ("outwardlinks", "inwardlinks"):
+                for s in t.findall(side):
+                    keys = [k.text.strip() for k in s.findall("issuelink/issuekey") if k.text]
+                    if keys:
+                        links.append(f"{s.get('description') or t.findtext('name') or 'linked'} {', '.join(keys)}")
+        subs = [s.text.strip() for s in item.findall("subtasks/subtask") if s.text]
+        if links or subs:
+            out.append("Links: " + "; ".join(links + ([f"sub-tasks {', '.join(subs)}"] if subs else [])))
+        custom = []
+        for cf in item.findall("customfields/customfield"):
+            name = (cf.findtext("customfieldname") or "").strip()
+            vals = [_Rich.text(v.text) for v in cf.findall("customfieldvalues/customfieldvalue")]
+            vals = [v for v in vals if v]
+            if name and vals and name.lower() not in self.SKIP_FIELDS:
+                custom.append(f"- {name}: {', '.join(vals)[:400]}")
+        if custom:
+            out += ["Custom fields:", *custom]
+        atts = [f"{a.get('name')} ({max(1, int(a.get('size') or 0) // 1024)} KB)" for a in item.findall("attachments/attachment")]
+        if atts:
+            out.append("Attachments: " + ", ".join(atts))
+        out += ["", marker("#description", ""), _Rich.text(g("description")) or "(no description)"]
+        for i, c in enumerate(item.findall("comments/comment"), 1):
+            out += ["", marker("#c", i), f"{c.get('author', '')} ({c.get('created', '')}): {_Rich.text(c.text)}"]
+        return {"text": "\n".join(out) + "\n", "meta": {"key": key, "title": f"{key}: {summary}", "updated": g("updated"),
+                                                        "status": g("status")}}
+
+
 def _adf_text(node) -> str:
     """Atlassian Document Format (Jira Cloud) or plain string (Data Center) → text."""
     if node is None:

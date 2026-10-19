@@ -6,7 +6,7 @@ Knowledge lives in the **instance** folder (`instance/`, its own git repository,
 ## How to run the tool
 - Windows: `.\kb.cmd <command>` (created by `setup.cmd`) · macOS/Linux: `.venv/bin/python -m kb <command>`
 - Commands: `add <file|folder>`, `collect inbox|git|jira`, `ingest` (the model writes the wiki), `ask "<question>"` (`--image`), `code-ask "<question>"`, `chat`, `repos`, `lint`, `remove <id>`, `rollback`, `serve` (local web app),
-  `search <words>`, `check-answer`, `verify`, `site`, `status`. Add `--json` for machine-readable output where supported.
+  `search <words>`, `jira get|search|add`, `check-answer`, `verify`, `site`, `status`. Add `--json` for machine-readable output where supported.
 
 ## Rules (always)
 1. **Answer project questions from the wiki yourself** (skills `kb-ask`, `kb-code`; ADR-0019): read

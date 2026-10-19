@@ -5,11 +5,11 @@ from pathlib import Path
 
 from kb.core import config, registry
 from kb.extractors.base import PlainText
-from kb.extractors.office import (CodeExtractor, DocxExtractor, EmailExtractor, HtmlExtractor, JiraJsonExtractor,
+from kb.extractors.office import (CodeExtractor, DocxExtractor, EmailExtractor, HtmlExtractor, JiraJsonExtractor, JiraXmlExtractor,
                                   TranscriptExtractor)
 from kb.extractors.pdf import PdfExtractor
 
-BUILTIN = [JiraJsonExtractor, PdfExtractor, DocxExtractor, HtmlExtractor, EmailExtractor, TranscriptExtractor, PlainText, CodeExtractor]
+BUILTIN = [JiraXmlExtractor, JiraJsonExtractor, PdfExtractor, DocxExtractor, HtmlExtractor, EmailExtractor, TranscriptExtractor, PlainText, CodeExtractor]
 
 
 def for_path(path: Path):

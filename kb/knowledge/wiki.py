@@ -64,10 +64,12 @@ def _extra(rec: dict, d: Path, chars: int) -> str:
         lines.append(f"- Version / commit: {rec['version']}")
     if rec["origin"].get("url"):
         lines.append(f"- URL: {rec['origin']['url']}")
-    figs = sorted((d / "figures").glob("*.png")) if (d / "figures").exists() else []
+    figs = sorted(f for f in (d / "figures").iterdir() if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".webp")) \
+        if (d / "figures").exists() else []
     if figs:
-        lines.append(f"- Figures extracted from the document: `raw/{rec['id']}/figures/` ({len(figs)} images, named by page, "
-                     "e.g. p0012-01.png). Look at them where the text refers to a screen or diagram.")
+        lines.append(f"- Figures extracted from the document: `raw/{rec['id']}/figures/` ({len(figs)} images, "
+                     + ("the issue's attached screenshots" if rec["kind"] == "ticket" else "named by page, e.g. p0012-01.png")
+                     + "). Look at them where the text refers to a screen or diagram.")
     if chars > LARGE_SOURCE_CHARS:
         lines.append(f"- This source is long. Work through it section by section (e.g. 30–50 pages at a time), updating the "
                      "source page and the knowledge pages as you go, until you reach the end.")

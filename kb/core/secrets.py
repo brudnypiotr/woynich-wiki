@@ -53,3 +53,38 @@ def apply_env(store: SecretStore | None = None) -> None:
             return
         if value:
             os.environ[var] = value
+
+
+def windows_credential(target: str) -> tuple[str, str] | None:
+    """(user name, secret) of a generic credential in Windows Credential Manager, e.g. one stored with
+    `cmdkey /generic:copilot-jira /user:<email> /pass:<token>` (as the jira-snapshot skill does). None elsewhere."""
+    import sys
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    import ctypes.wintypes as w
+
+    class ATTR(ctypes.Structure):
+        _fields_ = [("Keyword", w.LPWSTR), ("Flags", w.DWORD), ("ValueSize", w.DWORD), ("Value", ctypes.POINTER(ctypes.c_ubyte))]
+
+    class CRED(ctypes.Structure):
+        _fields_ = [("Flags", w.DWORD), ("Type", w.DWORD), ("TargetName", w.LPWSTR), ("Comment", w.LPWSTR),
+                    ("LastWritten", w.FILETIME), ("CredentialBlobSize", w.DWORD), ("CredentialBlob", ctypes.POINTER(ctypes.c_ubyte)),
+                    ("Persist", w.DWORD), ("AttributeCount", w.DWORD), ("Attributes", ctypes.POINTER(ATTR)),
+                    ("TargetAlias", w.LPWSTR), ("UserName", w.LPWSTR)]
+    adv = ctypes.windll.advapi32
+    cred = ctypes.POINTER(CRED)()
+    if not adv.CredReadW(ctypes.c_wchar_p(target), 1, 0, ctypes.byref(cred)):  # 1 = CRED_TYPE_GENERIC
+        return None
+    try:
+        c = cred.contents
+        if not c.CredentialBlobSize or not c.CredentialBlob:
+            return None
+        raw = ctypes.string_at(c.CredentialBlob, int(c.CredentialBlobSize))
+        try:
+            secret = raw.decode("utf-16-le").rstrip("\x00")
+        except UnicodeDecodeError:
+            secret = raw.decode("utf-8", errors="replace").rstrip("\x00")
+        return c.UserName or "", secret
+    finally:
+        adv.CredFree(cred)

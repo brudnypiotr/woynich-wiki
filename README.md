@@ -51,11 +51,13 @@ Check with `kb repos`. Then:
 - `kb chat` → a conversation in the terminal (`/image <file>`, `/save`, `/exit`); in the browser: `kb serve` → a chat
   (paste a screenshot with Ctrl+V, toggle "Code" to include the repositories). **Settings** in `kb serve`: model per
   task tier or one model for all, GitHub Copilot sign-in and quota, keys and tokens (Windows Credential Manager), Jira URL;
-- with Jira configured (`jira.base_url` in the profile, `kb secrets set jira-token`) the model can fetch tickets
-  (`jira_get`, `jira_search`) during the conversation.
+- Jira (read-only): `kb jira get PROJ-123` prints an issue (fields, links, custom fields, description, comments as
+  `#cN`), `kb jira search "<JQL>"`, `kb jira add PROJ-123 --links` registers issues as sources (screenshots become
+  figures, documents their own sources). Credentials: the Windows credential `copilot-jira` (as the jira-snapshot
+  skill stores it) or Settings → Jira token; Jira URL in Settings. The assistant also fetches tickets while answering.
 
 ### All commands
-`add`, `collect inbox|git|jira`, `ingest`, `ask`, `code-ask`, `chat`, `repos`, `lint`, `remove`, `rollback`, `serve`, `search`, `verify`, `site`, `status`, `model list|set|show`, `secrets set|check`, `login`, `llm-smoke`, `plugins`.
+`add`, `collect inbox|git|jira`, `jira get|search|add`, `ingest`, `ask`, `code-ask`, `chat`, `repos`, `lint`, `remove`, `rollback`, `serve`, `search`, `check-answer`, `verify`, `site`, `status`, `model list|set|show`, `secrets set|check`, `login`, `llm-smoke`, `plugins`.
 
 ## Documentation
 - [docs/architecture.html](docs/architecture.html): architecture (who decides what, workflows, source processing, modules, status) — open in a browser
