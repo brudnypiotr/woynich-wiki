@@ -20,3 +20,9 @@ __pycache__/
 doctor-report.json
 .DS_Store
 kb.cmd
+# JetBrains IDE (PyCharm, IntelliJ)
+.idea/
+*.iml
+out/
+# setup output
+setup.log
