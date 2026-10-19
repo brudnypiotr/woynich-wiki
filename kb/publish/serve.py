@@ -26,7 +26,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from kb.core import config, gitops
 from kb.knowledge import catalog, chat, pages, verify, wiki
@@ -110,6 +110,22 @@ def _load_session(sid: str) -> dict:
 
 def _save_session(s: dict) -> None:
     (_sessions_dir() / f"{s['id']}.json").write_text(json.dumps(s, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def _delete_session(sid: str) -> dict:
+    """Delete a discussion: its saved turns, attached screenshots and open agent session. Wiki pages saved from it stay."""
+    import shutil
+    with LIVE_LOCK:
+        conv = LIVE.pop(sid, None)
+    if conv:
+        conv.close()
+    TRACE.pop(sid, None)
+    f = _sessions_dir() / f"{sid}.json"
+    if not f.exists():
+        raise KeyError(sid)
+    f.unlink()
+    shutil.rmtree(_sessions_dir() / sid, ignore_errors=True)
+    return {"deleted": sid}
 
 
 def _job_step(job: dict, step: str, detail: str = "") -> None:
@@ -206,8 +222,11 @@ class Handler(BaseHTTPRequestHandler):
             brand = site._branding()
             if "<img" not in brand:  # no company logo in instance/branding: neutral mark
                 brand = MARK + brand
+            icon = site.branding_file("icon")  # company icon from instance/branding, else the neutral mark
+            mark = f'<img class="mark" src="{site._data_uri(icon)}" alt="">' if icon else MARK
+            fav = site._data_uri(icon) if icon else "data:image/svg+xml," + quote(MARK.replace('class="mark" ', ""))
             page = (APP.replace("__ACCESS__", self.token).replace("__TITLE__", html.escape(title))
-                    .replace("__LOGO__", brand).replace("__MARK__", MARK))
+                    .replace("__LOGO__", brand).replace("__MARK__", mark).replace("__FAVICON__", fav))
             return self._send(200, page, "text/html; charset=utf-8")
         if url.path == "/dashboard":
             page = site.build().read_bytes()
@@ -295,12 +314,17 @@ class Handler(BaseHTTPRequestHandler):
                     if j.get("source_id") == m.group(1):
                         j["removed"] = True
                 return self._send(200, r)
+            m = re.fullmatch(r"/api/sessions/([0-9a-f]{12})/delete", url.path)
+            if m:
+                return self._send(200, _delete_session(m.group(1)))
             m = re.fullmatch(r"/api/sessions/([0-9a-f]{12})/(ask|save)", url.path)
             if m:
                 s = _load_session(m.group(1))
                 return self._ask(s) if m.group(2) == "ask" else self._save_page(s)
         except ValueError as e:
             return self._send(400, {"error": str(e)[:500]})
+        except (KeyError, FileNotFoundError):
+            return self._send(404, {"error": "no such discussion"})
         except Exception as e:
             return self._send(500, {"error": f"{type(e).__name__}: {e}"[:500]})
         return self._send(404, {"error": "not found"})
@@ -406,6 +430,7 @@ MARK = ('<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearG
 APP = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>__TITLE__</title>
+<link rel="icon" href="__FAVICON__">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -421,12 +446,13 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 'Red Hat Displ
 button{font:inherit;color:inherit;cursor:pointer}
 button:disabled{opacity:.45;cursor:default}
 svg.i{width:18px;height:18px;flex:none}
-svg.mark{width:30px;height:30px;flex:none}
+svg.mark,img.mark{width:30px;height:30px;flex:none;object-fit:contain;border-radius:8px}
 
 /* sidebar */
 aside{background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;min-height:0;z-index:20}
 header{display:flex;align-items:center;gap:10px;padding:16px 16px 14px;background:var(--side) var(--hdr-bg,none) center/cover;border-bottom:1px solid rgba(255,255,255,.07)}
-header img{height:26px;width:auto;max-width:120px}
+header img{height:26px;width:auto;max-width:150px}
+header:has(img){flex-direction:column;align-items:flex-start;gap:10px}
 header h1{margin:0;font-size:15px;font-weight:800;color:#fff;line-height:1.2;letter-spacing:-.01em}
 header small{display:block;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#b9a6ff}
 .navp{padding:12px 10px 4px;display:flex;flex-direction:column;gap:2px}
@@ -436,7 +462,10 @@ header small{display:block;font-size:11px;font-weight:600;letter-spacing:.12em;t
 .navp button.new{border:1px solid rgba(255,255,255,.14);margin-bottom:6px}
 .label{padding:16px 22px 6px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#7f88b5}
 .sl{flex:1;overflow:auto;padding:0 10px 10px}
-.sl a{font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;cursor:pointer}
+.sl a{font-weight:500;font-size:14px;cursor:pointer;padding-right:6px}
+.sl a span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sl a .del{flex:none;visibility:hidden;border:0;background:none;color:#8e97c4;font-size:16px;line-height:1;width:22px;height:22px;border-radius:6px;padding:0}
+.sl a:hover .del,.sl a.on .del{visibility:visible}.sl a .del:hover{background:rgba(255,255,255,.1);color:#fff}
 .sl .none{padding:4px 12px;font-size:13px;color:#7f88b5}
 .foot{padding:12px 18px;border-top:1px solid rgba(255,255,255,.07);font-size:12px;color:#8e97c4;display:flex;align-items:center;gap:8px}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}.dot.busy{background:#f0a83a;animation:pulse 1.2s infinite}
@@ -457,7 +486,7 @@ iframe{flex:1;border:0;width:100%;min-height:0;background:var(--bg)}
 
 /* chat */
 .hero{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 24px}
-.hero svg.mark{width:48px;height:48px;margin-bottom:14px}
+.hero .mark{width:48px!important;height:48px!important;margin-bottom:14px}
 .hero h2{font-size:28px;font-weight:800;margin:0 0 6px;letter-spacing:-.02em}
 .hero p{color:var(--mute);margin:0 0 22px;max-width:520px}
 .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:640px}
@@ -468,7 +497,7 @@ iframe{flex:1;border:0;width:100%;min-height:0;background:var(--bg)}
 .msg.user .bubble{background:var(--bubble);border-radius:20px 20px 6px 20px;padding:10px 16px;max-width:85%;white-space:pre-wrap;word-wrap:break-word}
 .msg.user .att{font-size:12px;color:var(--mute);margin-top:4px}
 .msg.bot{display:flex;gap:14px}
-.msg.bot svg.mark{width:28px;height:28px;margin-top:2px}
+.msg.bot .mark{width:28px!important;height:28px!important;margin-top:2px}
 .msg.bot .body{flex:1;min-width:0}
 .md p{margin:0 0 10px}.md>:last-child{margin-bottom:0}
 .md h3,.md h4,.md h5{margin:16px 0 6px;line-height:1.3}.md h3{font-size:18px}.md h4{font-size:16px}.md h5{font-size:15px}
@@ -480,8 +509,9 @@ iframe{flex:1;border:0;width:100%;min-height:0;background:var(--bg)}
 .md .callout{border-left:4px solid #d98a1b;background:rgba(217,138,27,.09);padding:8px 12px;border-radius:0 10px 10px 0;margin:0 0 10px}
 .md .tbl{overflow:auto;margin:0 0 10px}.md table{border-collapse:collapse;font-size:14px}
 .md th,.md td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}.md th{background:var(--soft)}
-.cg{color:var(--mute);font-size:.82em;opacity:.85}
-a.wl{color:inherit;font-weight:500;text-decoration:underline dotted;text-decoration-color:color-mix(in srgb,currentColor 45%,transparent);text-underline-offset:2px}
+.cg{color:var(--mute);font-size:.74em;font-weight:400;opacity:.7;letter-spacing:.01em}
+.cg a.wl,.cg b,.cg code{font-weight:400}.cg code{font-size:1em;background:none;border:0;padding:0}
+a.wl{color:inherit;font-weight:400;text-decoration:underline dotted;text-decoration-color:color-mix(in srgb,currentColor 45%,transparent);text-underline-offset:2px}
 a.wl:hover{color:var(--vio);text-decoration-color:currentColor;opacity:1}
 .meta a.wl{margin-right:6px}
 .nf{color:var(--warn)}
@@ -617,7 +647,7 @@ const api=(p,o={})=>fetch(p,{...o,headers:{...H,...(o.headers||{})}}).then(async
 const ic=(d,w=1.8)=>`<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
 const I={menu:'M4 6h16M4 12h16M4 18h16',clip:'m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7',code:'m8 8-4 4 4 4M16 8l4 4-4 4',
   send:'M12 19V5m0 0-6 6m6-6 6 6',save:'M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6',ext:'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',file:'M6 3h8l5 5v13H6zM14 3v5h5',
-  up:'M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',redo:'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5'};
+  up:'M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',redo:'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5',trash:'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3'};
 const topbar=(title,acts='')=>`<div class="top"><button class="icon menu" onclick="document.body.classList.add('side')" title="Menu">${ic(I.menu)}</button><div class="ttl">${title}</div>${acts}</div>`;
 let S=null,BUSY=false,STEPS=['saved','extracted','writing','checking','verify','done'];
 const STEP_LABEL={saved:'Saved',extracted:'Text extracted',writing:'Writing wiki',checking:'Checking',verify:'Citations verified',done:'Done'};
@@ -626,11 +656,15 @@ async function status(){try{const s=await api('/api/status');$('#st').textConten
   $('#dot').classList.toggle('busy',s.busy)}catch(e){$('#st').textContent='not connected';$('#dot').classList.add('busy')}}
 setInterval(status,5000);status();
 async function loadSessions(){const l=await api('/api/sessions').catch(()=>[]);
-  $('#sl').innerHTML=l.length?l.map(s=>`<a data-id="${s.id}" title="${esc(s.topic)} · ${s.turns} questions">${esc(s.topic)}</a>`).join(''):'<div class="none">No discussions yet.</div>';mark()}
+  $('#sl').innerHTML=l.length?l.map(s=>`<a data-id="${s.id}" title="${esc(s.topic)} · ${s.turns} questions"><span>${esc(s.topic)}</span><button class="del" data-del="${s.id}" title="Delete discussion">×</button></a>`).join(''):'<div class="none">No discussions yet.</div>';mark()}
+async function delSession(id){if(!confirm('Delete this discussion? Wiki pages saved from it stay.'))return;
+  try{await api('/api/sessions/'+id+'/delete',{method:'POST'})}catch(e){return alert(e.message)}
+  if(S&&S.id===id){S=null;if(location.hash.slice(1))location.hash='';else V.chat(null)}loadSessions()}
 function mark(v){v=v||(location.hash.slice(1).split('/')[0]||'new');const sid=(v.match(/^s=(\w+)/)||[])[1];
   document.querySelectorAll('#navp button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   document.querySelectorAll('#sl a').forEach(a=>a.classList.toggle('on',a.dataset.id===sid))}
-$('#sl').onclick=e=>{const a=e.target.closest('a');if(a)location.hash='s='+a.dataset.id};
+$('#sl').onclick=e=>{const d=e.target.closest('[data-del]');if(d){e.preventDefault();e.stopPropagation();return delSession(d.dataset.del)}
+  const a=e.target.closest('a');if(a)location.hash='s='+a.dataset.id};
 $('#navp').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.v==='new'&&!location.hash.slice(1))return V.chat(null);location.hash=b.dataset.v==='new'?'':b.dataset.v};
 
 // ---------------------------------------------------------------- markdown (answers)
@@ -655,7 +689,7 @@ function mdl(src){const L=String(src||'').replace(/\r/g,'').split('\n');let o=''
 // ---------------------------------------------------------------- views
 const V={
  chat(s){S=s;mark(s?'s='+s.id:'new');
-  $('#main').innerHTML=topbar(s?esc(s.topic):'New discussion',s?`<button class="ghost" id="save" title="Save this discussion as a wiki page">${ic(I.save)}<span>Save as wiki page</span></button>`:'')+
+  $('#main').innerHTML=topbar(s?esc(s.topic):'New discussion',s?`<button class="ghost" id="save" title="Save this discussion as a wiki page">${ic(I.save)}<span>Save as wiki page</span></button><button class="icon" id="delc" title="Delete this discussion">${ic(I.trash)}</button>`:'')+
    `<div class="scroll" id="scroll"><div class="col" id="turns"></div></div>
    <div class="cwrap"><div class="composer"><div class="imgs" id="imgs"></div>
      <textarea id="q" rows="1" placeholder="Ask anything about the knowledge base…"></textarea>
@@ -664,6 +698,7 @@ const V={
        <button class="send" id="ask" title="Send (Enter)" disabled>${ic(I.send,2.2)}</button></div></div>
      <p class="hint">Answers use only the knowledge base and cite their sources. Shift+Enter for a new line.</p></div>`;
   renderTurns();
+  if(s)$('#delc').onclick=()=>delSession(S.id);
   if(s)$('#save').onclick=async()=>{const b=$('#save');b.disabled=true;try{const r=await api('/api/sessions/'+S.id+'/save',{method:'POST'});b.innerHTML=ic('M5 12l5 5 9-10',2)+'<span>Saved</span>';b.title=r.saved}
     catch(e){alert(e.message);b.disabled=false}};
   const q=$('#q'),ask=$('#ask'),fit=()=>{q.style.height='auto';q.style.height=q.scrollHeight+'px';ask.disabled=BUSY||!q.value.trim()};

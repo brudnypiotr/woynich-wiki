@@ -75,11 +75,15 @@ def _data_uri(p: Path) -> str:
     return f"data:{mime};base64," + base64.b64encode(p.read_bytes()).decode()
 
 
-def _branding() -> str:
-    """Optional company branding, kept in the instance (never in the blueprint): instance/branding/logo.(svg|png)
-    and background.(jpg|png). Embedded so the dashboard stays a single file that works offline."""
+def branding_file(stem: str) -> Path | None:
     d = catalog.instance() / "branding"
-    find = lambda stem: next((p for ext in (".svg", ".png", ".jpg", ".jpeg") if (p := d / f"{stem}{ext}").exists()), None)
+    return next((p for ext in (".svg", ".png", ".jpg", ".jpeg") if (p := d / f"{stem}{ext}").exists()), None)
+
+
+def _branding() -> str:
+    """Optional company branding, kept in the instance (never in the blueprint): instance/branding/logo.(svg|png),
+    background.(jpg|png) and icon.(svg|png) (assistant avatar and browser tab icon in `kb serve`). Embedded so the dashboard stays a single file that works offline."""
+    find = branding_file
     out = ""
     if (logo := find("logo")):
         out += f'<img src="{_data_uri(logo)}" alt="">'

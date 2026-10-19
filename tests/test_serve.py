@@ -73,6 +73,11 @@ def test_upload_steps_then_discussion(app):
     t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest after restart"}).encode())
     assert t["session"] == "resumed"
     assert call(base, token, f"/api/sessions/{s['id']}/save", b"")["saved"].startswith("wiki/answers/discussion-")
+    assert call(base, token, f"/api/sessions/{s['id']}/delete", b"") == {"deleted": s["id"]}
+    assert s["id"] not in [x["id"] for x in call(base, token, "/api/sessions")] and runner.closed[-1] == "live-1"
+    with pytest.raises(urllib.error.HTTPError) as e:
+        call(base, token, f"/api/sessions/{s['id']}/delete", b"")
+    assert e.value.code == 404
 
 
 def test_settings_models_profile_and_secrets(app, instance, monkeypatch):

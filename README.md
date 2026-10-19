@@ -25,7 +25,8 @@ Expected: pages for the sources and concepts (e.g. minimum rest at home base), a
 Then with your own files: `kb add C:\path\to\document.pdf` (or drop files into `instance\inbox\` and run `kb collect inbox`).
 
 ### Branding (optional)
-Put a logo and a header background into `instance\branding\` (`logo.png` or `logo.svg`, `background.jpg`; a white logo
+Put a logo and a header background into `instance\branding\` (`logo.png` or `logo.svg`, `background.jpg`, and `icon.svg`/`icon.png`
+for the assistant avatar and browser tab; a white logo
 suits the dark header) and run `kb site`. The dashboard and the `kb serve` sidebar both use them. They are embedded into the single dashboard file; company imagery never goes into this repository.
 Set the title in `instance\config\profile.yaml` (`instance: {title: "Orders Rules knowledge base"}`).
 
