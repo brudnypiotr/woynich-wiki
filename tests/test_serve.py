@@ -43,7 +43,7 @@ def test_token_required(app):
 def test_upload_steps_then_discussion(app):
     base, token = app
     job = call(base, token, "/api/upload", SAMPLE.read_bytes(), {"X-Filename": SAMPLE.name})
-    for _ in range(100):
+    for _ in range(1200):  # up to 2 min: Windows with antivirus is slow
         job = call(base, token, f"/api/jobs/{job['id']}")
         if job["state"] != "running":
             break
@@ -63,7 +63,7 @@ def test_upload_steps_then_discussion(app):
     assert call(base, token, f"/api/sessions/{s['id']}")["agent_session"] == "live-1"
     other = next(p for p in sorted(SAMPLE.parent.iterdir()) if p != SAMPLE)
     job = call(base, token, "/api/upload", other.read_bytes(), {"X-Filename": other.name})
-    for _ in range(100):
+    for _ in range(1200):  # up to 2 min: Windows with antivirus is slow
         if call(base, token, f"/api/jobs/{job['id']}")["state"] != "running":
             break
         time.sleep(0.1)

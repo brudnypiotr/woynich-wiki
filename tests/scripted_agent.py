@@ -49,7 +49,9 @@ class ScriptedAgent:
                 return AgentResult(f"`required_hours` takes the larger of the parameter and the previous duty (rules/{rel}:{i}@abc1234).",
                                    0.1, model, 100, 10, 1.0, [{"tool": "rg", "ok": True, "why": "read", "paths": [str(f)]}])
             hits = [p for p in w.rglob("*.md") if any(word in p.read_text(encoding="utf-8").lower() for word in q.split() if len(word) > 4)]
-            src = next((p for p in hits if p.parent.name == "sources"), None)
+            # deterministic on every OS: prefer the paged OM-A source (it has p. 3), whatever order rglob returns
+            srcs = sorted((p for p in hits if p.parent.name == "sources"), key=lambda p: ("om-a" not in p.stem, p.stem))
+            src = srcs[0] if srcs else None
             reply = (f"Minimum rest is 12 hours ([[{src.stem}]] p. 3; see [[minimum-rest]])." if src else
                      "NOT FOUND: the wiki has nothing on this; a policy document would help.")
             return AgentResult(reply, 0.1, model, 100, 10, 1.0, [{"tool": "view", "ok": True, "why": "read", "paths": ["wiki/index.md"]}])
