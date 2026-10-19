@@ -24,9 +24,9 @@ Expected: pages for the sources and concepts (e.g. minimum rest at home base), a
 `t. 00:01:10` of the meeting, and a contradiction (12 h vs 10 h). About one premium request per source and per question.
 Then with your own files: `kb add C:\path\to\document.pdf` (or drop files into `instance\inbox\` and run `kb collect inbox`).
 
-### Dashboard branding (optional)
-Put a logo and a header background into `instance\branding\` (`logo.png` or `logo.svg`, `background.jpg`) and run
-`kb site`. They are embedded into the single dashboard file; company imagery never goes into this repository.
+### Branding (optional)
+Put a logo and a header background into `instance\branding\` (`logo.png` or `logo.svg`, `background.jpg`; a white logo
+suits the dark header) and run `kb site`. The dashboard and the `kb serve` sidebar both use them. They are embedded into the single dashboard file; company imagery never goes into this repository.
 Set the title in `instance\config\profile.yaml` (`instance: {title: "Orders Rules knowledge base"}`).
 
 ### In GitHub Copilot CLI
@@ -45,8 +45,8 @@ code_repos:
 Check with `kb repos`. Then:
 - `kb code-ask "How is minimum rest computed?" --evidence` → answer from wiki + code, citing `file:line@commit`;
 - `kb ask "What does this screen show?" --image screenshot.png` → the model explains the screen with the wiki;
-- `kb chat` → a conversation in the terminal (`/image <file>`, `/save`, `/exit`); in the browser: `kb serve` → Discuss
-  (paste a screenshot with Ctrl+V, tick "question about the code");
+- `kb chat` → a conversation in the terminal (`/image <file>`, `/save`, `/exit`); in the browser: `kb serve` → a chat
+  (paste a screenshot with Ctrl+V, toggle "Code" to include the repositories);
 - with Jira configured (`jira.base_url` in the profile, `kb secrets set jira-token`) the model can fetch tickets
   (`jira_get`, `jira_search`) during the conversation.
 

@@ -27,7 +27,7 @@ Next: the first real Orders documents ([REAL-DATA-TEST.md](REAL-DATA-TEST.md)).
 | M3 Catalog and search | one source = one commit, dedup by SHA-256, large originals in `store/`, SQLite FTS5 search, glossary by rules |
 | M4 Gateway and meter | routing per task, one-model override, token meter per call, budget limit |
 | M5 LLM Wiki | ingest (verified facts with quotes, summaries, topic pages, discrepancies, index/log/hot), `ask` with citations, `code-ask` with `path:line@commit`, `verify` |
-| M6 Publish and use | dashboard (offline single file, optional branding), `kb serve` (add files with visible steps, discussion sessions), Copilot CLI instructions and 6 skills |
+| M6 Publish and use | dashboard (offline single file, optional branding), `kb serve` (chat-style discussions with a sidebar, add files with a step tracker, wiki shown inside the app), Copilot CLI instructions and 6 skills |
 | Pitch | 8-slide deck with real prototype output |
 
 ## Modules
