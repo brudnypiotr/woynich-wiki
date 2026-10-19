@@ -27,9 +27,15 @@ NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
 TIERS = ("basic", "standard", "premium")
 
 
+_STORE = None
+
+
 def store():
-    """The secret store (tests replace this function)."""
-    return registry.create("secret_stores", "keyring")
+    """The secret store (tests replace this function). Created once: loading keyring is slow on Windows."""
+    global _STORE
+    if _STORE is None:
+        _STORE = registry.create("secret_stores", "keyring")
+    return _STORE
 
 
 def _inst(name: str) -> Path:

@@ -224,7 +224,8 @@ class JiraXmlExtractor(Extractor):
             out.append("Attachments: " + ", ".join(atts))
         out += ["", marker("#description", ""), _Rich.text(g("description")) or "(no description)"]
         for i, c in enumerate(item.findall("comments/comment"), 1):
-            out += ["", marker("#c", i), f"{c.get('author', '')} ({c.get('created', '')}): {_Rich.text(c.text)}"]
+            cid = f" [comment id {c.get('id')}]" if c.get("id") else ""  # matches ?focusedCommentId= in Jira links
+            out += ["", marker("#c", i), f"{c.get('author', '')} ({c.get('created', '')}){cid}: {_Rich.text(c.text)}"]
         return {"text": "\n".join(out) + "\n", "meta": {"key": key, "title": f"{key}: {summary}", "updated": g("updated"),
                                                         "status": g("status")}}
 

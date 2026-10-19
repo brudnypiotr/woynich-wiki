@@ -69,7 +69,7 @@ def test_xml_to_text_with_markers(tmp_path):
     assert "Status: Done" in t and "Fix versions: 2026.2.2" in t and "Links: relates to EXA-151" in t
     assert "- Found in release: 2026.2.1" in t and "Rank" not in t
     assert "<!-- #description -->\nThe rule uses 10 hours." in t and "- OM-A says 12" in t and "| Home | 12 |" in t
-    assert "<!-- #c 2 -->\nmarek" in t and "Fixed in MinRest.java." in t
+    assert "<!-- #c 2 -->\nmarek" in t and "[comment id 11]: Fixed in MinRest.java." in t
     assert "Attachments: screen.png (1 KB), om-a.pdf (2 KB)" in t
 
 

@@ -72,9 +72,13 @@ def test_upload_steps_then_discussion(app):
     assert serve.close_live() == 1 and runner.closed == ["live-1"]
     t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest after restart"}).encode())
     assert t["session"] == "resumed"
+    call(base, token, "/api/settings", json.dumps({"profile": {"title": "Orders"}}).encode())  # e.g. Jira URL set later
+    assert "agent_session" not in call(base, token, f"/api/sessions/{s['id']}")
+    t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest with new settings"}).encode())
+    assert t["session"] == "new" and "EARLIER IN THIS CONVERSATION" in runner.prompts[-1]  # fresh tools, history kept
     assert call(base, token, f"/api/sessions/{s['id']}/save", b"")["saved"].startswith("wiki/answers/discussion-")
     assert call(base, token, f"/api/sessions/{s['id']}/delete", b"") == {"deleted": s["id"]}
-    assert s["id"] not in [x["id"] for x in call(base, token, "/api/sessions")] and runner.closed[-1] == "live-1"
+    assert s["id"] not in [x["id"] for x in call(base, token, "/api/sessions")] and runner.closed[-1] == runner.opened[-1]
     with pytest.raises(urllib.error.HTTPError) as e:
         call(base, token, f"/api/sessions/{s['id']}/delete", b"")
     assert e.value.code == 404

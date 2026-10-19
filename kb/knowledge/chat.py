@@ -34,13 +34,26 @@ def repos() -> list[dict]:
         item = {"name": r.get("name") or p.name, "path": p, "role": (r.get("role") or "").strip(),
                 "description": (r.get("description") or "").strip(), "exists": p.is_dir(), "commit": None, "dirty": False}
         if (p / ".git").exists():
-            g = lambda *a: subprocess.run(["git", "-C", str(p), *a], capture_output=True, text=True, encoding="utf-8",
-                                          errors="replace").stdout.strip()
-            item["commit"] = g("rev-parse", "--short", "HEAD") or None
-            item["branch"] = g("rev-parse", "--abbrev-ref", "HEAD") or None
-            item["dirty"] = bool(g("status", "--porcelain", "--untracked-files=no"))
+            item.update(_git_state(p))
         out.append(item)
     return out
+
+
+_GIT: dict[str, tuple[float, dict]] = {}
+
+
+def _git_state(p: Path, ttl: float = 60) -> dict:
+    """Branch, commit and local changes of a repository, cached for a minute: `git status` on a large repository
+    is slow on Windows, and this runs for every question and every Settings page."""
+    hit = _GIT.get(str(p))
+    if hit and time.time() - hit[0] < ttl:
+        return hit[1]
+    g = lambda *a: subprocess.run(["git", "-C", str(p), *a], capture_output=True, text=True, encoding="utf-8",
+                                  errors="replace").stdout.strip()
+    st = {"commit": g("rev-parse", "--short", "HEAD") or None, "branch": g("rev-parse", "--abbrev-ref", "HEAD") or None,
+          "dirty": bool(g("status", "--porcelain", "--untracked-files=no"))}
+    _GIT[str(p)] = (time.time(), st)
+    return st
 
 
 def architecture() -> str:
@@ -71,7 +84,8 @@ def jira_tools() -> list:
     from kb.connectors import jira
 
     @define_tool(description="Fetch one Jira issue as compact text: fields, links, custom fields (e.g. found in release), "
-                             "description and comments (cite comments as KEY#cN). Read-only.")
+                             "description and comments (cite comments as KEY#cN; a link's ?focusedCommentId= is the comment id shown). "
+                             "Accepts a key or a Jira URL. Read-only.")
     def jira_get(params: JiraGet) -> str:
         return jira.get_text(params.key.strip(), **cfg)[:40_000]
 

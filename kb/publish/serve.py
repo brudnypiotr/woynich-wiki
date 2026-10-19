@@ -70,13 +70,23 @@ def _conversation(s: dict) -> chat.Conversation:
         return conv
 
 
-def close_live(idle_only: bool = False) -> int:
-    """Close open discussion sessions (all, or those idle for IDLE_S); they resume on the next question."""
+def close_live(idle_only: bool = False, fresh: bool = False) -> int:
+    """Close open discussion sessions (all, or those idle for IDLE_S); they resume on the next question.
+    fresh=True: the settings a session was opened with changed (model, Jira, repositories), so the next question
+    starts a new session (full prompt with the current tools and context, plus a summary of the earlier turns)."""
     with LIVE_LOCK:
         ids = [k for k, c in LIVE.items() if not idle_only or (time.time() - c.used > IDLE_S and not c.lock.locked())]
         convs = [LIVE.pop(k) for k in ids]
     for c in convs:
         c.close()
+    if fresh:
+        for f in _sessions_dir().glob("*.json"):
+            try:
+                s = json.loads(f.read_text(encoding="utf-8"))
+                if s.pop("agent_session", None):
+                    f.write_text(json.dumps(s, ensure_ascii=False, indent=1), encoding="utf-8")
+            except (OSError, ValueError):
+                pass
     return len(convs)
 
 
@@ -215,6 +225,14 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(n).decode("utf-8") or "{}") if n else {}
 
     # ------------------------------------------------------------------ routes
+    def handle_one_request(self):
+        t0 = time.perf_counter()
+        super().handle_one_request()
+        took = time.perf_counter() - t0
+        path = urlparse(getattr(self, "path", "") or "").path
+        if took > 2 and not path.endswith(("/ask", "/upload")):  # questions and uploads are slow by nature
+            print(f"slow request: {getattr(self, 'command', '')} {path} took {took:.1f} s", flush=True)
+
     def do_GET(self):
         url = urlparse(self.path)
         if not self._authorised():
@@ -289,8 +307,8 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/api/settings":
                 body = self._json_body()
                 out = settings.save(body)
-                if "model" in body:
-                    close_live()  # open discussions continue with the new model
+                if {"model", "profile", "repos"} & set(body):
+                    close_live(fresh=True)  # sessions were opened with the old model, Jira tools or repositories
                 return self._send(200, out)
             if url.path == "/api/settings/login":
                 return self._send(200, settings.login())
