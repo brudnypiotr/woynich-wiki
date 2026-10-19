@@ -83,6 +83,16 @@ def cmd_jira(a) -> int:
     return 0
 
 
+def cmd_check(a) -> int:
+    """Heartbeat: are the GitHub Copilot sign-in and the Jira token valid? No premium request."""
+    from kb.llm.gateway import Gateway
+    from kb.publish import settings
+    r = settings.check(Gateway(adapter=a.adapter))
+    for k, v in r.items():
+        print(f"{'OK  ' if v['ok'] else ('FAIL' if v['ok'] is False else '--  ')} {k:<8} {v['detail']}")
+    return 1 if any(v["ok"] is False for v in r.values()) else 0
+
+
 def cmd_ingest(a) -> int:
     from kb.knowledge import verify, wiki
     show = lambda step, detail: print(f"  {step}: {detail}", flush=True)
@@ -416,6 +426,8 @@ def main(argv=None) -> int:
     s.add_argument("action", choices=["get", "search", "add"]); s.add_argument("args", nargs="+")
     s.add_argument("--limit", type=int); s.add_argument("--links", action="store_true", help="add: also linked issues and sub-tasks")
     s.add_argument("--no-attachments", action="store_true"); s.set_defaults(fn=cmd_jira)
+    s = sub.add_parser("check", help="test the GitHub Copilot sign-in and the Jira token (no premium request)")
+    s.add_argument("--adapter"); s.set_defaults(fn=cmd_check)
     s = sub.add_parser("ingest", help="the model reads new sources and writes the wiki (one agent session per source)")
     s.add_argument("ids", nargs="*"); s.set_defaults(fn=cmd_ingest)
     sub.add_parser("lint", help="the model checks and repairs the wiki (links, index, duplicates, contradictions)").set_defaults(fn=cmd_lint)

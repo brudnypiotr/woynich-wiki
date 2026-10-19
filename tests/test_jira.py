@@ -115,3 +115,30 @@ def test_login_page_is_an_auth_error(monkeypatch):
     monkeypatch.setattr(jira.urllib.request, "urlopen", lambda *a, **k: R())
     with pytest.raises(PermissionError, match="login page"):
         jira.Jira(**CFG).issue_xml("EXA-1")
+
+
+def test_heartbeat(monkeypatch, instance):
+    from kb.llm.gateway import Gateway
+    from kb.publish import settings
+
+    def request(self, url, accept):
+        assert url.endswith("/rest/api/3/myself?")
+        return b'{"displayName": "Piotr", "emailAddress": "me@example.com"}', "application/json"
+    monkeypatch.setattr(jira.Jira, "_request", request)
+    me = jira.Jira(**CFG).whoami()
+    assert me == {"name": "Piotr", "email": "me@example.com", "source": "argument"}
+
+    gw = Gateway(cfg={"default_adapter": "fake", "adapters": {"fake": {"module": "kb.llm.adapters:FakeAdapter"}},
+                      "tiers": {"standard": {"model": "m"}}, "tasks": {}}, log_path=instance / "m.jsonl")
+    r = settings.check(gw)
+    assert r["copilot"]["ok"] is None and r["jira"]["ok"] is None          # fake adapter, Jira not configured
+    (instance / "config").mkdir(parents=True, exist_ok=True)
+    (instance / "config" / "profile.yaml").write_text("jira:\n  base_url: https://example.atlassian.net\n  email: me@example.com\n")
+    monkeypatch.setenv("JIRA_API_TOKEN", "t")
+    r = settings.check(gw, "jira")
+    assert r["jira"]["ok"] and "Piotr <me@example.com>" in r["jira"]["detail"] and "environment" in r["jira"]["detail"]
+
+    def refused(self, url, accept):
+        raise PermissionError("Jira refused the credentials (401); check the token and e-mail")
+    monkeypatch.setattr(jira.Jira, "_request", refused)
+    assert settings.check(gw, "jira")["jira"] == {"ok": False, "detail": "Jira refused the credentials (401); check the token and e-mail"}

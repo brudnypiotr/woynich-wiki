@@ -223,6 +223,40 @@ def account(gw) -> dict:
     return out
 
 
+def check(gw, what: str = "all") -> dict:
+    """Heartbeat of the credentials, no premium request: GitHub Copilot sign-in and one Jira /myself call.
+    Each entry: ok (True / False / None = not configured), detail."""
+    out = {}
+    if what in ("all", "copilot"):
+        f = getattr(gw.llm.inner, "auth_status", None)
+        if not f:
+            out["copilot"] = {"ok": None, "detail": f"the {getattr(gw.llm.inner, 'name', 'current')} adapter has no sign-in"}
+        else:
+            try:
+                st = _plain(f()) or {}
+                ok = bool(st.get("is_authenticated", st.get("isAuthenticated")))
+                who = st.get("login") or st.get("user") or ""
+                how = st.get("auth_type") or st.get("authType") or ""
+                via = " (GitHub token from Keys and tokens)" if os.environ.get("COPILOT_GITHUB_TOKEN") else ""
+                out["copilot"] = {"ok": ok, "detail": (f"signed in{' as ' + who if who else ''}{' · ' + how if how else ''}{via}" if ok
+                                                       else (st.get("status_message") or st.get("statusMessage") or "not signed in: run kb login"))}
+            except Exception as e:
+                out["copilot"] = {"ok": False, "detail": f"{type(e).__name__}: {e}"[:300]}
+    if what in ("all", "jira"):
+        cfg = config.load("profile").get("jira") or {}
+        if not cfg.get("base_url"):
+            out["jira"] = {"ok": None, "detail": "not configured (Jira URL in Settings)"}
+        else:
+            try:
+                from kb.connectors import jira
+                me = jira.Jira(**cfg).whoami()
+                out["jira"] = {"ok": True, "detail": f"authenticated as {me['name']}{' <' + me['email'] + '>' if me.get('email') else ''}"
+                                                     f" · token from {me['source']}"}
+            except Exception as e:
+                out["jira"] = {"ok": False, "detail": (str(e) if isinstance(e, (PermissionError, RuntimeError)) else f"{type(e).__name__}: {e}")[:300]}
+    return out
+
+
 def login() -> dict:
     """Start `copilot login` (GitHub device flow) in its own console window on Windows."""
     cli = shutil.which("copilot")

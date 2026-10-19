@@ -258,6 +258,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "no such session"})
         if url.path == "/api/settings":
             return self._send(200, settings.state())
+        if url.path == "/api/settings/check":
+            return self._send(200, settings.check(self.gw, (parse_qs(url.query).get("what") or ["all"])[0]))
         if url.path in ("/api/settings/models", "/api/settings/account"):
             try:
                 return self._send(200, settings.models_available(self.gw) if url.path.endswith("models") else settings.account(self.gw))
@@ -773,6 +775,7 @@ V.settings=async function(){mark('settings');
    <section class="set"><h3>GitHub Copilot account</h3><p class="d">The models run through your GitHub Copilot subscription.</p>
     <div class="btns" style="margin-top:0"><button class="ghost" id="acheck">Check sign-in</button><button class="ghost" id="alogin">Sign in with GitHub…</button><span id="amsg"></span></div><div id="acc"></div></section>
    <section class="set"><h3>Keys and tokens</h3><p class="d">Stored for your Windows user only. This page can tell whether a key is set, never what it is.</p>
+    <div class="btns" style="margin:0 0 6px"><button class="ghost" id="ctest">Test connections</button><span class="sub" style="margin:0;font-size:12px">GitHub Copilot sign-in and one Jira request; no premium requests</span></div><div id="cres" class="kv" style="margin:4px 0 12px"></div>
     <div id="secs"></div>
     <div class="sec-row"><div class="nm"><b>Another key</b><small>Name: lowercase letters, digits, dashes.</small></div><input id="nk-name" placeholder="name, e.g. confluence-token"><div class="b"></div>
      <div></div><input id="nk-val" type="password" placeholder="value" autocomplete="off"><div class="b"><button class="ghost" id="nk-add">Add</button></div></div></section>
@@ -805,6 +808,10 @@ V.settings=async function(){mark('settings');
         ${a.token_from_store?'<span>Token</span><span style="color:var(--ink)">GitHub token from Keys and tokens</span>':''}
         ${q.error?`<span>Quota</span><span class="errmsg">${esc(q.error)}</span>`:Object.entries(q).map(([k,v])=>`<span>${esc(k.replace(/_/g,' '))}</span><div>${v.entitlement?`${v.used??'?'} of ${v.entitlement} used`:'unlimited'}${v.resets?` · resets ${esc(String(v.resets).slice(0,10))}`:''}${v.remaining_pct!=null&&v.entitlement?`<div class="meter"><i style="width:${Math.max(0,Math.min(100,100-v.remaining_pct))}%"></i></div>`:''}</div>`).join('')}</div>`}
     catch(e){msg('amsg',e.message,false)}finally{b.disabled=false}};
+  $('#ctest').onclick=async()=>{const b=$('#ctest');b.disabled=true;$('#cres').innerHTML='<span>Testing…</span><span></span>';
+    try{const r=await api('/api/settings/check');const L={copilot:'GitHub Copilot',jira:'Jira'};
+      $('#cres').innerHTML=Object.entries(r).map(([k,v])=>`<span>${L[k]||k}</span><b class="${v.ok===true?'okmsg':v.ok===false?'errmsg':'sub'}" style="font-size:14px;margin:0">${v.ok===true?'✓':v.ok===false?'✗':'–'} ${esc(v.detail)}</b>`).join('')}
+    catch(e){$('#cres').innerHTML=`<span>Error</span><b class="errmsg">${esc(e.message)}</b>`}finally{b.disabled=false}};
   $('#alogin').onclick=async()=>{try{const r=await post('/api/settings/login');msg('amsg',r.message,r.ok)}catch(e){msg('amsg',e.message,false)}};
   const secs=st=>{$('#secs').innerHTML=(st.error?`<p class="errmsg">Secret store not available: ${esc(st.error)}</p>`:'')+st.items.map(x=>`<div class="sec-row" data-n="${esc(x.name)}"><div class="nm"><b>${esc(x.label)} <span class="badge ${x.set?'done':'off'}">${x.set?'Set':x.set===null?'?':'Not set'}</span></b><code>${esc(x.name)}</code><small>${esc(x.help)}</small></div>
      <input type="password" placeholder="${x.set?'Paste a new value to replace':'Paste the value'}" autocomplete="off"><div class="b"><button class="ghost" data-a="set">Save</button>${x.set?'<button class="ghost" data-a="del">Remove</button>':''}</div></div>`).join('')};

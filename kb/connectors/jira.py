@@ -54,14 +54,17 @@ class Jira(Connector):
         self.email, self.token = self._credentials(email, token, secret_name, secret_store, credential)
 
     def _credentials(self, email, token, secret_name, secret_store, credential):
+        self.source = "argument" if token else "environment (JIRA_API_TOKEN)"
         email, token = email or os.environ.get("JIRA_EMAIL"), token or os.environ.get("JIRA_API_TOKEN")
         if not token:
+            self.source = f"Keys and tokens ({secret_name})"
             try:
                 token = registry.create("secret_stores", secret_store).get(secret_name)
             except Exception:
                 token = None
         if not token and credential:
             from kb.core.secrets import windows_credential
+            self.source = f"Windows credential {credential}"
             found = windows_credential(credential)
             if found:
                 email, token = email or found[0], found[1]
@@ -96,6 +99,11 @@ class Jira(Connector):
         return json.loads(self._request(url, "application/json")[0].decode("utf-8"))
 
     # ------------------------------------------------------------------ reading
+    def whoami(self) -> dict:
+        """One cheap authenticated request: who the credentials belong to (heartbeat)."""
+        me = self._get("myself", {})
+        return {"name": me.get("displayName") or me.get("name"), "email": me.get("emailAddress"), "source": self.source}
+
     def issue_xml(self, key: str) -> str:
         key = issue_key(key)
         q = "&".join(f"field={urllib.parse.quote(f)}" for f in XML_FIELDS)
