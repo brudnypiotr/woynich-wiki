@@ -31,8 +31,8 @@ def repos() -> list[dict]:
         p = Path(str(r.get("path", ""))).expanduser()
         if not p.is_absolute():
             p = (config.paths().root / p).resolve()
-        item = {"name": r.get("name") or p.name, "path": p, "description": (r.get("description") or "").strip(),
-                "exists": p.is_dir(), "commit": None, "dirty": False}
+        item = {"name": r.get("name") or p.name, "path": p, "role": (r.get("role") or "").strip(),
+                "description": (r.get("description") or "").strip(), "exists": p.is_dir(), "commit": None, "dirty": False}
         if (p / ".git").exists():
             g = lambda *a: subprocess.run(["git", "-C", str(p), *a], capture_output=True, text=True, encoding="utf-8",
                                           errors="replace").stdout.strip()
@@ -41,6 +41,11 @@ def repos() -> list[dict]:
             item["dirty"] = bool(g("status", "--porcelain", "--untracked-files=no"))
         out.append(item)
     return out
+
+
+def architecture() -> str:
+    """How the parts of the system fit together (profile `architecture`, edited in Settings)."""
+    return str(config.load("profile").get("architecture") or "").strip()
 
 
 def jira_config() -> dict | None:
@@ -83,10 +88,14 @@ def _context(history, topic, attachments, focus) -> str:
     rs = repos()
     lines = []
     if rs:
+        if architecture():
+            lines.append("SYSTEM ARCHITECTURE (how the parts below fit together; follow a behaviour across tiers, e.g. "
+                         "screen → API → service → database, and say which tier the answer comes from):\n" + architecture())
         lines.append("CODE REPOSITORIES you may read (read-only; cite as `name/path/to/file:LINE@commit`):")
         for r in rs:
             state = "missing on disk" if not r["exists"] else f"commit {r['commit'] or 'unknown'}" + (" (uncommitted local changes)" if r["dirty"] else "")
-            lines.append(f"- {r['name']}: `{r['path'].as_posix()}` — {r['description'] or 'no description'} [{state}]")
+            role = f" ({r['role']})" if r["role"] else ""
+            lines.append(f"- {r['name']}{role}: `{r['path'].as_posix()}` — {r['description'] or 'no description'} [{state}]")
     else:
         lines.append("No code repositories are configured.")
     lines.append("JIRA: tools `jira_get` and `jira_search` are available (read-only)." if jira_config() else "JIRA: not configured.")

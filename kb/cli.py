@@ -267,13 +267,14 @@ def cmd_repos(a) -> int:
     from kb.knowledge import chat
     rs = chat.repos()
     if not rs:
-        print("no code repositories configured. Add to instance/config/profile.yaml:\n"
-              "code_repos:\n  - name: inventory-service\n    path: C:/Users/you/DEV/inventory-service\n"
-              "    description: Inventory backend; rules engine, orders. Look here for rule logic.")
+        print("no code repositories configured: kb serve → Settings → Code repositories (or code_repos in "
+              "instance/config/profile.yaml: name, role, path, description)")
         return 1
+    if chat.architecture():
+        print("Architecture:\n" + "\n".join("  " + l for l in chat.architecture().splitlines()) + "\n")
     for r in rs:
         state = "MISSING" if not r["exists"] else f"{r.get('branch') or '?'}@{r['commit'] or '?'}" + (" (local changes)" if r["dirty"] else "")
-        print(f"  {r['name']:<18} {state:<24} {r['path']}\n  {'':<18} {r['description']}")
+        print(f"  {r['name']:<18} {r['role'] or '-':<14} {state:<24} {r['path']}\n  {'':<18} {r['description']}")
     return 0
 
 

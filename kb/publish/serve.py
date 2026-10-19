@@ -622,7 +622,11 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
 .f label{display:block;font-size:13px;font-weight:700;margin-bottom:5px;color:var(--ink2)}
 .f small{display:block;font-size:12px;color:var(--mute);margin-top:4px}
 .f input,.f select{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px;outline:none}
-.f input:focus{border-color:var(--vio);box-shadow:0 0 0 3px var(--vio-soft)}
+.f input:focus,.f textarea:focus{border-color:var(--vio);box-shadow:0 0 0 3px var(--vio-soft)}
+.f textarea{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px;outline:none;resize:vertical}
+.repo{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px;display:grid;grid-template-columns:1fr 1fr 170px;gap:10px 12px}
+.repo .wide{grid-column:1/3}.repo .st{font-size:12px;color:var(--mute);align-self:center}.repo .st.bad{color:var(--bad)}.repo .st.ok{color:var(--ok)}
+.repo .x{align-self:start;justify-self:end}
 .f input[readonly]{background:var(--soft);color:var(--mute)}
 .eff{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--soft);border-radius:14px;padding:12px 14px;margin-bottom:16px}
 .eff b{font-size:18px}.eff .badge{margin-left:auto}
@@ -647,7 +651,7 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
   body{grid-template-columns:1fr}
   aside{position:fixed;inset:0 auto 0 0;width:280px;transform:translateX(-100%);transition:transform .2s}
   body.side aside{transform:none}body.side .scrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:10}
-  .menu{display:inline-grid}.col{padding:20px 16px 10px}.grid2,.sec-row{grid-template-columns:1fr}.cwrap{padding:6px 12px 12px}.how{grid-template-columns:1fr}
+  .menu{display:inline-grid}.col{padding:20px 16px 10px}.grid2,.sec-row,.repo{grid-template-columns:1fr}.repo .wide{grid-column:auto}.cwrap{padding:6px 12px 12px}.how{grid-template-columns:1fr}
   .stepper li{font-size:0}.top .ghost span{display:none}}
 </style></head><body>
 <aside>
@@ -776,9 +780,16 @@ V.settings=async function(){mark('settings');
     <div class="grid2"><div class="f" style="grid-column:1/-1"><label for="ptitle">Title</label><input id="ptitle" value="${esc(p.title)}"></div>
      <div class="f"><label for="pjira">Jira URL</label><input id="pjira" value="${esc(p.jira_base_url)}" placeholder="https://jira.example.com"><small>Token: <b>Jira token</b> under Keys and tokens.</small></div>
      <div class="f"><label for="pmail">Jira e-mail</label><input id="pmail" value="${esc(p.jira_email)}" placeholder="Jira Cloud only"><small>Leave empty for Jira Data Center.</small></div></div>
-    <div class="btns"><button class="pri" id="psave">Save</button><span id="pmsg"></span></div>
-    <div class="f" style="margin-top:18px"><label>Code repositories (read only for the assistant)</label><div class="repos">${p.code_repos.length?p.code_repos.map(r=>`<div><b>${esc(r.name)}</b> <code>${esc(r.path)}</code><br><small class="sub">${esc(r.description)}</small></div>`).join(''):'<p class="empty">None configured.</p>'}</div>
-     <small>Edit <code>code_repos</code> in ${esc(C.files.profile)}.</small></div></section>`;
+    <div class="btns"><button class="pri" id="psave">Save</button><span id="pmsg"></span></div></section>
+   <section class="set"><h3>Code repositories</h3><p class="d">Local clones the assistant may read (never change). The role and description tell
+    it which tier holds what; the name is used in citations (<code>name/path:line@commit</code>).</p>
+    <datalist id="rolelist">${['frontend (UI)','backend server','API / services','database (schema, procedures)','rules / configuration','batch / integration','shared library','tests','infrastructure / deployment'].map(x=>`<option value="${x}">`).join('')}</datalist>
+    <div id="repos"></div>
+    <div class="btns" style="margin-top:6px"><button class="ghost" id="radd">+ Add repository</button></div>
+    <div class="f" style="margin-top:16px"><label for="arch">How the parts fit together</label>
+     <textarea id="arch" rows="5" placeholder="e.g. Three tiers: the Angular frontend (inv-web) calls the Java server (inv-server) over REST; the server keeps orders and rules in Oracle (schema and stored procedures in inv-db). Rule parameters come from XML in inv-rules, loaded by the server at start.">${esc(p.architecture)}</textarea>
+     <small>Plain words are enough: tiers, who calls whom, where data lives, which repository holds what.</small></div>
+    <div class="btns"><button class="pri" id="rsave">Save repositories</button><span id="rmsg"></span></div></section>`;
   const msg=(id,t,ok=true)=>{const e=$('#'+id);e.className=ok?'okmsg':'errmsg';e.textContent=t;if(ok)setTimeout(()=>{if(e.textContent===t)e.textContent=''},4000)};
   const post=(path,body)=>api(path,{method:'POST',body:JSON.stringify(body||{})});
   $('#msave').onclick=async()=>{try{const r=await post('/api/settings',{model:{override:$('#ov').value,tiers:{basic:$('#t-basic').value,standard:$('#t-standard').value,premium:$('#t-premium').value},timeout_s:Math.round(+$('#tmo').value*60)}});
@@ -803,6 +814,21 @@ V.settings=async function(){mark('settings');
       else{if(!v.trim())return row.querySelector('input').focus();secs(await post('/api/secrets/'+n,{value:v}))}}catch(err){alert(err.message)}};
   $('#nk-add').onclick=async()=>{const n=$('#nk-name').value.trim(),v=$('#nk-val').value;if(!n||!v)return;
     try{secs(await post('/api/secrets/'+encodeURIComponent(n),{value:v}));$('#nk-name').value=$('#nk-val').value=''}catch(e){alert(e.message)}};
+  let RP=p.code_repos.map(r=>({...r}));
+  const rstate=r=>r.exists===undefined?'':(r.exists?`<span class="st ok">✓ ${esc(r.branch||'?')}@${esc(r.commit||'?')}${r.dirty?' · local changes':''}</span>`:'<span class="st bad">⚠ folder not found</span>');
+  const rrender=()=>{$('#repos').innerHTML=RP.length?RP.map((r,i)=>`<div class="repo" data-i="${i}">
+     <div class="f"><label>Name</label><input data-k="name" value="${esc(r.name||'')}" placeholder="inv-server"></div>
+     <div class="f"><label>Role</label><input data-k="role" list="rolelist" value="${esc(r.role||'')}" placeholder="backend server"></div>
+     <button class="icon x" data-del="${i}" title="Remove from the list (the folder stays)">×</button>
+     <div class="f wide"><label>Folder</label><input data-k="path" value="${esc(r.path||'')}" placeholder="C:\\Users\\you\\DEV\\inv-server"></div>${rstate(r)}
+     <div class="f wide"><label>What it contains, where to look</label><textarea data-k="description" rows="2" placeholder="Java server: rule engine (package rules/), order services, REST API for the frontend.">${esc(r.description||'')}</textarea></div></div>`).join(''):'<p class="empty">No repositories yet.</p>'};
+  rrender();
+  $('#repos').oninput=e=>{const box=e.target.closest('.repo'),k=e.target.dataset.k;if(box&&k){RP[+box.dataset.i][k]=e.target.value;RP[+box.dataset.i].exists=undefined}};
+  $('#repos').onclick=e=>{const d=e.target.closest('[data-del]');if(d){RP.splice(+d.dataset.del,1);rrender()}};
+  $('#radd').onclick=()=>{RP.push({name:'',role:'',path:'',description:''});rrender();$('#repos .repo:last-child input').focus()};
+  $('#rsave').onclick=async()=>{try{const r=await post('/api/settings',{repos:{list:RP,architecture:$('#arch').value}});
+    RP=r.profile.code_repos.map(x=>({...x}));rrender();const bad=RP.filter(x=>!x.exists).length;
+    msg('rmsg',bad?`Saved; ${bad} folder${bad>1?'s':''} not found on this computer.`:'Saved. The next question uses them.',!bad)}catch(e){msg('rmsg',e.message,false)}};
   $('#psave').onclick=async()=>{try{const r=await post('/api/settings',{profile:{title:$('#ptitle').value,jira_base_url:$('#pjira').value,jira_email:$('#pmail').value}});
     document.querySelector('aside header h1').textContent=r.profile.title;msg('pmsg','Saved.')}catch(e){msg('pmsg',e.message,false)}}};
 

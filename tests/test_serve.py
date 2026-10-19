@@ -124,3 +124,23 @@ def test_second_server_gets_its_own_port(instance):
         assert a.server_address[1] == port and b.server_address[1] != port  # never two servers on one port
     finally:
         a.server_close(); b.server_close()
+
+
+def test_settings_code_repos_roles_and_architecture(app, instance, tmp_path):
+    from kb.knowledge import chat
+    base, token = app
+    server = tmp_path / "inv-server"; server.mkdir()
+    body = {"repos": {"list": [{"name": "inv-server", "role": "backend server", "path": str(server), "description": "Java rules engine"},
+                               {"name": "inv-web", "role": "frontend (UI)", "path": str(tmp_path / "missing"), "description": ""},
+                               {"name": "", "path": ""}],
+                      "architecture": "Angular frontend (inv-web) → REST → Java server (inv-server) → Oracle."}}
+    s = call(base, token, "/api/settings", json.dumps(body).encode())
+    repos = s["profile"]["code_repos"]
+    assert [(r["name"], r["role"], r["exists"]) for r in repos] == [("inv-server", "backend server", True), ("inv-web", "frontend (UI)", False)]
+    assert s["profile"]["architecture"].startswith("Angular frontend")
+    ctx = chat._context(None, None, [], "wiki")
+    assert "SYSTEM ARCHITECTURE" in ctx and "- inv-server (backend server):" in ctx and "Java rules engine" in ctx
+    for bad in ([{"name": "cm server", "path": "x"}], [{"name": "a", "path": "x"}, {"name": "A", "path": "y"}], [{"name": "a", "path": ""}]):
+        with pytest.raises(urllib.error.HTTPError) as e:
+            call(base, token, "/api/settings", json.dumps({"repos": {"list": bad}}).encode())
+        assert e.value.code == 400

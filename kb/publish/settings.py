@@ -75,12 +75,43 @@ def state() -> dict:
                   "timeout_s": int((m.get("agent") or {}).get("timeout_s") or 1800), "adapter": m.get("default_adapter")},
         "profile": {"title": (prof.get("instance") or {}).get("title") or "", "jira_base_url": jira.get("base_url") or "",
                     "jira_email": jira.get("email") or "",
-                    "code_repos": [{"name": r.get("name"), "path": str(r.get("path")), "description": r.get("description") or ""}
-                                   for r in (prof.get("code_repos") or []) if isinstance(r, dict)]},
+                    "code_repos": _repos(), "architecture": str(prof.get("architecture") or "")},
         "secrets": secrets_state(),
         "copilot_cli": bool(shutil.which("copilot")),
         "files": {"models": str(_inst("models")), "profile": str(_inst("profile"))},
     }
+
+
+REPO_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,39}")
+
+
+def _repos() -> list[dict]:
+    from kb.knowledge import chat
+    return [{"name": r["name"], "role": r["role"], "path": str(r["path"]), "description": r["description"], "exists": r["exists"],
+             "branch": r.get("branch"), "commit": r["commit"], "dirty": r["dirty"]} for r in chat.repos()]
+
+
+def _save_repos(b: dict, data: dict) -> None:
+    """Replace the list of code repositories (read-only for the assistant) and the architecture text."""
+    if "list" in b:
+        out, seen = [], set()
+        for r in b["list"] or []:
+            name, path = str(r.get("name") or "").strip(), str(r.get("path") or "").strip().strip('"')
+            if not name and not path:
+                continue
+            if not REPO_NAME.fullmatch(name):
+                raise ValueError(f"repository name {name!r}: letters, digits, dot, dash, underscore (it is used in citations)")
+            if name.lower() in seen:
+                raise ValueError(f"repository name {name!r} is used twice")
+            if not path:
+                raise ValueError(f"repository {name}: the folder is missing")
+            seen.add(name.lower())
+            item = {"name": name, "role": str(r.get("role") or "").strip()[:60] or None, "path": path,
+                    "description": str(r.get("description") or "").strip()[:2000]}
+            out.append({k: v for k, v in item.items() if v})
+        data["code_repos"] = out
+    if "architecture" in b:
+        data["architecture"] = str(b["architecture"] or "").strip()[:6000] or None
 
 
 def _model_id(v) -> str:
@@ -119,6 +150,10 @@ def save(body: dict) -> dict:
             j = data.setdefault("jira", {})
             j["base_url"] = url or None
             j["email"] = str(b.get("jira_email") or "").strip() or None
+        _write("profile", data)
+    if "repos" in body:
+        data = _read("profile")
+        _save_repos(body["repos"] or {}, data)
         _write("profile", data)
     return state()
 

@@ -6,9 +6,10 @@ allowed-tools: ["view", "glob", "grep", "shell"]
 You read the wiki and the code yourself (ADR-0019) and keep the context for follow-up questions.
 `kb` means `.\kb.cmd` on Windows and `.venv/bin/python -m kb` on macOS/Linux.
 
-1. `kb repos` lists the repositories you may read, with a description of what each contains, the branch and the
-   commit. If none are configured, explain how to add them to `instance/config/profile.yaml`:
-   `code_repos: [{name: ..., path: ..., description: what it contains and what to look for}]`.
+1. `kb repos` prints the system architecture (how the tiers fit together: frontend, server, database, …) and the
+   repositories you may read, each with its role, a description of what it contains, the branch and the commit.
+   Follow a behaviour across tiers (screen → API → service → database) and say which tier the answer comes from.
+   If none are configured: `kb serve` → Settings → Code repositories.
 2. Start with the wiki (as in `kb-ask`: `instance/wiki/hot.md`, `index.md`, pages) to learn the domain terms, then
    grep the repository for class, method, parameter or message names and read the relevant lines.
 3. Cite code as `name/path/to/File.java:LINE@commit` (name from `kb repos`, short commit from `git -C <path>
