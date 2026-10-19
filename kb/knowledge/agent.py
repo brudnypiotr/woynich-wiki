@@ -236,6 +236,7 @@ class LiveSession:
         threading.Thread(target=self.loop.run_forever, daemon=True, name="kb-live-session").start()
         self._seen = (0, 0, 0.0)
         self._thinking: dict[str, str] = {}
+        self.stopped = False
         try:
             self._call(self._start(Path(root), list(tools), resume), 120)
         except Exception:
@@ -289,12 +290,31 @@ class LiveSession:
     async def _send(self, prompt, attachments):
         self._final, self._partial, self._thinking = None, "", {}
         att = [{"type": "file", "path": str(Path(a).resolve())} for a in attachments]
-        ev = await self.session.send_and_wait(prompt, attachments=att or None, timeout=float(self.timeout))
-        reply = getattr(getattr(ev, "data", None), "content", None) or self._final or self._partial or _reply(ev)
+        try:
+            ev = await self.session.send_and_wait(prompt, attachments=att or None, timeout=float(self.timeout))
+        except Exception:
+            if not self.stopped:
+                raise
+            ev = None
+        if self.stopped:  # keep what the model had written, mark the rest as stopped
+            reply = ((self._final or self._partial or "").strip() + "\n\n_(stopped by the user)_").strip()
+        else:
+            reply = getattr(getattr(ev, "data", None), "content", None) or self._final or self._partial or _reply(ev)
         return reply, await _usage(self.session)
 
+    def abort(self) -> bool:
+        """Stop the answer being written (the session stays usable for the next question)."""
+        self.stopped = True
+        try:
+            self._call(self.session.abort(), 15)
+            return True
+        except Exception:
+            return False  # the sandbox still denies every further tool call
+
     def send(self, prompt: str, attachments=(), progress=None, cancelled=None) -> AgentResult:
-        self.box.progress, self.box.cancelled = progress, cancelled
+        self.stopped = False
+        self.box.progress = progress
+        self.box.cancelled = lambda: self.stopped or bool(cancelled and cancelled())
         n, t0 = len(self.box.log), time.perf_counter()
         reply, (tin, tout, prem) = self._call(self._send(prompt, list(attachments)), self.timeout + 60)
         # the runtime reports totals for the session: keep only this question's share

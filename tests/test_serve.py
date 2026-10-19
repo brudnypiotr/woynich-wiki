@@ -60,6 +60,9 @@ def test_upload_steps_then_discussion(app):
     t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest again"}).encode())
     runner = serve.Handler.runner
     assert t["session"] == "continued" and runner.opened == ["live-1"]  # one long session (ADR-0019)
+    with pytest.raises(urllib.error.HTTPError) as e:
+        call(base, token, f"/api/sessions/{s['id']}/stop", b"")   # nothing running
+    assert e.value.code == 409
     assert call(base, token, f"/api/sessions/{s['id']}")["agent_session"] == "live-1"
     other = next(p for p in sorted(SAMPLE.parent.iterdir()) if p != SAMPLE)
     job = call(base, token, "/api/upload", other.read_bytes(), {"X-Filename": other.name})

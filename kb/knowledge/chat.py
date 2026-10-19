@@ -219,8 +219,17 @@ class Conversation:
             self.changed = set()
             out = _finish(question, res, focus, attachments, t0, "agent_discussion")
             out["session"] = "new" if fresh and not getattr(self.live, "resumed", False) else ("resumed" if fresh else "continued")
+            out["stopped"] = bool(getattr(self.live, "stopped", False))
             self.history.append({"question": question, "answer_text": out["answer_text"]})
             return out
+
+    def stop(self) -> bool:
+        """Stop the answer in progress (called from another thread). False if nothing is running."""
+        live = self.live
+        if not live or not self.lock.locked() or not hasattr(live, "abort"):
+            return False
+        live.abort()
+        return True
 
     def close(self) -> None:
         live, self.live = self.live, None

@@ -174,3 +174,34 @@ def test_check_answer(instance, tmp_path):
     bad = f"Rest ([[{slug}]] p. 999), see [[no-such-page]], rules/{code}:99999@{commit}, other/x.py:1@{commit}."
     r = verify.check_answer(bad)
     assert len(r["broken"]) == 4 and not r["ok"]
+
+
+def test_stop_an_answer_in_progress(instance):
+    import threading
+    from kb.knowledge.agent import AgentResult
+
+    class SlowLive:
+        id, resumed, stopped = "live-x", False, False
+        def __init__(self): self.go = threading.Event()
+        def send(self, task, attachments=(), progress=None, cancelled=None):
+            self.stopped = False
+            self.go.wait(5)  # "writing" until stopped
+            return AgentResult("Partial answer\n\n_(stopped by the user)_", 0.1, "m", 1, 1, 1.0, [])
+        def abort(self):
+            self.stopped = True; self.go.set(); return True
+        def close(self): pass
+
+    class Runner:
+        def open(self, *a, **k): return SlowLive()
+    conv = chat.Conversation(runner=Runner())
+    assert conv.stop() is False                      # nothing running
+    out = {}
+    t = threading.Thread(target=lambda: out.update(conv.ask("anything")))
+    t.start()
+    for _ in range(100):
+        if conv.lock.locked() and conv.live:
+            break
+        import time; time.sleep(0.01)
+    assert conv.stop() is True
+    t.join(5)
+    assert out["stopped"] and out["answer_text"].startswith("Partial answer")

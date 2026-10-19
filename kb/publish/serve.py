@@ -336,6 +336,12 @@ class Handler(BaseHTTPRequestHandler):
                     if j.get("source_id") == m.group(1):
                         j["removed"] = True
                 return self._send(200, r)
+            m = re.fullmatch(r"/api/sessions/([0-9a-f]{12})/stop", url.path)
+            if m:
+                conv = LIVE.get(m.group(1))
+                if not conv or not conv.stop():
+                    return self._send(409, {"error": "nothing is running in this discussion"})
+                return self._send(200, {"ok": True})
             m = re.fullmatch(r"/api/sessions/([0-9a-f]{12})/delete", url.path)
             if m:
                 return self._send(200, _delete_session(m.group(1)))
@@ -396,7 +402,7 @@ class Handler(BaseHTTPRequestHandler):
         c = r.get("check") or {}
         turn = {"question": q, "at": catalog.now(), "not_found": r["not_found"], "seconds": r["seconds"],
                 "answer_text": r["answer_text"], "markdown": r["answer_text"], "pages_read": r["pages_read"],
-                "tools_used": r["tools_used"], "premium": r["premium"], "images": [p.name for p in att], "session": r["session"],
+                "tools_used": r["tools_used"], "premium": r["premium"], "images": [p.name for p in att], "session": r["session"], "stopped": r.get("stopped", False),
                 "check": {"ok": len(c.get("ok", [])), "broken": c.get("broken", []), "unchecked": c.get("unchecked", [])},
                 "trace": TRACE[s["id"]]["events"]}
         s = _load_session(s["id"])  # re-read: the question may have taken minutes
@@ -590,7 +596,7 @@ a.wl:hover{color:var(--vio);text-decoration-color:currentColor;opacity:1}
 .pill[aria-pressed=true]{background:var(--vio-soft);border-color:var(--vio);color:var(--vio)}
 .sp{flex:1}
 .send{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;border:0;background:var(--ink);color:var(--bg)}
-.send:disabled{background:var(--line);color:var(--mute);opacity:1}
+.send:disabled{background:var(--line);color:var(--mute);opacity:1}.send.stop{background:var(--bad);color:#fff}
 .imgs{display:flex;flex-wrap:wrap;gap:6px}.imgs:not(:empty){margin-bottom:6px}
 .imgs span{display:inline-flex;align-items:center;gap:6px;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:3px 4px 3px 4px;font-size:12px}
 .imgs img{width:28px;height:28px;object-fit:cover;border-radius:5px}.imgs b{cursor:pointer;padding:0 5px;color:var(--mute)}
@@ -749,8 +755,8 @@ const V={
   if(s)$('#delc').onclick=()=>delSession(S.id);
   if(s)$('#save').onclick=async()=>{const b=$('#save');b.disabled=true;try{const r=await api('/api/sessions/'+S.id+'/save',{method:'POST'});b.innerHTML=ic('M5 12l5 5 9-10',2)+'<span>Saved</span>';b.title=r.saved}
     catch(e){alert(e.message);b.disabled=false}};
-  const q=$('#q'),ask=$('#ask'),fit=()=>{q.style.height='auto';q.style.height=q.scrollHeight+'px';ask.disabled=BUSY||!q.value.trim()};
-  q.oninput=fit;q.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();go()}};
+  const q=$('#q'),ask=$('#ask'),fit=()=>{q.style.height='auto';q.style.height=q.scrollHeight+'px';ask.disabled=!BUSY&&!q.value.trim()};
+  q.oninput=fit;q.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();if(!BUSY)go()}};
   $('#code').onclick=e=>{const b=e.currentTarget;b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')!=='true')};
   $('#att').onclick=()=>$('#img').click();$('#img').onchange=()=>{addImgs([...$('#img').files]);$('#img').value=''};
   q.onpaste=e=>{const fs=[...((e.clipboardData||{}).files||[])];if(fs.length){e.preventDefault();addImgs(fs)}};
@@ -874,7 +880,7 @@ function checkHtml(c){if(!c)return '';const b=c.broken||[];
   if(b.length)return `<span class="badc" title="${esc(b.join('\n'))}" onclick="alert(this.title)">⚠ ${b.length} citation${b.length>1?'s':''} not found</span>`;
   return c.ok?`<span class="okc" title="Every link and page/time reference was found in the wiki and its sources">✓ ${c.ok} citation${c.ok>1?'s':''} checked</span>`:''}
 function botMsg(t){const md=t.markdown||(t.sentences||[]).map(s=>s.text).join(' ');
-  const pr=t.pages_read||[],meta=[t.session==='continued'?'same session':t.session==='resumed'?'session resumed':'',t.seconds?`${t.seconds} s`:'',t.tools_used&&t.tools_used.length?`tools: ${t.tools_used.map(esc).join(', ')}`:''].filter(Boolean);
+  const pr=t.pages_read||[],meta=[t.stopped?'⏹ stopped':'',t.session==='continued'?'same session':t.session==='resumed'?'session resumed':'',t.seconds?`${t.seconds} s`:'',t.tools_used&&t.tools_used.length?`tools: ${t.tools_used.map(esc).join(', ')}`:''].filter(Boolean);
   return `<div class="msg bot">${MARK}<div class="body">${traceHtml(t.trace,false)}<div class="md ${t.not_found?'nf':''}">${t.not_found&&!md.trim()?'<p>No answer found in the knowledge base. Try other words, or add a source that covers it.</p>':mdl(md)}</div>
    <div class="meta">${checkHtml(t.check)}${meta.map(x=>`<span>${x}</span>`).join('')}${pr.length?`<details><summary>${pr.length} page${pr.length>1?'s':''} read ▾</summary><div>${pr.map(p=>`<a class="wl" href="#wiki/w:${encodeURIComponent(String(p).replace(/^.*\//,'').replace(/\.md$/,''))}">${esc(String(p).replace(/^.*\//,'').replace(/\.md$/,''))}</a>`).join(' ')}</div></details>`:''}</div></div></div>`}
 const scrollEnd=()=>{const s=$('#scroll');if(s)s.scrollTop=s.scrollHeight};
@@ -884,8 +890,14 @@ function renderTurns(){const el=$('#turns');
     <div class="chips">${['What are the main topics in the wiki?','Which sources contradict each other?','Summarise the most recent source'].map(x=>`<button>${x}</button>`).join('')}</div>`;
     el.querySelectorAll('.chips button').forEach(b=>b.onclick=()=>{$('#q').value=b.textContent;$('#q').oninput();go()});return}
   el.className='col';el.innerHTML=S.turns.map(t=>userMsg(t.question,t.images)+botMsg(t)).join('');scrollEnd()}
-async function go(){const q=$('#q').value.trim();if(!q||BUSY)return;BUSY=true;$('#ask').disabled=true;
-  const code=$('#code').getAttribute('aria-pressed')==='true',imgs=IM;IM=[];showImgs();$('#q').value='';$('#q').oninput();$('#ask').disabled=true;
+async function stopAnswer(){if(!BUSY||!S)return;const p=$('#pnow');if(p)p.textContent='Stopping…';
+  try{await api('/api/sessions/'+S.id+'/stop',{method:'POST'})}catch(e){if(p)p.textContent=e.message}}
+function busyUi(on){const b=$('#ask');if(!b)return;b.disabled=false;b.classList.toggle('stop',on);b.title=on?'Stop (Esc)':'Send (Enter)';
+  b.innerHTML=on?'<svg class="i" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>':ic(I.send,2.2);
+  if(!on)$('#q').oninput()}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&BUSY)stopAnswer()});
+async function go(){if(BUSY)return stopAnswer();const q=$('#q').value.trim();if(!q)return;BUSY=true;busyUi(true);
+  const code=$('#code').getAttribute('aria-pressed')==='true',imgs=IM;IM=[];showImgs();$('#q').value='';$('#q').style.height='auto';
   const el=$('#turns');if(el.className==='hero'){el.className='col';el.innerHTML=''}
   el.insertAdjacentHTML('beforeend',userMsg(q,imgs.map(x=>x.name))+`<div class="msg bot" id="pending">${MARK}<div class="body"><div class="typing"><i></i><i></i><i></i> <span id="pnow">Reading the wiki${code?' and the code':''}…</span></div><div id="ptrace"></div></div></div>`);scrollEnd();
   let live=true,started=false,since=0,EV=[];
@@ -902,7 +914,7 @@ async function go(){const q=$('#q').value.trim();if(!q||BUSY)return;BUSY=true;$(
     const t=await api('/api/sessions/'+S.id+'/ask',{method:'POST',body:JSON.stringify({question:q,images:imgs,focus:code?'code':'wiki'})});
     S.turns.push(t);if(!$('#save'))V.chat(S);else renderTurns();loadSessions()}
   catch(e){const p=$('#pending');if(p)p.querySelector('.body').innerHTML=`<p class="err">${esc(e.message)}</p>`;if($('#q')&&!$('#q').value){$('#q').value=q;$('#q').oninput()}}
-  finally{live=false;BUSY=false;if($('#q')){$('#q').oninput();$('#q').focus()}}}
+  finally{live=false;BUSY=false;busyUi(false);if($('#q'))$('#q').focus()}}
 
 // ---------------------------------------------------------------- uploads
 async function upload(files){for(const file of files){const j=await api('/api/upload',{method:'POST',headers:{'X-Filename':encodeURIComponent(file.name)},body:file})
