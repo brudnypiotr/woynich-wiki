@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
 import secrets
+import socket
 import tempfile
 import threading
 import time
@@ -396,12 +398,34 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(200, {"saved": str(p.relative_to(catalog.instance()))})
 
 
+class _Server(ThreadingHTTPServer):
+    # On Windows SO_REUSEADDR lets a second server bind a port another one already listens on, without an error;
+    # the browser then reaches the old server, whose token differs ("open the link printed by kb serve").
+    allow_reuse_address = os.name != "nt"
+    daemon_threads = True
+
+    def server_bind(self):
+        if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def make_server(port: int = 8765, gw: Gateway | None = None, adapter: str | None = None) -> ThreadingHTTPServer:
     catalog.init()
     Handler.token = secrets.token_urlsafe(16)
     Handler.gw = gw or Gateway(adapter=adapter)
+    for p in ([port] if port == 0 else range(port, port + 10)):
+        try:
+            httpd = _Server(("127.0.0.1", p), Handler)
+            break
+        except OSError:
+            if p != port:
+                continue
+            print(f"port {port} is in use (another kb serve still running?); trying the next one", flush=True)
+    else:
+        raise OSError(f"ports {port}-{port + 9} are all in use; stop other kb serve windows")
     threading.Thread(target=_reaper, daemon=True, name="kb-reaper").start()
-    return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    return httpd
 
 
 def serve(port: int = 8765, open_browser: bool = True, adapter: str | None = None) -> None:

@@ -112,3 +112,15 @@ def test_settings_models_profile_and_secrets(app, instance, monkeypatch):
     assert any(x["name"] == "confluence-token" and x["set"] for x in st["items"])
     st = call(base, token, "/api/secrets/copilot-github-token/delete", b"")
     assert not st["items"][0]["set"] and "COPILOT_GITHUB_TOKEN" not in os.environ
+
+
+def test_second_server_gets_its_own_port(instance):
+    import socket
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+    gw = Gateway(cfg=CFG, log_path=instance / "catalog" / "metering.jsonl")
+    a = serve.make_server(port, gw=gw)
+    b = serve.make_server(port, gw=gw)
+    try:
+        assert a.server_address[1] == port and b.server_address[1] != port  # never two servers on one port
+    finally:
+        a.server_close(); b.server_close()
