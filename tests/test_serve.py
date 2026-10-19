@@ -24,6 +24,7 @@ def app(instance):
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{httpd.server_address[1]}", serve.Handler.token
     httpd.shutdown()
+    serve.close_live()
 
 
 def call(base, token, path, data=None, headers=None):
@@ -51,7 +52,22 @@ def test_upload_steps_then_discussion(app):
     assert [s for s in serve.STEPS if s in {l["step"] for l in job["log"]}] == serve.STEPS
     s = call(base, token, "/api/sessions", json.dumps({"topic": "Minimum rest"}).encode())
     t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest home base"}).encode())
-    assert not t["not_found"] and "[[" in t["markdown"]
+    assert not t["not_found"] and "[[" in t["markdown"] and t["session"] == "new"
+    t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest again"}).encode())
+    runner = serve.Handler.runner
+    assert t["session"] == "continued" and runner.opened == ["live-1"]  # one long session (ADR-0019)
+    assert call(base, token, f"/api/sessions/{s['id']}")["agent_session"] == "live-1"
+    other = next(p for p in sorted(SAMPLE.parent.iterdir()) if p != SAMPLE)
+    job = call(base, token, "/api/upload", other.read_bytes(), {"X-Filename": other.name})
+    for _ in range(100):
+        if call(base, token, f"/api/jobs/{job['id']}")["state"] != "running":
+            break
+        time.sleep(0.1)
+    call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest now?"}).encode())
+    assert "WIKI UPDATED" in runner.prompts[-1] and "wiki/sources/" in runner.prompts[-1]
+    assert serve.close_live() == 1 and runner.closed == ["live-1"]
+    t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest after restart"}).encode())
+    assert t["session"] == "resumed"
     assert call(base, token, f"/api/sessions/{s['id']}/save", b"")["saved"].startswith("wiki/answers/discussion-")
 
 

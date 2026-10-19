@@ -125,3 +125,51 @@ def test_lint_commits(instance):
     catalog.init()
     wiki.lint(runner=ScriptedAgent())
     assert "lint: wiki health check" in git(instance, "log", "-1", "--format=%s")
+
+
+def test_conversation_keeps_one_session_and_hears_about_changes(instance):
+    for f in sorted(SAMPLES.iterdir()):
+        catalog.add_file(f)
+    sa = ScriptedAgent()
+    wiki.ingest_pending(runner=sa)
+    conv = chat.Conversation(topic="Rest", runner=sa)
+    a1 = conv.ask("minimum rest before duty")
+    a2 = conv.ask("and at home base minimum rest?")
+    assert sa.opened == ["live-1"] and (a1["session"], a2["session"]) == ("new", "continued")
+    assert "# How to work" in sa.prompts[-2] and "DISCUSSION TOPIC: Rest" in sa.prompts[-2]
+    assert "# How to work" not in sa.prompts[-1] and "QUESTION: and at home base" in sa.prompts[-1]
+    conv.wiki_changed(["wiki/concepts/minimum-rest.md"])
+    conv.ask("minimum rest again")
+    assert "WIKI UPDATED" in sa.prompts[-1] and "wiki/concepts/minimum-rest.md" in sa.prompts[-1]
+    conv.ask("minimum rest once more")
+    assert "WIKI UPDATED" not in sa.prompts[-1]
+    conv.close()
+    assert sa.closed == ["live-1"] and conv.session_id == "live-1"
+    again = chat.Conversation(runner=sa, history=conv.history, resume="live-1")  # resumed: no full prompt
+    assert again.ask("minimum rest?")["session"] == "resumed" and "# How to work" not in sa.prompts[-1]
+    lost = chat.Conversation(runner=sa, history=conv.history, resume="gone")      # cannot resume: history summary
+    assert lost.ask("minimum rest?")["session"] == "new" and "EARLIER IN THIS CONVERSATION" in sa.prompts[-1]
+
+
+def test_check_answer(instance, tmp_path):
+    import shutil
+    for f in sorted(SAMPLES.iterdir()):
+        catalog.add_file(f)
+    wiki.ingest_pending(runner=ScriptedAgent())
+    page = next((instance / "wiki" / "sources").glob("*.md"))
+    text = page.read_text(encoding="utf-8")
+    slug, loc = re.search(r"\(\[\[([^\]]+)\]\] ((?:p\.|L|t\.|¶|#)[^)]*)\)", text).groups()
+    repo = tmp_path / "rules-repo"
+    shutil.copytree(Path(__file__).resolve().parents[1] / "samples" / "code-repo", repo)
+    for cmd in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"]):
+        subprocess.run(["git", "-C", str(repo), *cmd], check=True)
+    (instance / "config").mkdir(exist_ok=True)
+    (instance / "config" / "profile.yaml").write_text(f"code_repos:\n  - name: rules\n    path: '{repo.as_posix()}'\n")
+    commit = git(repo, "rev-parse", "--short", "HEAD").strip()
+    code = next(p for p in repo.rglob("*.py")).relative_to(repo).as_posix()
+    good = f"Rest is 12 hours ([[{slug}]] {loc}; see [[minimum-rest]]). Computed in rules/{code}:1@{commit} (PROJ-1#c2)."
+    r = verify.check_answer(good)
+    assert not r["broken"] and len(r["ok"]) == 3 and r["unchecked"] == ["PROJ-1#c2"]
+    bad = f"Rest ([[{slug}]] p. 999), see [[no-such-page]], rules/{code}:99999@{commit}, other/x.py:1@{commit}."
+    r = verify.check_answer(bad)
+    assert len(r["broken"]) == 4 and not r["ok"]

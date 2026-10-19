@@ -2,8 +2,10 @@
 
 - Add sources: upload files from the browser; each goes through visible steps
   (saved → text extracted → facts → summary → topic pages → glossary → citation check) as a background job.
-- Discuss: open a session on a topic and ask follow-up questions; every answer is cited and checked like `kb ask`.
-  Sessions are kept in instance/sessions/<id>.json and can be saved as a wiki page.
+- Discuss: one long agent session per discussion (ADR-0019): follow-up questions build on what the model already
+  read; after an ingest the session is told which pages changed; idle sessions close after 30 minutes and are
+  resumed (or rebuilt from the saved turns) on the next question. Discussions are kept in
+  instance/sessions/<id>.json and can be saved as a wiki page.
 - Settings: models, GitHub Copilot sign-in, keys and tokens (never sent back to the browser), Jira and title.
 - Wiki: the same static dashboard, rebuilt on request and shown inside the app (`/dashboard?embed=1`).
 
@@ -34,6 +36,46 @@ from kb.publish import settings, site
 MAX_UPLOAD = 200_000_000
 WRITE_LOCK = threading.Lock()
 JOBS: dict[str, dict] = {}
+LIVE: dict[str, chat.Conversation] = {}  # discussion id -> open agent session
+LIVE_LOCK = threading.Lock()
+IDLE_S = 1800
+
+
+def _conversation(s: dict) -> chat.Conversation:
+    with LIVE_LOCK:
+        conv = LIVE.get(s["id"])
+        if conv is None:
+            hist = [{"question": t["question"], "answer_text": t["answer_text"]} for t in s["turns"]]
+            conv = LIVE[s["id"]] = chat.Conversation(topic=s["topic"], history=hist, runner=Handler.runner,
+                                                     resume=s.get("agent_session"))
+        return conv
+
+
+def close_live(idle_only: bool = False) -> int:
+    """Close open discussion sessions (all, or those idle for IDLE_S); they resume on the next question."""
+    with LIVE_LOCK:
+        ids = [k for k, c in LIVE.items() if not idle_only or (time.time() - c.used > IDLE_S and not c.lock.locked())]
+        convs = [LIVE.pop(k) for k in ids]
+    for c in convs:
+        c.close()
+    return len(convs)
+
+
+def _reaper() -> None:
+    while True:
+        time.sleep(60)
+        try:
+            close_live(idle_only=True)
+        except Exception:
+            pass
+
+
+def _tell_discussions(result: dict | None) -> None:
+    changed = (result or {}).get("created", []) + (result or {}).get("updated", [])
+    if changed:
+        with LIVE_LOCK:
+            for c in LIVE.values():
+                c.wiki_changed(changed)
 STEPS = ["saved", "extracted", "writing", "checking", "verify", "done"]
 
 
@@ -85,6 +127,7 @@ def run_ingest_job(job: dict, path: Path, gw: Gateway) -> None:
                 if job.get("cancel"):
                     raise wiki.Cancelled()
                 job["result"] = res[0] if res else None
+                _tell_discussions(job["result"])
             v = verify.verify_all()
             _job_step(job, "verify", f"{v['citations_ok']}/{v['citations']} citations found in sources, {v['broken_links']} broken links, "
                                      f"{v['contradictions']} contradictions")
@@ -199,7 +242,11 @@ class Handler(BaseHTTPRequestHandler):
                 _save_session(s)
                 return self._send(200, s)
             if url.path == "/api/settings":
-                return self._send(200, settings.save(self._json_body()))
+                body = self._json_body()
+                out = settings.save(body)
+                if "model" in body:
+                    close_live()  # open discussions continue with the new model
+                return self._send(200, out)
             if url.path == "/api/settings/login":
                 return self._send(200, settings.login())
             m = re.fullmatch(r"/api/secrets/([a-z0-9-]{1,40})(/delete)?", url.path)
@@ -272,13 +319,13 @@ class Handler(BaseHTTPRequestHandler):
             p = _sessions_dir() / s["id"] / f"{len(s['turns']) + 1:03d}-{i + 1}{ext}"
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_bytes(data); att.append(p)
-        hist = [{"question": t["question"], "answer_text": t["answer_text"]} for t in s["turns"]]
-        r = chat.ask(q, runner=Handler.runner, history=hist, topic=s["topic"], attachments=att,
-                     focus="code" if body.get("focus") == "code" else "wiki")
+        conv = _conversation(s)
+        r = conv.ask(q, attachments=att, focus="code" if body.get("focus") == "code" else "wiki")
         turn = {"question": q, "at": catalog.now(), "not_found": r["not_found"], "seconds": r["seconds"],
                 "answer_text": r["answer_text"], "markdown": r["answer_text"], "pages_read": r["pages_read"],
-                "tools_used": r["tools_used"], "premium": r["premium"], "images": [p.name for p in att]}
-        s["turns"].append(turn); s["updated"] = catalog.now()
+                "tools_used": r["tools_used"], "premium": r["premium"], "images": [p.name for p in att], "session": r["session"]}
+        s = _load_session(s["id"])  # re-read: the question may have taken minutes
+        s["turns"].append(turn); s["updated"] = catalog.now(); s["agent_session"] = conv.session_id
         _save_session(s)
         return self._send(200, turn)
 
@@ -300,6 +347,7 @@ def make_server(port: int = 8765, gw: Gateway | None = None, adapter: str | None
     catalog.init()
     Handler.token = secrets.token_urlsafe(16)
     Handler.gw = gw or Gateway(adapter=adapter)
+    threading.Thread(target=_reaper, daemon=True, name="kb-reaper").start()
     return ThreadingHTTPServer(("127.0.0.1", port), Handler)
 
 
@@ -315,6 +363,7 @@ def serve(port: int = 8765, open_browser: bool = True, adapter: str | None = Non
     except KeyboardInterrupt:
         print("stopped")
     finally:
+        close_live()
         httpd.server_close()
 
 
@@ -662,7 +711,7 @@ function addImgs(fs){for(const f of fs){if(!f.type.startsWith('image/'))continue
 function showImgs(){const el=$('#imgs');if(!el)return;el.innerHTML=IM.map((x,k)=>`<span><img src="${x.data}" alt="">${esc(x.name)}<b onclick="IM.splice(${k},1);showImgs()" title="Remove">×</b></span>`).join('')}
 function userMsg(q,imgs){return `<div class="msg user"><div class="bubble">${esc(q)}</div>${imgs&&imgs.length?`<div class="att">📎 ${imgs.map(esc).join(', ')}</div>`:''}</div>`}
 function botMsg(t){const md=t.markdown||(t.sentences||[]).map(s=>s.text).join(' ');
-  const pr=t.pages_read||[],meta=[t.seconds?`${t.seconds} s`:'',t.tools_used&&t.tools_used.length?`tools: ${t.tools_used.map(esc).join(', ')}`:''].filter(Boolean);
+  const pr=t.pages_read||[],meta=[t.session==='continued'?'same session':t.session==='resumed'?'session resumed':'',t.seconds?`${t.seconds} s`:'',t.tools_used&&t.tools_used.length?`tools: ${t.tools_used.map(esc).join(', ')}`:''].filter(Boolean);
   return `<div class="msg bot">${MARK}<div class="body"><div class="md ${t.not_found?'nf':''}">${t.not_found&&!md.trim()?'<p>No answer found in the knowledge base. Try other words, or add a source that covers it.</p>':mdl(md)}</div>
    <div class="meta">${meta.map(x=>`<span>${x}</span>`).join('')}${pr.length?`<details><summary>${pr.length} page${pr.length>1?'s':''} read ▾</summary><div>${pr.map(p=>`<a class="wl" href="#wiki/w:${encodeURIComponent(String(p).replace(/^.*\//,'').replace(/\.md$/,''))}">${esc(String(p).replace(/^.*\//,'').replace(/\.md$/,''))}</a>`).join(' ')}</div></details>`:''}</div></div></div>`}
 const scrollEnd=()=>{const s=$('#scroll');if(s)s.scrollTop=s.scrollHeight};

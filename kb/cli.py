@@ -104,8 +104,16 @@ def cmd_chat(a) -> int:
     the last answer as a wiki page, /exit ends."""
     from kb.knowledge import chat, wiki
     topic = " ".join(a.topic) if a.topic else None
-    hist, pending = [], []
+    conv, pending = chat.Conversation(topic=topic), []
     print("Ask about the project, the product, the code or a Jira ticket. /image <path>, /save, /exit")
+    try:
+        return _chat_loop(conv, pending, wiki)
+    finally:
+        conv.close()
+
+
+def _chat_loop(conv, pending, wiki) -> int:
+    hist = conv.history
     while True:
         try:
             q = input("\n> ").strip()
@@ -126,10 +134,9 @@ def cmd_chat(a) -> int:
             if hist:
                 print("  saved: " + str(wiki.save_answer(hist[-1]["question"], hist[-1]["answer_text"], kind="discussion")))
             continue
-        res = chat.ask(q, history=hist, topic=topic, attachments=pending)
-        pending = []
-        print("\n" + res["answer_text"] + f"\n  ({res['seconds']} s, {res.get('premium')} premium request)")
-        hist.append({"question": q, "answer_text": res["answer_text"]})
+        res = conv.ask(q, attachments=pending)  # one session for the whole chat (ADR-0019)
+        pending.clear()
+        print("\n" + res["answer_text"] + f"\n  ({res['seconds']} s, {res.get('premium')} premium request, {res['session']} session)")
 
 
 def cmd_search(a) -> int:
@@ -138,6 +145,25 @@ def cmd_search(a) -> int:
     hits = search.search(" ".join(a.query), limit=a.limit, kind=None if a.pages else "source")
     _out(a, hits, "\n".join(f"{h['title']} · {h['locator'] or '-'}  [{h['source_id']}]\n    {h['text'][:200].replace(chr(10), ' ')}" for h in hits) or "no matches")
     return 0
+
+
+def cmd_check_answer(a) -> int:
+    """Check the citations of an answer before showing it (used by the Copilot CLI skills, ADR-0019)."""
+    from kb.knowledge import verify
+    if a.file:
+        text = Path(a.file).read_text(encoding="utf-8", errors="replace")
+    elif a.text and a.text != ["-"]:
+        text = " ".join(a.text)
+    else:
+        text = sys.stdin.buffer.read().decode("utf-8", errors="replace")
+    r = verify.check_answer(text)
+    lines = [f"{len(r['ok'])} citations OK, {len(r['broken'])} broken, {len(r['unchecked'])} Jira references not checked, "
+             f"{r['uncited_lines']} long lines without a citation"]
+    lines += [f"  BROKEN  {b}" for b in r["broken"]] + [f"  ok      {o}" for o in r["ok"]] + [f"  jira    {j}" for j in r["unchecked"]]
+    if r["broken"]:
+        lines.append("Fix or remove the broken citations (re-read the page or source), then check again.")
+    _out(a, r, "\n".join(lines))
+    return 1 if r["broken"] else 0
 
 
 def cmd_verify(a) -> int:
@@ -368,6 +394,8 @@ def main(argv=None) -> int:
     s = sub.add_parser("search", help="full-text search (no model)")
     s.add_argument("query", nargs="+"); s.add_argument("--limit", type=int, default=8); s.add_argument("--pages", action="store_true")
     s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_search)
+    s = sub.add_parser("check-answer", help="check the citations of an answer (text, --file, or stdin with -) before showing it")
+    s.add_argument("text", nargs="*"); s.add_argument("--file"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_check_answer)
     s = sub.add_parser("verify", help="check links and citations on wiki pages (warnings only)"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_verify)
     s = sub.add_parser("site", help="build the dashboard (instance/site/index.html)"); s.add_argument("--open", action="store_true"); s.set_defaults(fn=cmd_site)
     s = sub.add_parser("quota", help="your Copilot quota (premium requests left) and what kb used")

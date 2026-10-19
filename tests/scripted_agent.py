@@ -12,6 +12,25 @@ class ScriptedAgent:
     def __init__(self, stop_after_reading=False):
         self.stop_after_reading = stop_after_reading
         self.prompts = []
+        self.opened, self.closed, self.alive = [], [], set()  # long sessions (ADR-0019)
+
+    def open(self, model, root, read_roots=(), tools=(), resume=None):
+        """A long session: every send() is one question; resume works only for sessions still alive."""
+        outer = self
+
+        class Live:
+            resumed = bool(resume and resume in outer.alive)
+            id = resume if resumed else f"live-{len(outer.opened) + 1}"
+
+            def send(self, task, attachments=(), progress=None, cancelled=None):
+                return outer.run(task, model, root, write_dirs=(), progress=progress, read_roots=read_roots, tools=tools,
+                                 attachments=attachments)
+
+            def close(self):
+                outer.closed.append(self.id)
+        live = Live()
+        self.opened.append(live.id); self.alive.add(live.id)
+        return live
 
     def run(self, task, model, root, write_dirs=("wiki",), progress=None, cancelled=None, read_roots=(), tools=(), attachments=()):
         self.prompts.append(task)

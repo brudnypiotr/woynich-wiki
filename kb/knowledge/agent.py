@@ -1,6 +1,7 @@
 """The model writes the wiki (Karpathy LLM Wiki pattern, as in the claude-obsidian `wiki-ingest` skill).
 
-One agent session per task (ingest a source, answer a question, lint). The model gets file tools and decides what
+One agent session per task (ingest a source, answer a question, lint); a discussion keeps one session open
+across its questions (LiveSession, ADR-0019). The model gets file tools and decides what
 to read and which pages to create or update. Scripts do the plumbing around it: register and extract the source,
 run the session inside a sandbox, check the result, commit, roll back on failure.
 
@@ -14,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -148,8 +150,40 @@ class AgentResult:
     tools: list[dict]
 
 
+def _quiet(lp, ctx):  # SDK 1.0.22 cannot parse the echo of a user message with attachments; harmless
+    if isinstance(ctx.get("exception"), AssertionError) and "handle_notification" in str(ctx.get("handle", "")):
+        return
+    lp.default_exception_handler(ctx)
+
+
+def _session_kwargs(box: Sandbox, model: str, root: Path, tools) -> dict:
+    kw = dict(on_permission_request=box.on_permission, hooks={"on_pre_tool_use": box.pre_tool_use},
+              available_tools=sorted(READ_TOOLS | (WRITE_TOOLS if box.write_dirs else set()) | set(box.custom)),
+              enable_skills=False, skip_custom_instructions=True, enable_config_discovery=False, working_directory=str(root))
+    if model and model != "auto":
+        kw["model"] = model
+    if tools:
+        kw["tools"] = list(tools)
+    return kw
+
+
+async def _usage(session) -> tuple:
+    try:
+        m = await session.rpc.usage.get_metrics()
+        return (sum((x.usage.input_tokens or 0) for x in m.model_metrics.values()),
+                sum((x.usage.output_tokens or 0) for x in m.model_metrics.values()),
+                getattr(m, "total_premium_request_cost", None))
+    except Exception:
+        return None, None, None
+
+
+def _reply(ev) -> str:
+    data = getattr(ev, "data", None)
+    return getattr(data, "content", None) or str(data if data is not None else ev)
+
+
 class AgentRunner:
-    """Runs one agent session with the Copilot SDK. Tests replace it with a scripted runner."""
+    """Runs agent sessions with the Copilot SDK. Tests replace it with a scripted runner."""
 
     def __init__(self, timeout: int | None = None):
         self.timeout = timeout or int((config.load("models").get("agent") or {}).get("timeout_s", 1800))
@@ -159,46 +193,94 @@ class AgentRunner:
         return asyncio.run(self._run(task_prompt, model, root, tuple(write_dirs), progress, cancelled,
                                      tuple(read_roots), list(tools), list(attachments)))
 
+    def open(self, model: str, root: Path, read_roots=(), tools=(), resume: str | None = None) -> "LiveSession":
+        """A long read-only session for a discussion (ADR-0019): send() several questions, the model keeps its context."""
+        return LiveSession(self.timeout, model, root, read_roots, tools, resume)
+
     async def _run(self, task_prompt, model, root, write_dirs, progress=None, cancelled=None, read_roots=(), tools=(),
                    attachments=()) -> AgentResult:
         from copilot import CopilotClient
-        loop = asyncio.get_running_loop()
-
-        def quiet(lp, ctx):  # SDK 1.0.22 cannot parse the echo of a user message with attachments; harmless
-            if isinstance(ctx.get("exception"), AssertionError) and "handle_notification" in str(ctx.get("handle", "")):
-                return
-            lp.default_exception_handler(ctx)
-        loop.set_exception_handler(quiet)
+        asyncio.get_running_loop().set_exception_handler(_quiet)
         box = Sandbox(Path(root), write_dirs, progress=progress, cancelled=cancelled, read_roots=read_roots,
                       custom=tuple(t.name for t in tools))
         t0 = time.perf_counter()
         client = CopilotClient(working_directory=str(root))
         await client.start()
         try:
-            kw = dict(on_permission_request=box.on_permission, hooks={"on_pre_tool_use": box.pre_tool_use},
-                      available_tools=sorted(READ_TOOLS | (WRITE_TOOLS if write_dirs else set()) | set(box.custom)),
-                      enable_skills=False,
-                      skip_custom_instructions=True, enable_config_discovery=False, working_directory=str(root))
-            if model and model != "auto":
-                kw["model"] = model
-            if tools:
-                kw["tools"] = list(tools)
-            session = await client.create_session(**kw)
+            session = await client.create_session(**_session_kwargs(box, model, root, tools))
             att = [{"type": "file", "path": str(Path(a).resolve())} for a in attachments]
             ev = await session.send_and_wait(task_prompt, attachments=att or None, timeout=float(self.timeout))
-            data = getattr(ev, "data", None)
-            reply = getattr(data, "content", None) or str(data if data is not None else ev)
-            tin = tout = premium = None
-            try:
-                m = await session.rpc.usage.get_metrics()
-                tin = sum((x.usage.input_tokens or 0) for x in m.model_metrics.values())
-                tout = sum((x.usage.output_tokens or 0) for x in m.model_metrics.values())
-                premium = getattr(m, "total_premium_request_cost", None)
-            except Exception:
-                pass
-            return AgentResult(reply, round(time.perf_counter() - t0, 1), model, tin, tout, premium, box.log)
+            tin, tout, premium = await _usage(session)
+            return AgentResult(_reply(ev), round(time.perf_counter() - t0, 1), model, tin, tout, premium, box.log)
         finally:
             await client.stop()
+
+
+class LiveSession:
+    """One agent session kept open across questions (a discussion). Read-only sandbox, same rules as `run`.
+
+    The SDK is asynchronous; the session lives on its own event loop in a background thread, so the (threaded) web
+    server and the terminal chat can call send() synchronously. `resume` reopens a session saved earlier (after a
+    restart); `resumed` tells whether that worked, otherwise a new session was started.
+    """
+
+    def __init__(self, timeout: int, model: str, root: Path, read_roots=(), tools=(), resume: str | None = None):
+        self.timeout, self.model, self.resumed = timeout, model, False
+        self.box = Sandbox(Path(root), (), read_roots=tuple(read_roots), custom=tuple(t.name for t in tools))
+        self.loop = asyncio.new_event_loop()
+        self.loop.set_exception_handler(_quiet)
+        threading.Thread(target=self.loop.run_forever, daemon=True, name="kb-live-session").start()
+        self._seen = (0, 0, 0.0)
+        try:
+            self._call(self._start(Path(root), list(tools), resume), 120)
+        except Exception:
+            self.close()
+            raise
+
+    def _call(self, coro, timeout=None):
+        return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
+
+    async def _start(self, root, tools, resume):
+        from copilot import CopilotClient
+        self.client = CopilotClient(working_directory=str(root))
+        await self.client.start()
+        kw = _session_kwargs(self.box, self.model, root, tools)
+        if resume:
+            try:
+                self.session = await self.client.resume_session(resume, **kw)
+                self.resumed = True
+            except Exception:
+                self.session = None
+        if not self.resumed:
+            self.session = await self.client.create_session(**kw)
+        self.id = getattr(self.session, "session_id", None) or getattr(self.session, "id", None)
+        tin, tout, prem = await _usage(self.session)
+        self._seen = (tin or 0, tout or 0, prem or 0.0)
+
+    async def _send(self, prompt, attachments):
+        att = [{"type": "file", "path": str(Path(a).resolve())} for a in attachments]
+        ev = await self.session.send_and_wait(prompt, attachments=att or None, timeout=float(self.timeout))
+        return _reply(ev), await _usage(self.session)
+
+    def send(self, prompt: str, attachments=(), progress=None, cancelled=None) -> AgentResult:
+        self.box.progress, self.box.cancelled = progress, cancelled
+        n, t0 = len(self.box.log), time.perf_counter()
+        reply, (tin, tout, prem) = self._call(self._send(prompt, list(attachments)), self.timeout + 60)
+        # the runtime reports totals for the session: keep only this question's share
+        seen = self._seen
+        self._seen = (tin if tin is not None else seen[0], tout if tout is not None else seen[1], prem if prem is not None else seen[2])
+        delta = lambda new, old: None if new is None else (new - old if new >= old else new)
+        return AgentResult(reply, round(time.perf_counter() - t0, 1), self.model, delta(tin, seen[0]), delta(tout, seen[1]),
+                           delta(prem, seen[2]), self.box.log[n:])
+
+    def close(self) -> None:
+        try:
+            if getattr(self, "client", None):
+                self._call(self.client.stop(), 30)
+        except Exception:
+            pass
+        finally:
+            self.loop.call_soon_threadsafe(self.loop.stop)
 
 
 def model_for(task: str) -> str:

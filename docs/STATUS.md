@@ -9,6 +9,11 @@ Diagnosis in [INGEST-ANALYSIS.md](INGEST-ANALYSIS.md); decision [ADR-0018](decis
 Update: v1 removed; one assistant over wiki, code repositories (`code_repos` with descriptions), Jira tools and
 screenshots (`kb ask --image`, `kb code-ask`, `kb chat`, Discuss in `kb serve`). Architecture: [architecture.html](architecture.html).
 
+Update (ADR-0019): in the Copilot CLI the agent answers from the wiki itself (skills `kb-ask`, `kb-code`; no nested
+`kb ask` session, so one premium request per prompt instead of two) and checks its citations with `kb check-answer`.
+`kb serve` and `kb chat` keep **one agent session per discussion** (resumed after a restart; told which pages an ingest
+changed). Ingest stays in the sandbox. Still to measure on the laptop: premium requests per question, CLI vs `kb serve`.
+
 ## Where we are
 The mini-flow runs **end to end on a standard work laptop** (Windows 11, no admin rights, Windows PowerShell 5.1,
 GPT-6 Luna via GitHub Copilot). On the fictional sample corpus: 4 sources → 19 verified facts, 0 rejected,

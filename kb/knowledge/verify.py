@@ -91,3 +91,59 @@ def verify_all() -> dict:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     return report
+
+
+CODE_CITE = re.compile(r"\b([\w.-]+)/([^\s:()\[\]`]+):(\d+)(?:-(\d+))?@([0-9a-f]{6,40})\b")
+JIRA_CITE = re.compile(r"\b[A-Z][A-Z0-9]+-\d+#(?:c\d+|description)\b")
+
+
+def check_answer(text: str) -> dict:
+    """Check the citations of an answer written by an agent (Copilot CLI, ADR-0019) before it is shown:
+    wiki links resolve, `([[source]] p. 3)` points to an existing place, `repo/path:line@commit` exists at that
+    commit. Jira references are listed but not checked offline. Deterministic, no model."""
+    import subprocess
+    from kb.knowledge import chat
+    from kb.knowledge import wiki as wikimod
+    w = pages.wiki()
+    names = {p.stem for p in w.rglob("*.md")} if w.exists() else set()
+    srcs = wikimod.source_pages()
+    repos = {r["name"]: r for r in chat.repos() if r["exists"]}
+    out = {"ok": [], "broken": [], "unchecked": [], "uncited_lines": 0}
+    seen = set()
+    for m in CITE.finditer(text):
+        slug, loc = m.group(1).strip().split("/")[-1], re.sub(r"\s+", " ", m.group(2))
+        seen.add(m.group(1).strip())
+        if slug not in srcs:
+            (out["ok"] if slug in names else out["broken"]).append(f"[[{slug}]] {loc}" + ("" if slug in names else ": no such page"))
+            continue
+        tm = catalog.instance() / "raw" / srcs[slug] / "text.md"
+        segs = {l: t for l, t in segments(tm.read_text(encoding="utf-8"))} if tm.exists() else {}
+        (out["ok"] if _locator_ok(loc, segs) else out["broken"]).append(
+            f"[[{slug}]] {loc}" + ("" if _locator_ok(loc, segs) else f": {loc} not found in the source"))
+    for m in LINK.finditer(text):
+        name = m.group(1).strip()
+        if name in seen:
+            continue
+        seen.add(name)
+        slug = name.split("/")[-1]
+        (out["ok"] if slug in names else out["broken"]).append(f"[[{slug}]]" + ("" if slug in names else ": no such page"))
+    for m in CODE_CITE.finditer(text):
+        repo, path, line, commit = m.group(1), m.group(2), int(m.group(3)), m.group(5)
+        ref = m.group(0)
+        if repo not in repos:
+            out["broken"].append(f"{ref}: no configured repository named {repo!r} (see `kb repos`)"); continue
+        r = subprocess.run(["git", "-C", str(repos[repo]["path"]), "show", f"{commit}:{path}"], capture_output=True,
+                           text=True, encoding="utf-8", errors="replace")
+        if r.returncode:
+            out["broken"].append(f"{ref}: {path} does not exist at {commit}")
+        elif line > len(r.stdout.splitlines()):
+            out["broken"].append(f"{ref}: the file has only {len(r.stdout.splitlines())} lines at {commit}")
+        else:
+            out["ok"].append(ref)
+    out["unchecked"] = sorted(set(JIRA_CITE.findall(text)))
+    for line in text.splitlines():
+        body = line.strip().lstrip("-*0123456789. ")
+        if len(body) > 80 and not (LINK.search(body) or CODE_CITE.search(body) or JIRA_CITE.search(body)) \
+                and not body.upper().startswith("NOT FOUND") and not body.startswith(("#", "|", "```", ">")):
+            out["uncited_lines"] += 1
+    return out

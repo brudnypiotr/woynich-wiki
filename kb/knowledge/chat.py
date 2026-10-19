@@ -1,7 +1,8 @@
 """Conversation with the knowledge base: the model uses the wiki first and, when the question needs it, reads the
 configured code repositories, fetches Jira issues and looks at attached screenshots. Read-only.
 
-Used by `kb ask`, `kb code-ask`, `kb chat` and the Discuss tab of `kb serve`.
+`ask` is one session per question (`kb ask`, `kb code-ask`); `Conversation` keeps one session open for a whole
+discussion (`kb chat`, `kb serve`; ADR-0019), so follow-up questions build on what the model already read.
 
 Code repositories are configured in instance/config/profile.yaml:
     code_repos:
@@ -14,6 +15,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -98,31 +100,31 @@ def _context(history, topic, attachments, focus) -> str:
     else:
         lines.append("No code repositories are configured.")
     lines.append("JIRA: tools `jira_get` and `jira_search` are available (read-only)." if jira_config() else "JIRA: not configured.")
+    if topic:
+        lines.append(f"DISCUSSION TOPIC: {topic}")
+    if history:
+        lines.append("EARLIER IN THIS CONVERSATION:\n" + "\n".join(f"Q: {h['question']}\nA: {h.get('answer_text', '')[:1200]}" for h in history[-4:]))
+    return "\n".join(lines + _turn(attachments, focus))
+
+
+def _turn(attachments, focus, changed=()) -> list[str]:
+    """Context that belongs to one question (also sent with follow-ups in a long session)."""
+    lines = []
+    if changed:
+        lines.append("WIKI UPDATED since your last answer (a source was ingested). Changed pages: "
+                     + ", ".join(f"`{p}`" for p in sorted(changed)[:30]) + ". Re-read them before relying on what you remember.")
     if attachments:
         lines.append(f"ATTACHED: {len(attachments)} image(s) from the user (e.g. a screenshot of the application). Describe "
                      "what is shown and explain it using the wiki (screens, fields, rules, where to click).")
     if focus == "code":
         lines.append("FOCUS: this is a question about the code. Search the repositories (grep for identifiers, then read "
                      "the relevant files) and explain how it works, citing file and line.")
-    if topic:
-        lines.append(f"DISCUSSION TOPIC: {topic}")
-    if history:
-        lines.append("EARLIER IN THIS CONVERSATION:\n" + "\n".join(f"Q: {h['question']}\nA: {h.get('answer_text', '')[:1200]}" for h in history[-4:]))
-    return "\n".join(lines)
+    return lines
 
 
-def ask(question: str, runner=None, history=None, topic=None, attachments=(), focus: str = "wiki", save: bool = False,
-        progress=None) -> dict:
+def _finish(question, res, focus, attachments, t0, task: str) -> dict:
     inst = catalog.instance()
-    from kb.knowledge import wiki
-    wiki.ensure_skeleton()
-    rs = [r for r in repos() if r["exists"]]
-    task = agent.prompt("chat", question=question, context=_context(history, topic, attachments, focus))
-    t0 = time.perf_counter()
-    runner = runner or agent.AgentRunner()
-    res = runner.run(task, agent.model_for("query"), inst, write_dirs=(), progress=progress,
-                     read_roots=[r["path"] for r in rs], tools=jira_tools(), attachments=list(attachments))
-    agent.meter("agent_code" if focus == "code" else "agent_query", res)
+    agent.meter(task, res)
     reply = res.reply.strip()
     not_found = reply.upper().startswith("NOT FOUND")
     read = sorted({p for t in res.tools for p in t.get("paths", []) if t["ok"] and re.search(r"\.\w+$", p)})
@@ -132,7 +134,81 @@ def ask(question: str, runner=None, history=None, topic=None, attachments=(), fo
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("a", encoding="utf-8") as f:
         f.write(json.dumps({"at": catalog.now(), "question": question, "focus": focus, "not_found": not_found,
-                            "seconds": out["seconds"], "premium": res.premium, "attachments": len(attachments)}, ensure_ascii=False) + "\n")
-    if save and not not_found:
-        out["saved"] = str(wiki.save_answer(question, reply))
+                            "seconds": out["seconds"], "premium": res.premium, "attachments": len(attachments), "task": task},
+                           ensure_ascii=False) + "\n")
     return out
+
+
+def ask(question: str, runner=None, history=None, topic=None, attachments=(), focus: str = "wiki", save: bool = False,
+        progress=None) -> dict:
+    """One question, one agent session."""
+    inst = catalog.instance()
+    from kb.knowledge import wiki
+    wiki.ensure_skeleton()
+    rs = [r for r in repos() if r["exists"]]
+    task = agent.prompt("chat", question=question, context=_context(history, topic, attachments, focus))
+    t0 = time.perf_counter()
+    runner = runner or agent.AgentRunner()
+    res = runner.run(task, agent.model_for("query"), inst, write_dirs=(), progress=progress,
+                     read_roots=[r["path"] for r in rs], tools=jira_tools(), attachments=list(attachments))
+    out = _finish(question, res, focus, attachments, t0, "agent_code" if focus == "code" else "agent_query")
+    if save and not out["not_found"]:
+        out["saved"] = str(wiki.save_answer(question, out["answer_text"]))
+    return out
+
+
+class Conversation:
+    """A discussion with one agent session kept open across questions (ADR-0019).
+
+    The first question gets the full prompt; follow-ups only the question (plus attachments, focus and a note about
+    wiki pages changed by an ingest since the last answer). `resume` reopens a saved session id after a restart; if
+    that fails, the new session gets a summary of the earlier turns instead. One question at a time.
+    """
+
+    def __init__(self, topic: str | None = None, history=None, runner=None, resume: str | None = None):
+        self.topic, self.history, self.resume = topic, list(history or []), resume
+        self.runner = runner or agent.AgentRunner()
+        self.live = None
+        self.changed: set[str] = set()
+        self.lock = threading.Lock()
+        self.used = time.time()
+
+    @property
+    def session_id(self) -> str | None:
+        return getattr(self.live, "id", None) if self.live else self.resume
+
+    def wiki_changed(self, paths) -> None:
+        self.changed |= {str(p) for p in paths}
+
+    def ask(self, question: str, attachments=(), focus: str = "wiki", progress=None) -> dict:
+        from kb.knowledge import wiki
+        with self.lock:
+            self.used = time.time()
+            t0 = time.perf_counter()
+            inst = catalog.instance()
+            wiki.ensure_skeleton()
+            fresh = self.live is None
+            if fresh:
+                rs = [r for r in repos() if r["exists"]]
+                self.live = self.runner.open(agent.model_for("query"), inst, read_roots=[r["path"] for r in rs],
+                                             tools=jira_tools(), resume=self.resume)
+            if fresh and not getattr(self.live, "resumed", False):
+                task = agent.prompt("chat", question=question, context=_context(self.history, self.topic, attachments, focus))
+            else:
+                task = agent.prompt("chat-followup", question=question, context="\n".join(_turn(attachments, focus, self.changed)))
+            try:
+                res = self.live.send(task, list(attachments), progress=progress)
+            except Exception:
+                self.close()  # the next question starts a new session with the history
+                raise
+            self.changed = set()
+            out = _finish(question, res, focus, attachments, t0, "agent_discussion")
+            out["session"] = "new" if fresh and not getattr(self.live, "resumed", False) else ("resumed" if fresh else "continued")
+            self.history.append({"question": question, "answer_text": out["answer_text"]})
+            return out
+
+    def close(self) -> None:
+        live, self.live = self.live, None
+        if live:
+            self.resume = getattr(live, "id", None) or self.resume
+            live.close()

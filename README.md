@@ -31,8 +31,10 @@ Set the title in `instance\config\profile.yaml` (`instance: {title: "Orders Rule
 
 ### In GitHub Copilot CLI
 Start `copilot` in this folder. It reads `AGENTS.md` and offers the skills `/kb-add`, `/kb-ingest`, `/kb-ask`,
-`/kb-code`, `/kb-status`, `/kb-verify`. Ask normally ("what is the minimum rest at home base?"): Copilot runs
-`kb ask` and repeats the citations. Allow the shell tool for `kb.cmd` when asked.
+`/kb-code`, `/kb-status`, `/kb-verify`. Ask normally ("what is the minimum rest at home base?"): Copilot reads
+the wiki itself (`instance/wiki/hot.md` → `index.md` → pages), keeps that context for follow-up questions, cites the
+pages and checks its draft with `kb check-answer` before replying (ADR-0019). Allow `view`/`grep` on `instance/` and
+the shell tool for `kb.cmd` when asked. Ingest still runs only through `kb ingest` (sandboxed).
 
 ### Code questions, Jira and screenshots
 Describe your local repositories in `instance\config\profile.yaml` (the model may only read them):
