@@ -207,3 +207,14 @@ def test_sdk_noise_is_one_line(capsys):
     quiet_sdk_noise(loop, ctx); quiet_sdk_noise(loop, ctx)
     loop.close()
     assert capsys.readouterr().out.count("does not know") == 1
+
+
+def test_usage_estimate_adds_what_kb_used_since_the_reading(instance):
+    from kb.publish import settings
+    u = {"checked_at": "2026-10-19T12:00:00+00:00", "used": 808, "entitlement": 1900, "remaining_pct": 57.47,
+         "unlimited": False, "kb_month": 3.5}
+    met = instance / "catalog" / "metering.jsonl"
+    met.parent.mkdir(parents=True, exist_ok=True)
+    met.write_text('{"at": "2026-10-19T11:59:00+00:00", "credits": 5}\n{"at": "2026-10-19T12:01:00+00:00", "credits": 1.5}\n')
+    e = settings.usage_estimate(u)
+    assert (e["used"], e["since_check"], e["kb_month"]) == (809.5, 1.5, 5.0) and round(e["remaining_pct"], 1) == 57.4

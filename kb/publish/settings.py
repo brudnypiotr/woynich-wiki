@@ -324,6 +324,28 @@ def usage(gw, now=None) -> dict:
     return out
 
 
+def usage_estimate(u: dict) -> dict:
+    """The last GitHub reading plus the AI credits this knowledge base metered since then (no runtime started)."""
+    from datetime import datetime
+    if not u or not u.get("checked_at"):
+        return u
+    since, met = 0.0, config.paths().metering
+    checked = datetime.fromisoformat(u["checked_at"])
+    if met.exists():
+        for line in met.read_text(encoding="utf-8").splitlines():
+            try:
+                e = json.loads(line)
+                if (e.get("credits") or 0) and datetime.fromisoformat(e["at"]) > checked:
+                    since += e["credits"]
+            except (ValueError, KeyError, TypeError):
+                pass
+    out = {**u, "since_check": round(since, 2), "kb_month": round((u.get("kb_month") or 0) + since, 2)}
+    if since and out.get("used") is not None and out.get("entitlement") and not out.get("unlimited"):
+        out["used"] = round(out["used"] + since, 2)
+        out["remaining_pct"] = max(0.0, 100 - 100 * out["used"] / out["entitlement"])
+    return out
+
+
 def login() -> dict:
     """Start `copilot login` (GitHub device flow) in its own console window on Windows."""
     cli = shutil.which("copilot")

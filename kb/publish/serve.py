@@ -323,9 +323,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, settings.state())
         if url.path == "/api/usage":
             fresh = parse_qs(url.query).get("refresh")
-            if fresh or not USAGE["data"] or time.time() - USAGE["at"] > 600:
+            if fresh or not USAGE["data"] or time.time() - USAGE["at"] > 300:  # real reading from GitHub: every 5 min
                 USAGE.update(at=time.time(), data=settings.usage(self.gw))
-            return self._send(200, USAGE["data"])
+            return self._send(200, settings.usage_estimate(USAGE["data"]))  # + what kb used since then
         if url.path == "/api/settings/check":
             return self._send(200, settings.check(self.gw, (parse_qs(url.query).get("what") or ["all"])[0]))
         if url.path in ("/api/settings/models", "/api/settings/account"):
@@ -779,9 +779,9 @@ async function usage(refresh){const sub=$('#u-sub');if(refresh)sub.textContent='
     const f=$('#u-fill');f.style.width=(used==null?0:Math.min(100,Math.max(2,used)))+'%';f.className=used>=90?'bad':used>=70?'warn':'';
     sub.innerHTML=(u.entitlement!=null&&!u.unlimited?`${fmt(u.used)} of ${fmt(u.entitlement)} used<br>`:'')+when
       +`<br>this knowledge base: ${fmt(u.kb_month)} this month`+(u.error&&u.entitlement==null?`<br><span title="${esc(u.error)}">quota not available from GitHub</span>`:'');
-    $('#usage').title=`${u.plan?('Plan: '+u.plan+'. '):''}Organisation plans pool AI credits across users; the figure is what GitHub reports for your account. Checked ${new Date(u.checked_at).toLocaleTimeString()}. Click to refresh.`}
+    $('#usage').title=`${u.plan?('Plan: '+u.plan+'. '):''}Read from GitHub at ${new Date(u.checked_at).toLocaleTimeString()}${u.since_check?`, plus ${fmt(u.since_check)} used by this knowledge base since then`:''}; GitHub is asked again every 5 minutes (usage in your IDE or CLI shows up then). Click to read it now.`}
   catch(e){sub.textContent='usage not available'}}
-$('#usage').onclick=()=>usage(true);usage();setInterval(()=>usage(),600000);
+$('#usage').onclick=()=>usage(true);usage();setInterval(()=>usage(),60000);
 async function loadSessions(){const l=await api('/api/sessions').catch(()=>[]);
   $('#sl').innerHTML=l.length?l.map(s=>`<a data-id="${s.id}" title="${esc(s.topic)} · ${s.turns} questions"><span>${esc(s.topic)}</span><button class="del" data-del="${s.id}" title="Delete discussion">×</button></a>`).join(''):'<div class="none">No discussions yet.</div>';mark()}
 async function delSession(id){if(!confirm('Delete this discussion? Wiki pages saved from it stay.'))return;
