@@ -45,7 +45,7 @@ def test_upload_steps_then_discussion(app):
     job = call(base, token, "/api/upload", SAMPLE.read_bytes(), {"X-Filename": SAMPLE.name})
     for _ in range(1200):  # up to 2 min: Windows with antivirus is slow
         job = call(base, token, f"/api/jobs/{job['id']}")
-        if job["state"] != "running":
+        if job["state"] not in ("queued", "running"):
             break
         time.sleep(0.1)
     assert job["state"] == "done", job
@@ -67,7 +67,7 @@ def test_upload_steps_then_discussion(app):
     other = next(p for p in sorted(SAMPLE.parent.iterdir()) if p != SAMPLE)
     job = call(base, token, "/api/upload", other.read_bytes(), {"X-Filename": other.name})
     for _ in range(1200):  # up to 2 min: Windows with antivirus is slow
-        if call(base, token, f"/api/jobs/{job['id']}")["state"] != "running":
+        if call(base, token, f"/api/jobs/{job['id']}")["state"] not in ("queued", "running"):
             break
         time.sleep(0.1)
     call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest now?"}).encode())
@@ -172,3 +172,38 @@ def test_usage_ai_credits_and_cycle(instance):
     assert (u["unit"], u["used"], u["entitlement"], u["plan"]) == ("AI credits", 808, 1900, "business")
     assert (u["days_left"], u["business_days_left"], u["kb_month"]) == (13, 10, 3.5)   # only this month counts
     assert u["reset"].startswith("2026-11-01")
+
+
+def test_uploads_queue_one_by_one_and_can_leave_the_queue(app):
+    base, token = app
+    serve.WRITE_LOCK.acquire()            # pretend another ingest is running
+    serve.QUEUE.insert(0, "busy")
+    try:
+        a = call(base, token, "/api/upload", b"first file text\n", {"X-Filename": "a.txt"})
+        b = call(base, token, "/api/upload", b"second file text\n", {"X-Filename": "b.txt"})
+        assert (a["state"], a["ahead"], b["ahead"]) == ("queued", 1, 2)
+        assert call(base, token, "/api/status")["queued"] == 2
+        call(base, token, f"/api/jobs/{b['id']}/cancel", b"{}")
+        for _ in range(50):
+            if call(base, token, f"/api/jobs/{b['id']}")["state"] == "cancelled":
+                break
+            time.sleep(0.1)
+        assert call(base, token, f"/api/jobs/{b['id']}")["state"] == "cancelled"
+    finally:
+        serve.WRITE_LOCK.release()
+        serve._done_turn({"id": "busy"})
+    for _ in range(600):
+        if call(base, token, f"/api/jobs/{a['id']}")["state"] not in ("queued", "running"):
+            break
+        time.sleep(0.1)
+    assert call(base, token, f"/api/jobs/{a['id']}")["state"] == "done"
+
+
+def test_sdk_noise_is_one_line(capsys):
+    import asyncio
+    from kb.llm.adapters import quiet_sdk_noise
+    loop = asyncio.new_event_loop()
+    ctx = {"exception": ValueError("'destroy' is not a valid ShutdownType"), "handle": "<Handle CopilotClient.handle_notification>"}
+    quiet_sdk_noise(loop, ctx); quiet_sdk_noise(loop, ctx)
+    loop.close()
+    assert capsys.readouterr().out.count("does not know") == 1

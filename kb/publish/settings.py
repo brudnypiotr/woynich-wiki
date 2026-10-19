@@ -69,6 +69,14 @@ def secrets_state() -> dict:
         return {"items": [{**s, "set": None} for s in _secret_names()], "error": f"{type(e).__name__}: {e}"[:300]}
 
 
+def effective_model() -> str:
+    """The model in use, cheaply (the status bar asks every few seconds)."""
+    m = config.load("models")
+    tiers = m.get("tiers") or {}
+    q = (m.get("tasks") or {}).get("query", "standard")
+    return os.environ.get("KB_MODEL") or m.get("model_override") or str((tiers.get(q) or {}).get("model") or "auto")
+
+
 def state() -> dict:
     m, prof = config.load("models"), config.load("profile")
     env = os.environ.get("KB_MODEL")

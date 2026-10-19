@@ -19,6 +19,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import socket
 import tempfile
 import threading
@@ -148,7 +149,42 @@ def _job_step(job: dict, step: str, detail: str = "") -> None:
     job["log"].append({"at": time.strftime("%H:%M:%S"), "step": step, "detail": detail})
 
 
+QUEUE: list[str] = []  # job ids in upload order; the first one is being ingested (one at a time)
+QCOND = threading.Condition()
+
+
+def _wait_turn(job: dict) -> bool:
+    with QCOND:
+        while QUEUE and QUEUE[0] != job["id"]:
+            if job.get("cancel"):
+                QUEUE.remove(job["id"]); QCOND.notify_all()
+                return False
+            QCOND.wait(1)
+    return True
+
+
+def _done_turn(job: dict) -> None:
+    with QCOND:
+        if job["id"] in QUEUE:
+            QUEUE.remove(job["id"])
+        QCOND.notify_all()
+
+
 def run_ingest_job(job: dict, path: Path, gw: Gateway) -> None:
+    """Wait for this file's turn (uploads are ingested one by one, in order), then ingest it."""
+    if not _wait_turn(job):
+        job["state"] = "cancelled"
+        job["log"].append({"at": time.strftime("%H:%M:%S"), "step": "cancelled", "detail": "removed from the queue before it started"})
+        shutil.rmtree(path.parent, ignore_errors=True)
+        return
+    job["state"] = "running"
+    try:
+        _ingest_job(job, path, gw)
+    finally:
+        _done_turn(job)
+
+
+def _ingest_job(job: dict, path: Path, gw: Gateway) -> None:
     try:
         with WRITE_LOCK:
             _job_step(job, "saved", path.name)
@@ -195,6 +231,12 @@ def run_ingest_job(job: dict, path: Path, gw: Gateway) -> None:
         job["state"] = "error"
         job["error"] = f"{type(e).__name__}: {e}"[:500]
         job["log"].append({"at": time.strftime("%H:%M:%S"), "step": "error", "detail": traceback.format_exc()[-1500:]})
+
+
+def _job_view(job: dict) -> dict:
+    with QCOND:
+        ahead = QUEUE.index(job["id"]) if job["state"] == "queued" and job["id"] in QUEUE else None
+    return {**job, "ahead": ahead}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -256,9 +298,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, page, "text/html; charset=utf-8")
         if url.path.startswith("/api/jobs/"):
             job = JOBS.get(url.path.rsplit("/", 1)[-1])
-            return self._send(200, job) if job else self._send(404, {"error": "no such job"})
-        if url.path == "/api/jobs":
-            return self._send(200, sorted(JOBS.values(), key=lambda j: j["started"], reverse=True)[:20])
+            return self._send(200, _job_view(job)) if job else self._send(404, {"error": "no such job"})
+        if url.path == "/api/jobs":  # everything waiting or running, plus the 30 most recent finished
+            js = sorted(JOBS.values(), key=lambda j: j["seq"], reverse=True)
+            live = [j for j in js if j["state"] in ("queued", "running")]
+            return self._send(200, [_job_view(j) for j in live + [j for j in js if j not in live][:30]])
         if url.path == "/api/sessions":
             items = []
             for f in sorted(_sessions_dir().glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:30]:
@@ -292,7 +336,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/status":
             srcs = catalog.all_sources()
             return self._send(200, {"sources": len(srcs), "pages": sum(1 for _ in pages.wiki().rglob("*.md")) if pages.wiki().exists() else 0, "busy": WRITE_LOCK.locked(),
-                                    "model": settings.state()["model"]["effective"]})
+                                    "queued": max(0, len(QUEUE) - 1), "model": settings.effective_model()})
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -325,7 +369,7 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/api/jobs/([0-9a-f]{12})/cancel", url.path)
             if m:
                 job = JOBS.get(m.group(1))
-                if not job or job["state"] != "running":
+                if not job or job["state"] not in ("queued", "running"):
                     return self._send(409, {"error": "job is not running"})
                 job["cancel"] = True
                 job["remove_on_cancel"] = bool(self._json_body().get("remove"))
@@ -376,11 +420,13 @@ class Handler(BaseHTTPRequestHandler):
                 if not chunk:
                     break
                 f.write(chunk); left -= len(chunk)
-        job = {"id": uuid.uuid4().hex[:12], "filename": name, "bytes": n, "state": "running", "step": "queued",
-               "started": catalog.now(), "log": [], "steps": STEPS}
+        job = {"id": uuid.uuid4().hex[:12], "filename": name, "bytes": n, "state": "queued", "step": "queued",
+               "started": catalog.now(), "seq": len(JOBS), "log": [], "steps": STEPS}
         JOBS[job["id"]] = job
+        with QCOND:
+            QUEUE.append(job["id"])
         threading.Thread(target=run_ingest_job, args=(job, tmp, self.gw), daemon=True).start()
-        return self._send(200, job)
+        return self._send(200, _job_view(job))
 
     def _ask(self, s: dict):
         import base64
@@ -635,7 +681,7 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
 .job .hd .fi{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--vio-soft);color:var(--vio)}
 .job .hd .nm{flex:1;min-width:0}.job .hd .nm b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.job .hd .nm small{color:var(--mute)}
 .badge{font-size:12px;font-weight:700;padding:2px 10px;border-radius:999px;background:var(--vio-soft);color:var(--vio)}
-.badge.done{background:var(--ok-soft);color:var(--ok)}.badge.error,.badge.cancelled{background:var(--bad-soft);color:var(--bad)}
+.badge.done{background:var(--ok-soft);color:var(--ok)}.badge.queued{background:var(--soft);color:var(--mute)}.badge.error,.badge.cancelled{background:var(--bad-soft);color:var(--bad)}
 .stepper{display:flex;list-style:none;padding:0;margin:16px 0 8px}
 .stepper li{flex:1;position:relative;text-align:center;font-size:11.5px;font-weight:600;color:var(--mute);padding-top:20px}
 .stepper li::before{content:"";position:absolute;top:5px;left:50%;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:var(--line);z-index:1}
@@ -720,7 +766,7 @@ const topbar=(title,acts='')=>`<div class="top"><button class="icon menu" onclic
 let S=null,BUSY=false,STEPS=['saved','extracted','writing','checking','verify','done'];
 const STEP_LABEL={saved:'Saved',extracted:'Text extracted',writing:'Writing wiki',checking:'Checking',verify:'Citations verified',done:'Done'};
 
-async function status(){try{const s=await api('/api/status');$('#st').textContent=`${s.sources} sources · ${s.pages} pages · ${s.model}${s.busy?' · working…':''}`;
+async function status(){try{const s=await api('/api/status');$('#st').textContent=`${s.sources} sources · ${s.pages} pages · ${s.model}${s.busy?' · working…':''}${s.queued?` · ${s.queued} queued`:''}`;
   $('#dot').classList.toggle('busy',s.busy)}catch(e){$('#st').textContent='not connected';$('#dot').classList.add('busy')}}
 setInterval(status,5000);status();
 const fmt=n=>n==null?'?':Number(n).toLocaleString(undefined,{maximumFractionDigits:n<100?1:0});
@@ -958,14 +1004,14 @@ function showJob(j){const box=$('#jobs');if(!box)return;box.querySelector('.empt
     atEnd=pre?pre.scrollTop+pre.clientHeight>=pre.scrollHeight-4:false;if(j.steps)STEPS=j.steps;const at=STEPS.indexOf(j.step),bad=j.state==='error'||j.state==='cancelled';
   const last=(j.log||[]).slice(-1)[0];
   el.innerHTML=`<div class="hd"><span class="fi">${ic(I.file)}</span><div class="nm"><b>${esc(j.filename)}</b><small>${j.bytes?(j.bytes>1e6?(j.bytes/1e6).toFixed(1)+' MB':Math.max(1,Math.round(j.bytes/1024))+' KB'):''}</small></div>
-    <span class="badge ${j.state}">${{running:'Working…',done:'Done',error:'Failed',cancelled:'Cancelled'}[j.state]||esc(j.state)}</span></div>
+    <span class="badge ${j.state}">${j.state==='queued'?(j.ahead?`Queued · ${j.ahead} ahead`:'Starting…'):({running:'Working…',done:'Done',error:'Failed',cancelled:'Cancelled'}[j.state]||esc(j.state))}</span></div>
    <ol class="stepper">${STEPS.map((s,i)=>`<li class="${bad&&i===Math.max(at,0)?'err':(i<at||j.state==='done'?'done':(i===at?'now':''))}">${STEP_LABEL[s]||s}</li>`).join('')}</ol>
-   ${j.error?`<p class="det err">${esc(j.error)}</p>`:(last?`<p class="det">${esc(last.detail)}</p>`:'')}
-   <div class="acts">${j.state==='running'?`<button class="ghost" onclick="cancelJob('${j.id}',false)">Cancel</button><button class="ghost" onclick="cancelJob('${j.id}',true)">Cancel and remove file</button>`:
+   ${j.error?`<p class="det err">${esc(j.error)}</p>`:(j.state==='queued'?`<p class="det">Waiting: files are ingested one by one (the model reads each one and updates the wiki).${j.ahead?` ${j.ahead} before this one.`:''}</p>`:(last?`<p class="det">${esc(last.detail)}</p>`:''))}
+   <div class="acts">${j.state==='queued'?`<button class="ghost" onclick="cancelJob('${j.id}',false)">Remove from queue</button>`:j.state==='running'?`<button class="ghost" onclick="cancelJob('${j.id}',false)">Cancel</button><button class="ghost" onclick="cancelJob('${j.id}',true)">Cancel and remove file</button>`:
      (j.source_id&&!j.removed?`<button class="ghost" onclick="removeSrc('${j.id}','${j.source_id}')">Remove from knowledge base</button>`:(j.removed?'<span class="empty">removed</span>':''))}</div>
    ${(j.log||[]).length?`<details${open?' open':''}><summary>Details</summary><pre>${(j.log||[]).map(l=>`${l.at} ${l.step}: ${esc(l.detail)}`).join('\n')}</pre></details>`:''}`;
   const np=el.querySelector('pre');if(np&&pre)np.scrollTop=atEnd?np.scrollHeight:top;  // keep the reader's place in the log
-  if(j.state==='running')setTimeout(()=>{if(document.getElementById('job-'+j.id))api('/api/jobs/'+j.id).then(showJob).catch(()=>{})},1500)}
+  if(j.state==='running'||j.state==='queued')setTimeout(()=>{if(document.getElementById('job-'+j.id))api('/api/jobs/'+j.id).then(showJob).catch(()=>{})},j.state==='queued'?4000:1500)}
 window.cancelJob=async(id,rm)=>{if(rm&&!confirm('Stop and delete this file from the knowledge base?'))return;
   await api('/api/jobs/'+id+'/cancel',{method:'POST',body:JSON.stringify({remove:rm})}).catch(e=>alert(e.message))};
 window.removeSrc=async(jid,sid)=>{if(!confirm('Delete this source and its pages from the knowledge base? (one commit, can be undone with Git)'))return;

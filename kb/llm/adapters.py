@@ -14,6 +14,30 @@ from kb.core.ports import LLM, LLMResult
 CLI_MAX_PROMPT_CHARS = 28000
 
 
+_NOTED: set[str] = set()
+
+
+def _run(coro):
+    async def main():
+        asyncio.get_running_loop().set_exception_handler(quiet_sdk_noise)
+        return await coro
+    return asyncio.run(main())
+
+
+def quiet_sdk_noise(loop, ctx) -> None:
+    """Asyncio exception handler for Copilot SDK sessions. A runtime newer than the SDK sends events the SDK cannot
+    parse (e.g. shutdown type 'destroy'); the SDK drops such an event inside a callback and the work continues.
+    Print one short line per kind instead of a traceback each time."""
+    exc = ctx.get("exception")
+    if exc is not None and "handle_notification" in str(ctx.get("handle", "")) and isinstance(exc, (AssertionError, ValueError, KeyError, TypeError)):
+        kind = f"{type(exc).__name__}: {exc}"[:120]
+        if kind not in _NOTED:
+            _NOTED.add(kind)
+            print(f"note: the Copilot runtime sent an event this SDK version does not know ({kind}); ignored", flush=True)
+        return
+    loop.default_exception_handler(ctx)
+
+
 class FakeAdapter(LLM):
     """Deterministic adapter for tests: returns a canned reply or echoes a JSON wrapper of the prompt."""
     name = "fake"
@@ -143,7 +167,7 @@ class CopilotSDKAdapter(LLM):
                 await client.stop()
 
     def complete(self, prompt, model, attachments=None, response_schema=None):
-        return asyncio.run(self._run(prompt, model, attachments, response_schema))
+        return _run(self._run(prompt, model, attachments, response_schema))
 
     def quota(self) -> dict:
         """Remaining Copilot entitlement of the signed-in user (premium requests, chat, completions)."""
@@ -159,7 +183,7 @@ class CopilotSDKAdapter(LLM):
                         for k, v in (res.quota_snapshots or {}).items()}
             finally:
                 await client.stop()
-        return asyncio.run(go())
+        return _run(go())
 
     def usage_quota(self) -> dict:
         """Billing state from the runtime: plan, token-based billing (AI credits) and quota snapshots in their own
@@ -189,7 +213,7 @@ class CopilotSDKAdapter(LLM):
                     return {"tbb": q.is_tbb_user, "plan": str(getattr(q.plan_tier, "value", q.plan_tier)), "snapshots": snaps}
                 finally:
                     await client.stop()
-        return asyncio.run(go())
+        return _run(go())
 
     def auth_status(self):
         async def go():
@@ -200,7 +224,7 @@ class CopilotSDKAdapter(LLM):
                 return await client.get_auth_status()
             finally:
                 await client.stop()
-        return asyncio.run(go())
+        return _run(go())
 
     def list_models(self) -> list[dict]:
         async def go():
@@ -212,7 +236,7 @@ class CopilotSDKAdapter(LLM):
                 return [{"id": m.id, "name": m.name, "policy": getattr(getattr(m, "policy", None), "state", None)} for m in models]
             finally:
                 await client.stop()
-        return asyncio.run(go())
+        return _run(go())
 
 
 def _reject_permission(request, invocation):

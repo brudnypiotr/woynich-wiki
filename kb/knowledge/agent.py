@@ -151,10 +151,9 @@ class AgentResult:
     credits: float | None = None   # GitHub AI credits (usage-based billing); total_nano_aiu / 1e9
 
 
-def _quiet(lp, ctx):  # SDK 1.0.22 cannot parse the echo of a user message with attachments; harmless
-    if isinstance(ctx.get("exception"), AssertionError) and "handle_notification" in str(ctx.get("handle", "")):
-        return
-    lp.default_exception_handler(ctx)
+def _quiet(lp, ctx):  # events the SDK cannot parse (attachment echo, newer runtime's shutdown types): harmless
+    from kb.llm.adapters import quiet_sdk_noise
+    quiet_sdk_noise(lp, ctx)
 
 
 def _session_kwargs(box: Sandbox, model: str, root: Path, tools, streaming: bool = False) -> dict:
