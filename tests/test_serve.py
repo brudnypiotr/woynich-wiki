@@ -53,6 +53,10 @@ def test_upload_steps_then_discussion(app):
     s = call(base, token, "/api/sessions", json.dumps({"topic": "Minimum rest"}).encode())
     t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest home base"}).encode())
     assert not t["not_found"] and "[[" in t["markdown"] and t["session"] == "new"
+    assert t["check"]["ok"] >= 1 and not t["check"]["broken"]                    # citations checked on the server
+    assert [e["kind"] for e in t["trace"]][:2] == ["thinking", "read"]             # what the model did
+    pr = call(base, token, f"/api/sessions/{s['id']}/progress")
+    assert pr["running"] is False and pr["total"] == len(t["trace"])
     t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest again"}).encode())
     runner = serve.Handler.runner
     assert t["session"] == "continued" and runner.opened == ["live-1"]  # one long session (ADR-0019)

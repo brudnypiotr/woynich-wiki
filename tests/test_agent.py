@@ -136,7 +136,8 @@ def test_conversation_keeps_one_session_and_hears_about_changes(instance):
     a1 = conv.ask("minimum rest before duty")
     a2 = conv.ask("and at home base minimum rest?")
     assert sa.opened == ["live-1"] and (a1["session"], a2["session"]) == ("new", "continued")
-    assert "# How to work" in sa.prompts[-2] and "DISCUSSION TOPIC: Rest" in sa.prompts[-2]
+    assert a1["check"]["ok"] and not a1["check"]["broken"]
+    assert "# How to work" in sa.prompts[-2] and "DISCUSSION TOPIC: Rest" in sa.prompts[-2] and "wiki/hot.md" in sa.prompts[-2]
     assert "# How to work" not in sa.prompts[-1] and "QUESTION: and at home base" in sa.prompts[-1]
     conv.wiki_changed(["wiki/concepts/minimum-rest.md"])
     conv.ask("minimum rest again")

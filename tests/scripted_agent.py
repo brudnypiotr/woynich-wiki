@@ -38,6 +38,8 @@ class ScriptedAgent:
         root = Path(root); w = root / "wiki"; tools = []
         say = progress or (lambda *_: None)
         if "QUESTION:" in task:
+            say("thinking", "Start with hot.md and the index.")
+            say("reading", "view wiki/index.md")
             q = task.split("QUESTION:", 1)[1].split("\n", 1)[0].lower()
             if "FOCUS: this is a question about the code" in task and read_roots:
                 hits = [(f, i) for r in read_roots for f in Path(r).rglob("*.py")

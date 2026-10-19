@@ -39,6 +39,22 @@ JOBS: dict[str, dict] = {}
 LIVE: dict[str, chat.Conversation] = {}  # discussion id -> open agent session
 LIVE_LOCK = threading.Lock()
 IDLE_S = 1800
+TRACE: dict[str, dict] = {}  # discussion id -> what the model is doing for the current question (live view)
+
+
+def _tracer(sid: str):
+    TRACE[sid] = {"running": True, "events": []}
+    t0 = time.time()
+
+    def say(step: str, detail: str = "") -> None:
+        ev = TRACE[sid]["events"]
+        kind = {"reading": "read", "writing": "write"}.get(step, step)
+        text = str(detail or "")[:1500]
+        if ev and ev[-1]["kind"] == kind == "thinking" and ev[-1]["text"] == text:
+            return
+        if len(ev) < 80:
+            ev.append({"s": round(time.time() - t0, 1), "kind": kind, "text": text})
+    return say
 
 
 def _conversation(s: dict) -> chat.Conversation:
@@ -208,6 +224,11 @@ class Handler(BaseHTTPRequestHandler):
                 s = json.loads(f.read_text(encoding="utf-8"))
                 items.append({"id": s["id"], "topic": s["topic"], "turns": len(s["turns"]), "updated": s.get("updated")})
             return self._send(200, items)
+        m = re.fullmatch(r"/api/sessions/([0-9a-f]{12})/progress", url.path)
+        if m:
+            t = TRACE.get(m.group(1)) or {"running": False, "events": []}
+            since = int((parse_qs(url.query).get("since") or ["0"])[0] or 0)
+            return self._send(200, {"running": t["running"], "events": t["events"][since:], "total": len(t["events"])})
         if url.path.startswith("/api/sessions/"):
             try:
                 return self._send(200, _load_session(url.path.rsplit("/", 1)[-1]))
@@ -320,10 +341,17 @@ class Handler(BaseHTTPRequestHandler):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_bytes(data); att.append(p)
         conv = _conversation(s)
-        r = conv.ask(q, attachments=att, focus="code" if body.get("focus") == "code" else "wiki")
+        say = _tracer(s["id"])
+        try:
+            r = conv.ask(q, attachments=att, focus="code" if body.get("focus") == "code" else "wiki", progress=say)
+        finally:
+            TRACE[s["id"]]["running"] = False
+        c = r.get("check") or {}
         turn = {"question": q, "at": catalog.now(), "not_found": r["not_found"], "seconds": r["seconds"],
                 "answer_text": r["answer_text"], "markdown": r["answer_text"], "pages_read": r["pages_read"],
-                "tools_used": r["tools_used"], "premium": r["premium"], "images": [p.name for p in att], "session": r["session"]}
+                "tools_used": r["tools_used"], "premium": r["premium"], "images": [p.name for p in att], "session": r["session"],
+                "check": {"ok": len(c.get("ok", [])), "broken": c.get("broken", []), "unchecked": c.get("unchecked", [])},
+                "trace": TRACE[s["id"]]["events"]}
         s = _load_session(s["id"])  # re-read: the question may have taken minutes
         s["turns"].append(turn); s["updated"] = catalog.now(); s["agent_session"] = conv.session_id
         _save_session(s)
@@ -463,6 +491,16 @@ a.wl:hover{background:var(--vio);color:#fff}
 .typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
 @keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes pulse{50%{opacity:.4}}
 .err{color:var(--bad)}
+.trace{margin:0 0 10px;font-size:13px;color:var(--mute)}
+.trace summary{cursor:pointer;list-style:none;display:inline-flex;gap:6px;align-items:center;padding:3px 11px;border-radius:999px;background:var(--soft);border:1px solid var(--line);font-weight:600}
+.trace summary::-webkit-details-marker{display:none}.trace summary:hover{color:var(--ink2)}
+.trace ol{list-style:none;margin:8px 0 2px 6px;padding:0 0 0 14px;border-left:2px solid var(--line)}
+.trace li{margin:5px 0;display:flex;gap:8px;align-items:baseline}.trace li>b{flex:none;width:16px;text-align:center;font-weight:400}
+.trace li i{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;cursor:pointer}
+.trace li i.full{-webkit-line-clamp:unset}
+.trace code{font:12px ui-monospace,Consolas,monospace;color:var(--ink2)}
+.trace small{margin-left:auto;padding-left:8px;opacity:.7;font-size:11px;flex:none}
+.okc{color:var(--ok)}.badc{color:var(--bad);cursor:pointer}
 
 /* composer */
 .cwrap{flex:none;padding:6px 24px 14px}
@@ -710,10 +748,21 @@ let IM=[];
 function addImgs(fs){for(const f of fs){if(!f.type.startsWith('image/'))continue;const r=new FileReader();r.onload=()=>{IM.push({name:f.name||'screenshot.png',data:r.result});showImgs()};r.readAsDataURL(f)}}
 function showImgs(){const el=$('#imgs');if(!el)return;el.innerHTML=IM.map((x,k)=>`<span><img src="${x.data}" alt="">${esc(x.name)}<b onclick="IM.splice(${k},1);showImgs()" title="Remove">×</b></span>`).join('')}
 function userMsg(q,imgs){return `<div class="msg user"><div class="bubble">${esc(q)}</div>${imgs&&imgs.length?`<div class="att">📎 ${imgs.map(esc).join(', ')}</div>`:''}</div>`}
+function stepHtml(e){const t=String(e.text||'');
+  if(e.kind==='thinking')return `<li><b>💭</b><i onclick="this.classList.toggle('full')">${esc(t)}</i><small>${e.s}s</small></li>`;
+  if(e.kind==='intent')return `<li><b>→</b><span>${esc(t)}</span><small>${e.s}s</small></li>`;
+  const m=t.match(/^(\S+)\s*(.*)$/)||[,t,''],tool=m[1],arg=m[2];
+  const verb={view:'Read',glob:'Find',grep:'Search',rg:'Search'}[tool]||tool;
+  return `<li><b>${verb==='Read'?'📄':'🔎'}</b><span>${esc(verb)} <code>${esc(arg.replace(/^.*?[\\/]instance[\\/]/,'').replace(/\\/g,'/'))}</code></span><small>${e.s}s</small></li>`}
+function traceHtml(ev,open,label){if(!ev||!ev.length)return '';const th=ev.filter(e=>e.kind==='thinking').length,rd=ev.length-th;
+  return `<details class="trace"${open?' open':''}><summary>${label||`Thought${th>1?' '+th+'×':''} and read ${rd} item${rd===1?'':'s'}`} ▾</summary><ol>${ev.map(stepHtml).join('')}</ol></details>`}
+function checkHtml(c){if(!c)return '';const b=c.broken||[];
+  if(b.length)return `<span class="badc" title="${esc(b.join('\n'))}" onclick="alert(this.title)">⚠ ${b.length} citation${b.length>1?'s':''} not found</span>`;
+  return c.ok?`<span class="okc" title="Every link and page/time reference was found in the wiki and its sources">✓ ${c.ok} citation${c.ok>1?'s':''} checked</span>`:''}
 function botMsg(t){const md=t.markdown||(t.sentences||[]).map(s=>s.text).join(' ');
   const pr=t.pages_read||[],meta=[t.session==='continued'?'same session':t.session==='resumed'?'session resumed':'',t.seconds?`${t.seconds} s`:'',t.tools_used&&t.tools_used.length?`tools: ${t.tools_used.map(esc).join(', ')}`:''].filter(Boolean);
-  return `<div class="msg bot">${MARK}<div class="body"><div class="md ${t.not_found?'nf':''}">${t.not_found&&!md.trim()?'<p>No answer found in the knowledge base. Try other words, or add a source that covers it.</p>':mdl(md)}</div>
-   <div class="meta">${meta.map(x=>`<span>${x}</span>`).join('')}${pr.length?`<details><summary>${pr.length} page${pr.length>1?'s':''} read ▾</summary><div>${pr.map(p=>`<a class="wl" href="#wiki/w:${encodeURIComponent(String(p).replace(/^.*\//,'').replace(/\.md$/,''))}">${esc(String(p).replace(/^.*\//,'').replace(/\.md$/,''))}</a>`).join(' ')}</div></details>`:''}</div></div></div>`}
+  return `<div class="msg bot">${MARK}<div class="body">${traceHtml(t.trace,false)}<div class="md ${t.not_found?'nf':''}">${t.not_found&&!md.trim()?'<p>No answer found in the knowledge base. Try other words, or add a source that covers it.</p>':mdl(md)}</div>
+   <div class="meta">${checkHtml(t.check)}${meta.map(x=>`<span>${x}</span>`).join('')}${pr.length?`<details><summary>${pr.length} page${pr.length>1?'s':''} read ▾</summary><div>${pr.map(p=>`<a class="wl" href="#wiki/w:${encodeURIComponent(String(p).replace(/^.*\//,'').replace(/\.md$/,''))}">${esc(String(p).replace(/^.*\//,'').replace(/\.md$/,''))}</a>`).join(' ')}</div></details>`:''}</div></div></div>`}
 const scrollEnd=()=>{const s=$('#scroll');if(s)s.scrollTop=s.scrollHeight};
 function renderTurns(){const el=$('#turns');
   if(!S||!S.turns.length){el.className='hero';el.innerHTML=`${MARK}<h2>${S?esc(S.topic):'What would you like to know?'}</h2>
@@ -724,13 +773,22 @@ function renderTurns(){const el=$('#turns');
 async function go(){const q=$('#q').value.trim();if(!q||BUSY)return;BUSY=true;$('#ask').disabled=true;
   const code=$('#code').getAttribute('aria-pressed')==='true',imgs=IM;IM=[];showImgs();$('#q').value='';$('#q').oninput();$('#ask').disabled=true;
   const el=$('#turns');if(el.className==='hero'){el.className='col';el.innerHTML=''}
-  el.insertAdjacentHTML('beforeend',userMsg(q,imgs.map(x=>x.name))+`<div class="msg bot" id="pending">${MARK}<div class="body"><div class="typing"><i></i><i></i><i></i> Reading the wiki${code?' and the code':''}…</div></div></div>`);scrollEnd();
+  el.insertAdjacentHTML('beforeend',userMsg(q,imgs.map(x=>x.name))+`<div class="msg bot" id="pending">${MARK}<div class="body"><div class="typing"><i></i><i></i><i></i> <span id="pnow">Reading the wiki${code?' and the code':''}…</span></div><div id="ptrace"></div></div></div>`);scrollEnd();
+  let live=true,started=false,since=0,EV=[];
+  const tick=async()=>{if(!live||!S)return setTimeout(()=>live&&tick(),700);
+    try{const r=await api(`/api/sessions/${S.id}/progress?since=${started?since:0}`);
+      if(r.running&&!started){started=true;EV=[]}
+      if(started&&r.events.length){EV=EV.concat(r.events);since=r.total;const pt=$('#ptrace');
+        if(pt){pt.innerHTML=traceHtml(EV,true,'Working… '+EV.length+' step'+(EV.length>1?'s':''));const l=EV[EV.length-1];
+          $('#pnow').textContent=l.kind==='thinking'?'Thinking…':l.kind==='intent'?l.text:'Reading '+String(l.text).replace(/^\S+\s*/,'').replace(/^.*[\\/]/,'')+'…';scrollEnd()}}}
+    catch(e){}if(live)setTimeout(tick,800)};
+  tick();
   try{if(!S){S=await api('/api/sessions',{method:'POST',body:JSON.stringify({topic:q.replace(/\s+/g,' ').slice(0,80)})});
       history.replaceState(null,'','#s='+S.id);$('.top .ttl').textContent=S.topic;loadSessions()}
     const t=await api('/api/sessions/'+S.id+'/ask',{method:'POST',body:JSON.stringify({question:q,images:imgs,focus:code?'code':'wiki'})});
     S.turns.push(t);if(!$('#save'))V.chat(S);else renderTurns();loadSessions()}
   catch(e){const p=$('#pending');if(p)p.querySelector('.body').innerHTML=`<p class="err">${esc(e.message)}</p>`;if($('#q')&&!$('#q').value){$('#q').value=q;$('#q').oninput()}}
-  finally{BUSY=false;if($('#q')){$('#q').oninput();$('#q').focus()}}}
+  finally{live=false;BUSY=false;if($('#q')){$('#q').oninput();$('#q').focus()}}}
 
 // ---------------------------------------------------------------- uploads
 async function upload(files){for(const file of files){const j=await api('/api/upload',{method:'POST',headers:{'X-Filename':encodeURIComponent(file.name)},body:file})

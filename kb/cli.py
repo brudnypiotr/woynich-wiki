@@ -79,6 +79,13 @@ def cmd_ingest(a) -> int:
     return 0
 
 
+def _check_line(res: dict) -> str:
+    c = res.get("check") or {}
+    if not c.get("ok") and not c.get("broken"):
+        return ""
+    return (f"\n  citations checked: {len(c['ok'])} ok" + (f", {len(c['broken'])} BROKEN: " + "; ".join(c["broken"][:5]) if c["broken"] else ""))
+
+
 def _answer(a, focus: str) -> int:
     from kb.knowledge import chat
     res = chat.ask(" ".join(a.question), focus=focus, save=getattr(a, "save", False), attachments=a.image or [])
@@ -87,6 +94,7 @@ def _answer(a, focus: str) -> int:
         text += "\n\nRead: " + (", ".join(res["pages_read"]) or "-") + f"\nTools: {', '.join(res['tools_used'])}"
     if res.get("saved"):
         text += f"\n\nsaved: {res['saved']}"
+    text += _check_line(res)
     _out(a, res, text)
     return 0 if not res["not_found"] else 3
 
@@ -136,7 +144,8 @@ def _chat_loop(conv, pending, wiki) -> int:
             continue
         res = conv.ask(q, attachments=pending)  # one session for the whole chat (ADR-0019)
         pending.clear()
-        print("\n" + res["answer_text"] + f"\n  ({res['seconds']} s, {res.get('premium')} premium request, {res['session']} session)")
+        print("\n" + res["answer_text"] + f"\n  ({res['seconds']} s, {res.get('premium')} premium request, {res['session']} session)"
+              + _check_line(res))
 
 
 def cmd_search(a) -> int:

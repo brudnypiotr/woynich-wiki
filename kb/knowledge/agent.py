@@ -254,8 +254,24 @@ class LiveSession:
         if not self.resumed:
             self.session = await self.client.create_session(**kw)
         self.id = getattr(self.session, "session_id", None) or getattr(self.session, "id", None)
+        try:
+            self.session.on(self._event)
+        except Exception:
+            pass
         tin, tout, prem = await _usage(self.session)
         self._seen = (tin or 0, tout or 0, prem or 0.0)
+
+    def _event(self, ev) -> None:
+        """Thinking and intent from the runtime, for the live view (tool calls come from the sandbox hook)."""
+        say = self.box.progress
+        if not say:
+            return
+        kind = str(getattr(getattr(ev, "type", None), "value", getattr(ev, "type", "")))
+        data = getattr(ev, "data", None)
+        if kind == "assistant.reasoning" and getattr(data, "content", None):
+            say("thinking", data.content.strip())
+        elif kind == "assistant.intent" and getattr(data, "intent", None):
+            say("intent", data.intent.strip())
 
     async def _send(self, prompt, attachments):
         att = [{"type": "file", "path": str(Path(a).resolve())} for a in attachments]
