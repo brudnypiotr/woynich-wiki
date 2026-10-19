@@ -84,7 +84,7 @@ def cmd_jira(a) -> int:
 
 
 def cmd_check(a) -> int:
-    """Heartbeat: are the GitHub Copilot sign-in and the Jira token valid? No premium request."""
+    """Heartbeat: are the GitHub Copilot sign-in and the Jira token valid? No AI credits used."""
     from kb.llm.gateway import Gateway
     from kb.publish import settings
     r = settings.check(Gateway(adapter=a.adapter))
@@ -104,7 +104,7 @@ def cmd_ingest(a) -> int:
         return 130
     for r in res:
         print(f"ingested {r['id']}: {len(r['created'])} pages created, {len(r['updated'])} updated, "
-              f"{r.get('premium')} premium request(s), {r.get('seconds')} s")
+              f"{_credits(r.get('credits'))}, {r.get('seconds')} s")
         if r.get("reply"):
             print("  " + r["reply"].strip().replace("\n", "\n  ")[:1500])
     if not res:
@@ -113,6 +113,10 @@ def cmd_ingest(a) -> int:
     print(f"check: {v['citations_ok']}/{v['citations']} citations found in sources, {v['broken_links']} broken links, "
           f"{v['uncited_lines']} long lines without citation, {v['contradictions']} contradictions")
     return 0
+
+
+def _credits(v) -> str:
+    return "AI credits n/a" if v is None else f"{v:.2f} AI credits"
 
 
 def _check_line(res: dict) -> str:
@@ -180,7 +184,7 @@ def _chat_loop(conv, pending, wiki) -> int:
             continue
         res = conv.ask(q, attachments=pending)  # one session for the whole chat (ADR-0019)
         pending.clear()
-        print("\n" + res["answer_text"] + f"\n  ({res['seconds']} s, {res.get('premium')} premium request, {res['session']} session)"
+        print("\n" + res["answer_text"] + f"\n  ({res['seconds']} s, {_credits(res.get('credits'))}, {res['session']} session)"
               + _check_line(res))
 
 
@@ -232,26 +236,22 @@ def cmd_site(a) -> int:
 
 
 def cmd_quota(a) -> int:
+    """Where you are in the billing cycle: AI credits (or premium requests on legacy plans), reset, days left."""
     from kb.llm.gateway import Gateway
-    gw = Gateway(adapter="copilot-sdk")
-    try:
-        q = gw.llm.inner.quota()
-    except Exception as e:
-        print(f"cannot read quota ({type(e).__name__}: {e})"); return 1
-    used_here = 0.0
-    met = config.paths().metering
-    if met.exists():
-        for line in met.read_text(encoding="utf-8").splitlines():
-            used_here += json.loads(line).get("premium") or 0
+    from kb.publish import settings
+    u = settings.usage(Gateway(adapter="copilot-sdk"))
     if a.json:
-        print(json.dumps({"quota": q, "premium_used_by_kb": used_here}, indent=1)); return 0
-    for k, v in q.items():
-        ent = "unlimited" if v["entitlement"] == -1 else v["entitlement"]
-        pct = f"{v['remaining_pct']:.1f}% left" if isinstance(v["remaining_pct"], (int, float)) else ""
-        print(f"  {k:<22} used {v['used']} of {ent}  {pct}  resets {v['resets'][:10] or 'n/a'}")
-    print(f"  premium requests used by this knowledge base (metered): {used_here:g}")
+        print(json.dumps(u, indent=1)); return 0
+    if u["entitlement"] is not None and not u["unlimited"]:
+        print(f"  {u['unit']}: {u['used']:g} of {u['entitlement']:g} used ({100 - (u['remaining_pct'] or 0):.0f}%)"
+              + (f", plan {u['plan']}" if u["plan"] else ""))
+    elif u["unlimited"]:
+        print(f"  {u['unit']}: unlimited")
+    else:
+        print(f"  quota not available from GitHub ({u['error']})")
+    print(f"  resets {u['reset'][:10]} (00:00 UTC): {u['days_left']} days, {u['business_days_left']} working days")
+    print(f"  used by this knowledge base this month: {u['kb_month']:g} AI credits")
     return 0
-
 
 def cmd_serve(a) -> int:
     from kb.publish import serve
@@ -426,7 +426,7 @@ def main(argv=None) -> int:
     s.add_argument("action", choices=["get", "search", "add"]); s.add_argument("args", nargs="+")
     s.add_argument("--limit", type=int); s.add_argument("--links", action="store_true", help="add: also linked issues and sub-tasks")
     s.add_argument("--no-attachments", action="store_true"); s.set_defaults(fn=cmd_jira)
-    s = sub.add_parser("check", help="test the GitHub Copilot sign-in and the Jira token (no premium request)")
+    s = sub.add_parser("check", help="test the GitHub Copilot sign-in and the Jira token (no AI credits used)")
     s.add_argument("--adapter"); s.set_defaults(fn=cmd_check)
     s = sub.add_parser("ingest", help="the model reads new sources and writes the wiki (one agent session per source)")
     s.add_argument("ids", nargs="*"); s.set_defaults(fn=cmd_ingest)
@@ -450,7 +450,7 @@ def main(argv=None) -> int:
     s.add_argument("text", nargs="*"); s.add_argument("--file"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_check_answer)
     s = sub.add_parser("verify", help="check links and citations on wiki pages (warnings only)"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_verify)
     s = sub.add_parser("site", help="build the dashboard (instance/site/index.html)"); s.add_argument("--open", action="store_true"); s.set_defaults(fn=cmd_site)
-    s = sub.add_parser("quota", help="your Copilot quota (premium requests left) and what kb used")
+    s = sub.add_parser("quota", help="AI credits used and left, when they reset (days, working days), what kb used this month")
     s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_quota)
     s = sub.add_parser("serve", help="local web app: add files with visible steps, discussion sessions, dashboard")
     s.add_argument("--port", type=int, default=8765); s.add_argument("--no-browser", action="store_true"); s.add_argument("--adapter")

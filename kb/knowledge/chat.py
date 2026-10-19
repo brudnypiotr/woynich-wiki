@@ -143,13 +143,13 @@ def _finish(question, res, focus, attachments, t0, task: str) -> dict:
     read = sorted({p for t in res.tools for p in t.get("paths", []) if t["ok"] and re.search(r"\.\w+$", p)})
     from kb.knowledge import verify
     out = {"question": question, "answer_text": reply, "not_found": not_found, "seconds": round(time.perf_counter() - t0, 1),
-           "premium": res.premium, "pages_read": read, "tools_used": sorted({t["tool"] for t in res.tools if t["ok"]}),
+           "premium": res.premium, "credits": res.credits, "pages_read": read, "tools_used": sorted({t["tool"] for t in res.tools if t["ok"]}),
            "check": verify.check_answer(reply)}  # deterministic citation check, as `kb check-answer` in the CLI
     log = inst / "catalog" / "queries.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("a", encoding="utf-8") as f:
         f.write(json.dumps({"at": catalog.now(), "question": question, "focus": focus, "not_found": not_found,
-                            "seconds": out["seconds"], "premium": res.premium, "attachments": len(attachments), "task": task},
+                            "seconds": out["seconds"], "premium": res.premium, "credits": res.credits, "attachments": len(attachments), "task": task},
                            ensure_ascii=False) + "\n")
     return out
 

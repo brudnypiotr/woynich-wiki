@@ -148,6 +148,7 @@ class AgentResult:
     tokens_out: int | None
     premium: float | None
     tools: list[dict]
+    credits: float | None = None   # GitHub AI credits (usage-based billing); total_nano_aiu / 1e9
 
 
 def _quiet(lp, ctx):  # SDK 1.0.22 cannot parse the echo of a user message with attachments; harmless
@@ -172,13 +173,15 @@ def _session_kwargs(box: Sandbox, model: str, root: Path, tools, streaming: bool
 
 
 async def _usage(session) -> tuple:
+    """(tokens in, tokens out, premium requests, AI credits) of the session so far."""
     try:
         m = await session.rpc.usage.get_metrics()
+        nano = getattr(m, "total_nano_aiu", None)
         return (sum((x.usage.input_tokens or 0) for x in m.model_metrics.values()),
                 sum((x.usage.output_tokens or 0) for x in m.model_metrics.values()),
-                getattr(m, "total_premium_request_cost", None))
+                getattr(m, "total_premium_request_cost", None), None if nano is None else nano / 1e9)
     except Exception:
-        return None, None, None
+        return None, None, None, None
 
 
 def _reply(ev) -> str:
@@ -214,8 +217,8 @@ class AgentRunner:
             session = await client.create_session(**_session_kwargs(box, model, root, tools))
             att = [{"type": "file", "path": str(Path(a).resolve())} for a in attachments]
             ev = await session.send_and_wait(task_prompt, attachments=att or None, timeout=float(self.timeout))
-            tin, tout, premium = await _usage(session)
-            return AgentResult(_reply(ev), round(time.perf_counter() - t0, 1), model, tin, tout, premium, box.log)
+            tin, tout, premium, credits = await _usage(session)
+            return AgentResult(_reply(ev), round(time.perf_counter() - t0, 1), model, tin, tout, premium, box.log, credits)
         finally:
             await client.stop()
 
@@ -234,7 +237,7 @@ class LiveSession:
         self.loop = asyncio.new_event_loop()
         self.loop.set_exception_handler(_quiet)
         threading.Thread(target=self.loop.run_forever, daemon=True, name="kb-live-session").start()
-        self._seen = (0, 0, 0.0)
+        self._seen = (0, 0, 0.0, 0.0)
         self._thinking: dict[str, str] = {}
         self.stopped = False
         try:
@@ -264,8 +267,8 @@ class LiveSession:
             self.session.on(self._event)
         except Exception:
             pass
-        tin, tout, prem = await _usage(self.session)
-        self._seen = (tin or 0, tout or 0, prem or 0.0)
+        tin, tout, prem, cred = await _usage(self.session)
+        self._seen = (tin or 0, tout or 0, prem or 0.0, cred or 0.0)
 
     def _event(self, ev) -> None:
         """Thinking and intent from the runtime, for the live view (tool calls come from the sandbox hook)."""
@@ -316,13 +319,12 @@ class LiveSession:
         self.box.progress = progress
         self.box.cancelled = lambda: self.stopped or bool(cancelled and cancelled())
         n, t0 = len(self.box.log), time.perf_counter()
-        reply, (tin, tout, prem) = self._call(self._send(prompt, list(attachments)), self.timeout + 60)
+        reply, now = self._call(self._send(prompt, list(attachments)), self.timeout + 60)
         # the runtime reports totals for the session: keep only this question's share
         seen = self._seen
-        self._seen = (tin if tin is not None else seen[0], tout if tout is not None else seen[1], prem if prem is not None else seen[2])
-        delta = lambda new, old: None if new is None else (new - old if new >= old else new)
-        return AgentResult(reply, round(time.perf_counter() - t0, 1), self.model, delta(tin, seen[0]), delta(tout, seen[1]),
-                           delta(prem, seen[2]), self.box.log[n:])
+        self._seen = tuple(v if v is not None else o for v, o in zip(now, seen))
+        d = [None if v is None else (v - o if v >= o else v) for v, o in zip(now, seen)]
+        return AgentResult(reply, round(time.perf_counter() - t0, 1), self.model, d[0], d[1], d[2], self.box.log[n:], d[3])
 
     def close(self) -> None:
         try:
@@ -343,7 +345,7 @@ def meter(task: str, res: AgentResult | None, source_id: str | None = None, erro
     ev = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "task": task, "stage": task, "source_id": source_id,
           "adapter": "copilot-sdk-agent", "model": res.model if res else None, "tier": None,
           "tokens_in": res.tokens_in if res else None, "tokens_out": res.tokens_out if res else None, "cost": None,
-          "premium": res.premium if res else None, "duration_s": res.seconds if res else None, "ok": error is None, "error": error,
+          "premium": res.premium if res else None, "credits": res.credits if res else None, "duration_s": res.seconds if res else None, "ok": error is None, "error": error,
           "tool_calls": len(res.tools) if res else None, "denied": sum(1 for t in res.tools if not t["ok"]) if res else None}
     p = config.paths().metering
     p.parent.mkdir(parents=True, exist_ok=True)

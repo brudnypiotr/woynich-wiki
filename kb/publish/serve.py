@@ -41,7 +41,8 @@ JOBS: dict[str, dict] = {}
 LIVE: dict[str, chat.Conversation] = {}  # discussion id -> open agent session
 LIVE_LOCK = threading.Lock()
 IDLE_S = 1800
-TRACE: dict[str, dict] = {}  # discussion id -> what the model is doing for the current question (live view)
+TRACE: dict[str, dict] = {}
+USAGE: dict = {"at": 0.0, "data": None}  # billing state, cached: reading it starts the Copilot runtime (seconds)  # discussion id -> what the model is doing for the current question (live view)
 
 
 def _tracer(sid: str):
@@ -230,7 +231,7 @@ class Handler(BaseHTTPRequestHandler):
         super().handle_one_request()
         took = time.perf_counter() - t0
         path = urlparse(getattr(self, "path", "") or "").path
-        if took > 2 and not path.endswith(("/ask", "/upload")):  # questions and uploads are slow by nature
+        if took > 2 and not path.endswith(("/ask", "/upload", "/api/usage", "/api/settings/account", "/api/settings/models", "/api/settings/check")):  # questions and uploads are slow by nature
             print(f"slow request: {getattr(self, 'command', '')} {path} took {took:.1f} s", flush=True)
 
     def do_GET(self):
@@ -276,6 +277,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "no such session"})
         if url.path == "/api/settings":
             return self._send(200, settings.state())
+        if url.path == "/api/usage":
+            fresh = parse_qs(url.query).get("refresh")
+            if fresh or not USAGE["data"] or time.time() - USAGE["at"] > 600:
+                USAGE.update(at=time.time(), data=settings.usage(self.gw))
+            return self._send(200, USAGE["data"])
         if url.path == "/api/settings/check":
             return self._send(200, settings.check(self.gw, (parse_qs(url.query).get("what") or ["all"])[0]))
         if url.path in ("/api/settings/models", "/api/settings/account"):
@@ -402,7 +408,7 @@ class Handler(BaseHTTPRequestHandler):
         c = r.get("check") or {}
         turn = {"question": q, "at": catalog.now(), "not_found": r["not_found"], "seconds": r["seconds"],
                 "answer_text": r["answer_text"], "markdown": r["answer_text"], "pages_read": r["pages_read"],
-                "tools_used": r["tools_used"], "premium": r["premium"], "images": [p.name for p in att], "session": r["session"], "stopped": r.get("stopped", False),
+                "tools_used": r["tools_used"], "premium": r["premium"], "credits": r.get("credits"), "images": [p.name for p in att], "session": r["session"], "stopped": r.get("stopped", False),
                 "check": {"ok": len(c.get("ok", [])), "broken": c.get("broken", []), "unchecked": c.get("unchecked", [])},
                 "trace": TRACE[s["id"]]["events"]}
         s = _load_session(s["id"])  # re-read: the question may have taken minutes
@@ -518,6 +524,11 @@ header small{display:block;font-size:11px;font-weight:600;letter-spacing:.12em;t
 .sl a:hover .del,.sl a.on .del{visibility:visible}.sl a .del:hover{background:rgba(255,255,255,.1);color:#fff}
 .sl .none{padding:4px 12px;font-size:13px;color:#7f88b5}
 .foot{padding:12px 18px;border-top:1px solid rgba(255,255,255,.07);font-size:12px;color:#8e97c4;display:flex;align-items:center;gap:8px}
+.usage{padding:10px 18px 8px;border-top:1px solid rgba(255,255,255,.07);font-size:12px;color:#8e97c4;cursor:pointer}
+.usage .u-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}.usage .u-top span{font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:11px;color:#7f88b5}
+.usage .u-top b{color:#fff;font-size:13px}.u-bar{height:6px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden}
+.u-bar i{display:block;height:100%;width:0;border-radius:99px;background:var(--ok);transition:width .4s}.u-bar i.warn{background:#f0a83a}.u-bar i.bad{background:var(--bad)}
+.u-sub{margin-top:5px;line-height:1.45}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}.dot.busy{background:#f0a83a;animation:pulse 1.2s infinite}
 
 /* main */
@@ -690,6 +701,8 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
  </div>
  <div class="label">Discussions</div>
  <div class="sl" id="sl"></div>
+ <div class="usage" id="usage" title="Click to refresh"><div class="u-top"><span id="u-unit">AI credits</span><b id="u-pct">…</b></div>
+  <div class="u-bar"><i id="u-fill"></i></div><div class="u-sub" id="u-sub">checking usage…</div></div>
  <div class="foot"><span class="dot" id="dot"></span><span id="st">connecting…</span></div>
 </aside>
 <div class="scrim" onclick="document.body.classList.remove('side')"></div>
@@ -709,6 +722,19 @@ const STEP_LABEL={saved:'Saved',extracted:'Text extracted',writing:'Writing wiki
 async function status(){try{const s=await api('/api/status');$('#st').textContent=`${s.sources} sources · ${s.pages} pages · ${s.model}${s.busy?' · working…':''}`;
   $('#dot').classList.toggle('busy',s.busy)}catch(e){$('#st').textContent='not connected';$('#dot').classList.add('busy')}}
 setInterval(status,5000);status();
+const fmt=n=>n==null?'?':Number(n).toLocaleString(undefined,{maximumFractionDigits:n<100?1:0});
+async function usage(refresh){const sub=$('#u-sub');if(refresh)sub.textContent='checking usage…';
+  try{const u=await api('/api/usage'+(refresh?'?refresh=1':''));const r=new Date(new Date(u.reset).getTime()-864e5);  // last day of the cycle, as GitHub shows it
+    const when=`resets in ${u.days_left} days (${u.business_days_left} working) · cycle ends ${r.toLocaleDateString(undefined,{day:'numeric',month:'short',timeZone:'UTC'})}`;
+    $('#u-unit').textContent=u.unit||'AI credits';
+    const used=u.unlimited?null:(u.remaining_pct!=null?100-u.remaining_pct:(u.entitlement?100*u.used/u.entitlement:null));
+    $('#u-pct').textContent=u.unlimited?'unlimited':used==null?'–':Math.round(used)+'% used';
+    const f=$('#u-fill');f.style.width=(used==null?0:Math.min(100,Math.max(2,used)))+'%';f.className=used>=90?'bad':used>=70?'warn':'';
+    sub.innerHTML=(u.entitlement!=null&&!u.unlimited?`${fmt(u.used)} of ${fmt(u.entitlement)} used<br>`:'')+when
+      +`<br>this knowledge base: ${fmt(u.kb_month)} this month`+(u.error&&u.entitlement==null?`<br><span title="${esc(u.error)}">quota not available from GitHub</span>`:'');
+    $('#usage').title=`${u.plan?('Plan: '+u.plan+'. '):''}Organisation plans pool AI credits across users; the figure is what GitHub reports for your account. Checked ${new Date(u.checked_at).toLocaleTimeString()}. Click to refresh.`}
+  catch(e){sub.textContent='usage not available'}}
+$('#usage').onclick=()=>usage(true);usage();setInterval(()=>usage(),600000);
 async function loadSessions(){const l=await api('/api/sessions').catch(()=>[]);
   $('#sl').innerHTML=l.length?l.map(s=>`<a data-id="${s.id}" title="${esc(s.topic)} · ${s.turns} questions"><span>${esc(s.topic)}</span><button class="del" data-del="${s.id}" title="Delete discussion">×</button></a>`).join(''):'<div class="none">No discussions yet.</div>';mark()}
 async function delSession(id){if(!confirm('Delete this discussion? Wiki pages saved from it stay.'))return;
@@ -789,7 +815,7 @@ V.settings=async function(){mark('settings');
   $('#setc').innerHTML=`<div class="pagehead"><div class="kicker">Settings</div><h2>Models, sign-in and keys</h2>
     <p>Saved in this knowledge base's own config (<code>instance/config</code>). Keys go to Windows Credential Manager and are never shown again.</p></div>
    <datalist id="mlist"><option value="auto"></option></datalist>
-   <section class="set"><h3>Model</h3><p class="d">Which model writes the wiki and answers questions. Every call is one premium request.</p>
+   <section class="set"><h3>Model</h3><p class="d">Which model writes the wiki and answers questions. Each question or source costs AI credits (shown under answers and in the sidebar).</p>
     <div class="eff"><span class="sub" style="margin:0">Now in use</span><b id="effm">${esc(m.effective)}</b><span class="badge">${SRC[m.source]}</span></div>
     ${m.env?`<p class="errmsg">The environment variable KB_MODEL=${esc(m.env)} overrides everything below until it is removed.</p>`:''}
     <div class="grid2"><div class="f" style="grid-column:1/-1"><label for="ov">One model for every task</label>${inp('ov',m.override,'empty = use the tiers below')}<small>Like <code>kb model set</code>. Leave empty to choose per tier.</small></div>
@@ -799,7 +825,7 @@ V.settings=async function(){mark('settings');
    <section class="set"><h3>GitHub Copilot account</h3><p class="d">The models run through your GitHub Copilot subscription.</p>
     <div class="btns" style="margin-top:0"><button class="ghost" id="acheck">Check sign-in</button><button class="ghost" id="alogin">Sign in with GitHub…</button><span id="amsg"></span></div><div id="acc"></div></section>
    <section class="set"><h3>Keys and tokens</h3><p class="d">Stored for your Windows user only. This page can tell whether a key is set, never what it is.</p>
-    <div class="btns" style="margin:0 0 6px"><button class="ghost" id="ctest">Test connections</button><span class="sub" style="margin:0;font-size:12px">GitHub Copilot sign-in and one Jira request; no premium requests</span></div><div id="cres" class="kv" style="margin:4px 0 12px"></div>
+    <div class="btns" style="margin:0 0 6px"><button class="ghost" id="ctest">Test connections</button><span class="sub" style="margin:0;font-size:12px">GitHub Copilot sign-in and one Jira request; no AI credits used</span></div><div id="cres" class="kv" style="margin:4px 0 12px"></div>
     <div id="secs"></div>
     <div class="sec-row"><div class="nm"><b>Another key</b><small>Name: lowercase letters, digits, dashes.</small></div><input id="nk-name" placeholder="name, e.g. confluence-token"><div class="b"></div>
      <div></div><input id="nk-val" type="password" placeholder="value" autocomplete="off"><div class="b"><button class="ghost" id="nk-add">Add</button></div></div></section>
@@ -880,7 +906,7 @@ function checkHtml(c){if(!c)return '';const b=c.broken||[];
   if(b.length)return `<span class="badc" title="${esc(b.join('\n'))}" onclick="alert(this.title)">⚠ ${b.length} citation${b.length>1?'s':''} not found</span>`;
   return c.ok?`<span class="okc" title="Every link and page/time reference was found in the wiki and its sources">✓ ${c.ok} citation${c.ok>1?'s':''} checked</span>`:''}
 function botMsg(t){const md=t.markdown||(t.sentences||[]).map(s=>s.text).join(' ');
-  const pr=t.pages_read||[],meta=[t.stopped?'⏹ stopped':'',t.session==='continued'?'same session':t.session==='resumed'?'session resumed':'',t.seconds?`${t.seconds} s`:'',t.tools_used&&t.tools_used.length?`tools: ${t.tools_used.map(esc).join(', ')}`:''].filter(Boolean);
+  const pr=t.pages_read||[],meta=[t.stopped?'⏹ stopped':'',t.session==='continued'?'same session':t.session==='resumed'?'session resumed':'',t.seconds?`${t.seconds} s`:'',t.credits!=null?`${Number(t.credits).toFixed(2)} AI credits`:'',t.tools_used&&t.tools_used.length?`tools: ${t.tools_used.map(esc).join(', ')}`:''].filter(Boolean);
   return `<div class="msg bot">${MARK}<div class="body">${traceHtml(t.trace,false)}<div class="md ${t.not_found?'nf':''}">${t.not_found&&!md.trim()?'<p>No answer found in the knowledge base. Try other words, or add a source that covers it.</p>':mdl(md)}</div>
    <div class="meta">${checkHtml(t.check)}${meta.map(x=>`<span>${x}</span>`).join('')}${pr.length?`<details><summary>${pr.length} page${pr.length>1?'s':''} read ▾</summary><div>${pr.map(p=>`<a class="wl" href="#wiki/w:${encodeURIComponent(String(p).replace(/^.*\//,'').replace(/\.md$/,''))}">${esc(String(p).replace(/^.*\//,'').replace(/\.md$/,''))}</a>`).join(' ')}</div></details>`:''}</div></div></div>`}
 const scrollEnd=()=>{const s=$('#scroll');if(s)s.scrollTop=s.scrollHeight};

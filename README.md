@@ -21,7 +21,7 @@ kb ask "What is the minimum rest before a duty at home base?"
 kb site --open                         # dashboard: sources, topics, discrepancies ⚖️, glossary, tokens
 ```
 Expected: pages for the sources and concepts (e.g. minimum rest at home base), an answer citing `p. 3` of the OM and
-`t. 00:01:10` of the meeting, and a contradiction (12 h vs 10 h). About one premium request per source and per question.
+`t. 00:01:10` of the meeting, and a contradiction (12 h vs 10 h). Each source and each question costs AI credits (shown under answers, in `kb quota` and in the kb serve sidebar).
 Then with your own files: `kb add C:\path\to\document.pdf` (or drop files into `instance\inbox\` and run `kb collect inbox`).
 
 ### Branding (optional)

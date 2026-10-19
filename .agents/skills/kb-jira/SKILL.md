@@ -15,7 +15,7 @@ allowed-tools: ["shell", "view"]
 **Add to the knowledge base** (only when the user asks):
 - `kb jira add PROJ-123 PROJ-124` registers each issue as a source (XML snapshot; screenshots become figures the
   model looks at; PDF/Word/… attachments become their own sources). `--links` also adds linked issues and
-  sub-tasks (one level). Then `kb ingest` writes them into the wiki (one premium request per source).
+  sub-tasks (one level). Then `kb ingest` writes them into the wiki (costs AI credits per source).
 - `kb collect jira --jql "<JQL>" --limit 30` does the same for a query. Say how many issues that is before running it.
 
 **Setup** (if a command says Jira is not configured): the Jira URL goes in Settings (`kb serve`) or

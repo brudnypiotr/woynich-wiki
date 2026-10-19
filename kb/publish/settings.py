@@ -6,6 +6,7 @@ and are never sent back to the browser: the UI only learns whether a secret is s
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -260,6 +261,58 @@ def check(gw, what: str = "all") -> dict:
                                                      f" · token from {me['source']}"}
             except Exception as e:
                 out["jira"] = {"ok": False, "detail": (str(e) if isinstance(e, (PermissionError, RuntimeError)) else f"{type(e).__name__}: {e}")[:300]}
+    return out
+
+
+def _next_month_utc(now):
+    from datetime import datetime, timezone
+    return datetime(now.year + (now.month == 12), now.month % 12 + 1, 1, tzinfo=timezone.utc)
+
+
+def usage(gw, now=None) -> dict:
+    """Where we are in the billing cycle: the quota GitHub reports for this account (AI credits under usage-based
+    billing, premium requests on legacy plans), the reset time (organisation plans: 1st of the month 00:00 UTC),
+    days and working days left, and what this knowledge base used this month (metered)."""
+    from datetime import datetime, timedelta, timezone
+    now = now or datetime.now(timezone.utc)
+    out = {"error": None, "plan": None, "unit": "AI credits", "entitlement": None, "used": None, "remaining_pct": None,
+           "unlimited": False, "quota": None}
+    f = getattr(gw.llm.inner, "usage_quota", None)
+    reset = None
+    if f:
+        try:
+            q = f()
+            snaps = q.get("snapshots") or {}
+            pick = (next((k for k, v in snaps.items() if v.get("tbb")), None)
+                    or next((k for k in snaps if "premium" in k or "credit" in k), None)
+                    or next((k for k, v in snaps.items() if not v.get("unlimited")), None))
+            out.update(plan=q.get("plan"), unit="AI credits" if q.get("tbb") or (pick and snaps[pick].get("tbb")) else "premium requests")
+            if pick:
+                v = snaps[pick]
+                out.update(quota=pick, entitlement=v["entitlement"], used=v["used"], remaining_pct=v["remaining_pct"],
+                           unlimited=bool(v["unlimited"]))
+                if v.get("reset_ms"):
+                    reset = datetime.fromtimestamp(v["reset_ms"] / 1000, timezone.utc)
+        except Exception as e:
+            out["error"] = f"{type(e).__name__}: {e}"[:300]
+    else:
+        out["error"] = f"the {getattr(gw.llm.inner, 'name', 'current')} adapter reports no quota"
+    reset = reset or _next_month_utc(now)
+    first = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    kb_month = 0.0
+    met = config.paths().metering
+    if met.exists():
+        for line in met.read_text(encoding="utf-8").splitlines():
+            try:
+                e = json.loads(line)
+                if (e.get("credits") or 0) and datetime.fromisoformat(e["at"]) >= first:
+                    kb_month += e["credits"]
+            except (ValueError, KeyError, TypeError):
+                pass
+    today, end = now.date(), reset.date()
+    business = sum(1 for i in range((end - today).days) if (today + timedelta(days=i)).weekday() < 5)
+    out.update(reset=reset.isoformat(), days_left=max(0, (end - today).days), business_days_left=business,
+               kb_month=round(kb_month, 2), checked_at=now.isoformat(timespec="seconds"))
     return out
 
 

@@ -151,3 +151,24 @@ def test_settings_code_repos_roles_and_architecture(app, instance, tmp_path):
         with pytest.raises(urllib.error.HTTPError) as e:
             call(base, token, "/api/settings", json.dumps({"repos": {"list": bad}}).encode())
         assert e.value.code == 400
+
+
+def test_usage_ai_credits_and_cycle(instance):
+    from datetime import datetime, timezone
+    from kb.publish import settings
+
+    class Inner:
+        name = "copilot-sdk"
+        def usage_quota(self):
+            return {"tbb": True, "plan": "business", "snapshots": {
+                "chat": {"entitlement": -1, "used": 0, "remaining_pct": 100, "unlimited": True, "reset_ms": None, "tbb": False},
+                "ai_credits": {"entitlement": 1900, "used": 808, "remaining_pct": 57.47, "unlimited": False,
+                               "reset_ms": datetime(2026, 11, 1, tzinfo=timezone.utc).timestamp() * 1000, "tbb": True}}}
+    gw = type("G", (), {"llm": type("L", (), {"inner": Inner()})()})()
+    met = instance / "catalog" / "metering.jsonl"
+    met.parent.mkdir(parents=True, exist_ok=True)
+    met.write_text('{"at": "2026-10-02T10:00:00+00:00", "credits": 3.5}\n{"at": "2026-09-30T10:00:00+00:00", "credits": 9}\n')
+    u = settings.usage(gw, datetime(2026, 10, 19, 12, tzinfo=timezone.utc))
+    assert (u["unit"], u["used"], u["entitlement"], u["plan"]) == ("AI credits", 808, 1900, "business")
+    assert (u["days_left"], u["business_days_left"], u["kb_month"]) == (13, 10, 3.5)   # only this month counts
+    assert u["reset"].startswith("2026-11-01")

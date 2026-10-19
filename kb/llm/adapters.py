@@ -161,6 +161,36 @@ class CopilotSDKAdapter(LLM):
                 await client.stop()
         return asyncio.run(go())
 
+    def usage_quota(self) -> dict:
+        """Billing state from the runtime: plan, token-based billing (AI credits) and quota snapshots in their own
+        units, with reset times. Opens a session but sends no prompt, so it costs nothing."""
+        async def go():
+            import tempfile
+            from copilot import CopilotClient
+            with tempfile.TemporaryDirectory() as wd:
+                client = CopilotClient(working_directory=wd)
+                await client.start()
+                try:
+                    session = await client.create_session(on_permission_request=_reject_permission, available_tools=[],
+                                                          enable_skills=False, skip_custom_instructions=True,
+                                                          enable_config_discovery=False, working_directory=wd)
+                    try:
+                        q = await session.rpc.quota.refresh()
+                    except Exception:
+                        q = await session.rpc.quota.get()
+                    snaps = {k: {"entitlement": v.entitlement_requests, "used": v.used_requests,
+                                 "remaining_pct": v.remaining_percentage, "unlimited": v.is_unlimited_entitlement,
+                                 "overage": v.overage, "reset_ms": v.reset_date_epoch_ms, "tbb": v.token_based_billing}
+                             for k, v in (q.snapshots or {}).items()}
+                    try:
+                        await client.delete_session(session.session_id)
+                    except Exception:
+                        pass
+                    return {"tbb": q.is_tbb_user, "plan": str(getattr(q.plan_tier, "value", q.plan_tier)), "snapshots": snaps}
+                finally:
+                    await client.stop()
+        return asyncio.run(go())
+
     def auth_status(self):
         async def go():
             from copilot import CopilotClient

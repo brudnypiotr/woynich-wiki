@@ -116,11 +116,11 @@ def ingest_source(sid: str, runner=None, progress=None, cancelled=lambda: False)
         summary = f"{len(created)} pages created, {len(updated)} updated"
         gitops.commit(inst, [d, pages.wiki()], gitops.message(
             "ingest", f"{rec['title']} — {summary}", scope=sid,
-            body=f"model: {res.model}\npremium requests: {res.premium}\ntokens in/out: {res.tokens_in}/{res.tokens_out}\n"
+            body=f"model: {res.model}\nAI credits: {res.credits}\ntokens in/out: {res.tokens_in}/{res.tokens_out}\n"
                  f"tool calls: {len(res.tools)} (denied: {sum(1 for t in res.tools if not t['ok'])})\n"
                  f"created: {', '.join(created) or '-'}\nupdated: {', '.join(updated) or '-'}"))
         catalog.ingest_finished()
-        return {"id": sid, "created": created, "updated": updated, "reply": res.reply, "premium": res.premium,
+        return {"id": sid, "created": created, "updated": updated, "reply": res.reply, "premium": res.premium, "credits": res.credits,
                 "seconds": res.seconds, "warnings": len(report["problems"])}
     except BaseException:
         catalog.rollback()
