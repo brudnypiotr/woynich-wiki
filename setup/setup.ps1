@@ -231,7 +231,12 @@ Write-Host 'Self-test: running all tests. This can take a few minutes on Windows
 $t0 = Get-Date
 Push-Location $Repo
 try {
-  $code = Invoke-Native $venvPy @('-m', 'pytest', '-q', '-p', 'no:cacheprovider')
+  # Straight to the console, not through Invoke-Native's line pipe: with -v pytest prints each test's name when it
+  # starts and PASSED/FAILED with the progress in % when it ends, so a slow test shows what it is busy with.
+  $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  & $venvPy -m pytest -v -p no:cacheprovider --color=yes
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = $old
   $took = '{0:N0} s' -f ((Get-Date) - $t0).TotalSeconds
   if ($code -eq 0) { Step 'Self-test' 'OK' "PASSED: all tests passed ($took)" } else { Step 'Self-test' 'WARN' "FAILED: some tests failed ($took); see setup.log" }
 } finally { Pop-Location }
