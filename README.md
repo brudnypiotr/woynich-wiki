@@ -12,6 +12,8 @@ This repository is the **blueprint**: generic code, templates and instructions w
    - `kb login`: sign in to GitHub Copilot once, in the browser
    - `kb llm-smoke`: checks that scripts can use the model; send `instance\reports\llm-smoke.json`
    - `kb init`: creates the knowledge base instance (`instance\`, its own git repository)
+5. Double-click **`serve.cmd`** to start the app (`kb serve`) in the browser; keep its window open. Another knowledge
+   base: `serve.cmd C:\kb\other-instance` (sets `KB_INSTANCE` for that window only).
 
 ## First test: from a PDF to a cited answer (about 5 minutes)
 ```
