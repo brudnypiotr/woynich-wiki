@@ -606,7 +606,7 @@ iframe{flex:1;border:0;width:100%;min-height:0;background:var(--bg)}
 .msg.bot{display:flex;gap:14px}
 .msg.bot .mark{width:28px!important;height:28px!important;margin-top:2px}
 .msg.bot .body{flex:1;min-width:0}
-.md p{margin:0 0 10px}.md>:last-child{margin-bottom:0}
+.md{overflow-wrap:anywhere}.md p{margin:0 0 10px}.md>:last-child{margin-bottom:0}
 .md h3,.md h4,.md h5{margin:16px 0 6px;line-height:1.3}.md h3{font-size:18px}.md h4{font-size:16px}.md h5{font-size:15px}
 .md ul,.md ol{margin:0 0 10px;padding-left:22px}.md li{margin:3px 0}
 .md code{background:var(--soft);border:1px solid var(--line);padding:0 5px;border-radius:5px;font:13px ui-monospace,Consolas,monospace}
@@ -636,8 +636,9 @@ a.wl:hover{color:var(--vio);text-decoration-color:currentColor;opacity:1}
 .trace summary::-webkit-details-marker{display:none}.trace summary:hover{color:var(--ink2)}
 .trace ol{list-style:none;margin:8px 0 2px 6px;padding:0 0 0 14px;border-left:2px solid var(--line)}
 .trace li{margin:5px 0;display:flex;gap:8px;align-items:baseline}.trace li>b{flex:none;width:16px;text-align:center;font-weight:400}
-.trace li i{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;cursor:pointer}
-.trace li i.full{-webkit-line-clamp:unset}
+.trace li>span,.trace li>i{flex:1;min-width:0;overflow-wrap:anywhere}
+.trace li i{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
+.trace li i.more{cursor:pointer}.trace li i.full{-webkit-line-clamp:unset}
 .trace code{font:12px ui-monospace,Consolas,monospace;color:var(--ink2)}
 .trace small{margin-left:auto;padding-left:8px;opacity:.7;font-size:11px;flex:none}
 .okc{color:var(--ok)}.badc{color:var(--bad);cursor:pointer}
@@ -948,11 +949,14 @@ function addImgs(fs){for(const f of fs){if(!f.type.startsWith('image/'))continue
 function showImgs(){const el=$('#imgs');if(!el)return;el.innerHTML=IM.map((x,k)=>`<span><img src="${x.data}" alt="">${esc(x.name)}<b onclick="IM.splice(${k},1);showImgs()" title="Remove">×</b></span>`).join('')}
 function userMsg(q,imgs){return `<div class="msg user"><div class="bubble">${esc(q)}</div>${imgs&&imgs.length?`<div class="att">📎 ${imgs.map(esc).join(', ')}</div>`:''}</div>`}
 function stepHtml(e){const t=String(e.text||'');
-  if(e.kind==='thinking')return `<li><b>💭</b><i onclick="this.classList.toggle('full')">${esc(t)}</i><small>${e.s}s</small></li>`;
+  if(e.kind==='thinking'){const more=t.length>240||t.split('\n').length>3;  // only long thoughts are clamped, so only they expand
+    return `<li><b>💭</b><i${more?` class="more" title="Click to show all" onclick="this.classList.toggle('full')"`:''}>${inl(t)}</i><small>${e.s}s</small></li>`}
   if(e.kind==='intent')return `<li><b>→</b><span>${esc(t)}</span><small>${e.s}s</small></li>`;
   const m=t.match(/^(\S+)\s*(.*)$/)||[,t,''],tool=m[1],arg=m[2];
   const verb={view:'Read',glob:'Find',grep:'Search',rg:'Search'}[tool]||tool;
-  return `<li><b>${verb==='Read'?'📄':'🔎'}</b><span>${esc(verb)} <code>${esc(arg.replace(/^.*?[\\/]instance[\\/]/,'').replace(/\\/g,'/'))}</code></span><small>${e.s}s</small></li>`}
+  const full=arg.replace(/^.*?[\\/]instance[\\/]/,'').replace(/\\/g,'/'),  // long code paths: the tail of each, full paths on hover
+    short=full.split(/,\s*/).map(x=>{const p=x.split('/');return p.length>4?'…/'+p.slice(-3).join('/'):x}).join(', ');
+  return `<li><b>${verb==='Read'?'📄':'🔎'}</b><span>${esc(verb)} <code title="${esc(full)}">${esc(short)}</code></span><small>${e.s}s</small></li>`}
 function traceHtml(ev,open,label){if(!ev||!ev.length)return '';const th=ev.filter(e=>e.kind==='thinking').length,rd=ev.length-th;
   return `<details class="trace"${open?' open':''}><summary>${label||`Thought${th>1?' '+th+'×':''} and read ${rd} item${rd===1?'':'s'}`} ▾</summary><ol>${ev.map(stepHtml).join('')}</ol></details>`}
 function checkHtml(c){if(!c)return '';const b=c.broken||[];
