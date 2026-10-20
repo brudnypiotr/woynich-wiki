@@ -204,3 +204,4 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
   .stepper li{font-size:0}.top .ghost span{display:none}}
 .set details.alt{margin-top:12px}.set details.alt summary{cursor:pointer;color:var(--mute);font-size:13px}
 .set .howto{font-size:13px;margin:12px 0 4px}.set .cstat,.set .jstat{margin-top:6px}
+.wiz{margin-top:18px}.wiz .sp{flex:1}.wmsg{color:var(--warn);min-height:1.2em}#setup .stepper{margin:0 0 22px}

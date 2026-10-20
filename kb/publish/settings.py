@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import yaml
@@ -345,6 +346,25 @@ def usage_estimate(u: dict) -> dict:
         out["used"] = round(out["used"] + since, 2)
         out["remaining_pct"] = max(0.0, 100 - 100 * out["used"] / out["entitlement"])
     return out
+
+
+def setup_state() -> dict:
+    """First-run setup: done once Finish was pressed (instance/config/profile.yaml: setup.done_at), or when the instance
+    already has sources (set up before the setup existed); what is configured."""
+    from kb.knowledge import catalog
+    prof = config.load("profile")
+    return {"done": bool((prof.get("setup") or {}).get("done_at")) or bool(catalog.all_sources()),
+            "jira": bool((prof.get("jira") or {}).get("base_url")), "repos": len(prof.get("code_repos") or [])}
+
+
+def setup_done(done: bool = True) -> dict:
+    data = _read("profile")
+    if done:
+        data.setdefault("setup", {})["done_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    else:
+        data.pop("setup", None)
+    _write("profile", data)
+    return setup_state()
 
 
 def login() -> dict:

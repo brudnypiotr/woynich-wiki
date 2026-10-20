@@ -48,6 +48,16 @@ def secret(h, name, delete):
     return h.send(200, settings.secret_delete(name) if delete else settings.secret_set(name, str(h.json_body().get("value") or "")))
 
 
+@route("GET", r"/api/setup")
+def setup(h):
+    return h.send(200, settings.setup_state())
+
+
+@route("POST", r"/api/setup/(done|reset)")
+def setup_mark(h, what):
+    return h.send(200, settings.setup_done(what == "done"))
+
+
 @route("GET", r"/api/usage")
 def usage(h):
     if h.query("refresh") or not USAGE["data"] or time.time() - USAGE["at"] > 300:  # real reading from GitHub: every 5 min

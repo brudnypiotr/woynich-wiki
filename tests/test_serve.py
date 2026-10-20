@@ -57,6 +57,15 @@ def test_static_app_files(app):
         assert e.value.code == code, path
 
 
+def test_first_run_setup_flag(app):
+    base, token = app
+    assert call(base, token, "/api/setup")["done"] is False                      # fresh instance: the app opens the setup
+    assert call(base, token, "/api/setup/done", b"{}")["done"] is True
+    assert call(base, token, "/api/setup")["done"] is True                       # kept in instance/config/profile.yaml
+    assert call(base, token, "/api/setup/reset", b"{}")["done"] is False
+    assert call(base, token, "/api/settings")["model"]["recommended"] == "gpt-6-luna"
+
+
 def test_upload_steps_then_discussion(app):
     base, token = app
     job = call(base, token, "/api/upload", SAMPLE.read_bytes(), {"X-Filename": SAMPLE.name})
