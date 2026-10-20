@@ -315,7 +315,8 @@ class LiveSession:
             return False  # the sandbox still denies every further tool call
 
     def send(self, prompt: str, attachments=(), progress=None, cancelled=None) -> AgentResult:
-        self.stopped = False
+        # `stopped` is reset by the caller when the question starts (Conversation.ask), not here: a Stop pressed
+        # while the prompt is still being built must not be lost
         self.box.progress = progress
         self.box.cancelled = lambda: self.stopped or bool(cancelled and cancelled())
         n, t0 = len(self.box.log), time.perf_counter()

@@ -182,10 +182,9 @@ def test_stop_an_answer_in_progress(instance):
 
     class SlowLive:
         id, resumed, stopped = "live-x", False, False
-        def __init__(self): self.go = threading.Event()
+        def __init__(self): self.go = threading.Event(); self.stopped = False
         def send(self, task, attachments=(), progress=None, cancelled=None):
-            self.stopped = False
-            self.go.wait(5)  # "writing" until stopped
+            self.go.wait(5)  # "writing" until stopped (a Stop before this point counts too)
             return AgentResult("Partial answer\n\n_(stopped by the user)_", 0.1, "m", 1, 1, 1.0, [])
         def abort(self):
             self.stopped = True; self.go.set(); return True

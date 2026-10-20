@@ -298,6 +298,8 @@ class Conversation:
     def ask(self, question: str, attachments=(), focus: str = "wiki", progress=None) -> dict:
         from kb.knowledge import wiki
         with self.lock:
+            if self.live is not None:
+                self.live.stopped = False  # a new question: a Stop from now on counts (a new session starts unstopped)
             self.used = time.time()
             t0 = time.perf_counter()
             inst = catalog.instance()
