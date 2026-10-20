@@ -617,6 +617,7 @@ iframe{flex:1;border:0;width:100%;min-height:0;background:var(--bg)}
 .md .tbl{overflow:auto;margin:0 0 10px}.md table{border-collapse:collapse;font-size:14px}
 .md th,.md td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}.md th{background:var(--soft)}
 .cg{color:var(--mute);font-size:.74em;font-weight:400;opacity:.7;letter-spacing:.01em}
+.cref{display:inline-block;white-space:nowrap;padding:0 6px;margin:1px 0;border-radius:6px;background:var(--soft);border:1px solid var(--line);font:11.5px ui-monospace,Consolas,monospace;cursor:help}
 .cg a.wl,.cg b,.cg code{font-weight:400}.cg code{font-size:1em;background:none;border:0;padding:0}
 a.wl{color:inherit;font-weight:400;text-decoration:underline dotted;text-decoration-color:color-mix(in srgb,currentColor 45%,transparent);text-underline-offset:2px}
 a.wl:hover{color:var(--vio);text-decoration-color:currentColor;opacity:1}
@@ -797,8 +798,16 @@ $('#sl').onclick=e=>{const d=e.target.closest('[data-del]');if(d){e.preventDefau
 $('#navp').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.v==='new'&&!location.hash.slice(1))return V.chat(null);location.hash=b.dataset.v==='new'?'':b.dataset.v};
 
 // ---------------------------------------------------------------- markdown (answers)
-const CITEGRP=/\(([^()]*?(?:\[\[|:\d+@[0-9a-f]{6,}|\b[A-Z][A-Z0-9]+-\d+#)[^()]*)\)/g; // "(…source…)": a footnote, shown muted
-function inl(t){return esc(t).replace(CITEGRP,'<span class="cg">($1)</span>').replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*\w])\*([^*\n]+)\*/g,'$1<i>$2</i>')
+const CITEGRP=/\(([^()]*?(?:\[\[|:\d[\d,\-–]*@[0-9a-f]{6,}|\b[A-Z][A-Z0-9]+-\d+#)[^()]*)\)/g; // "(…source…)": a footnote, shown muted
+// "repo/dir/File.cs:78-94@75f338ff8f" → a small "File.cs:78–94" label, the full reference on hover;
+// FitNesse pages are all content.txt, so they are named by their folder
+function citeHtml(g){return g.split(/;\s*/).map(c=>{const m=c.match(/^(?:(.*)\/)?([^\/\s]+):([\d,\-–]+)@([0-9a-f]{6,})$/);if(!m)return c;
+  const dir=(m[1]||'').split('/'),name=/^(content\.txt|index\.\w+)$/.test(m[2])&&dir.length?dir[dir.length-1]:m[2],
+    r=m[3].replace(/-/g,'–').split(','),lines=r.length>2?r.slice(0,2).join(', ')+' +'+(r.length-2):r.join(', ');
+  return `<span class="cref" title="${c}">${name}:${lines}</span>`}).join('; ')}
+// labels alone need no brackets (a lone "(" would wrap away from them)
+function inl(t){return esc(t).replace(CITEGRP,(m,g)=>{const h=citeHtml(g),bare=!h.replace(/<span class="cref"[^>]*>[^<]*<\/span>/g,'').replace(/[;\s]/g,'');
+    return `<span class="cg">${bare?h:'('+h+')'}</span>`}).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*\w])\*([^*\n]+)\*/g,'$1<i>$2</i>')
   .replace(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g,(m,a,l)=>`<a class="wl" href="#wiki/w:${encodeURIComponent(a.trim())}" title="Open in the wiki">${l||a.trim()}</a>`)}
 const BLOCK=/^(```|#{1,4}\s|\s*\||\s*>|\s*([-*]|\d+\.)\s)/;
 function mdl(src){const L=String(src||'').replace(/\r/g,'').split('\n');let o='',i=0,m;
