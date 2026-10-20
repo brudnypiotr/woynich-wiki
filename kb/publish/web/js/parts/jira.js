@@ -38,7 +38,8 @@ export function mountJira(el, C) {
   const save = async () => {try {const r = await post('/api/settings', {profile: {jira_base_url: $k('url').value, jira_email: $k('email').value}});
       const pasted = el.querySelector('.tok input').value.trim();
       if (pasted) {secrets = await post('/api/secrets/' + SECRET_NAME, {value: pasted}); tok()}
-      note(n, 'Saved.'); if (r.profile.jira_base_url) runCheck('jira'); return true}
+      if (!r.profile.jira_base_url) {el.querySelector('.jstat').innerHTML = ''; note(n, 'Saved. Nothing to test yet: enter the Jira URL above.', false); return true}
+      note(n, 'Saved. Testing the connection…'); runCheck('jira'); return true}
     catch (e) {note(n, e.message, false); return false}};
   el.querySelector('[data-a=save]').onclick = save;
   if (p.jira_base_url) runCheck('jira');
