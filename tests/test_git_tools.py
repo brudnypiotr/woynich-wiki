@@ -39,7 +39,7 @@ def run(tool, **args):
 def test_git_history_tools(repo):
     _, head = repo
     tools = {t.name: t for t in chat.git_tools()}
-    assert set(tools) == {"git_log", "git_show", "git_blame"}
+    assert set(tools) == {"git_log", "git_show", "git_blame", "git_refs", "git_grep", "git_diff"}
     log = run(tools["git_log"], repo="demo", grep="proj-9")
     assert "Bob Ray <bob@example.com>" in log and "minimum rest is 12 h" in log and "first rule" not in log
     assert "first rule" in run(tools["git_log"], repo="demo", author="ann", path="rules")

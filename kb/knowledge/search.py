@@ -21,6 +21,15 @@ def db_path() -> Path:
     return p
 
 
+def ensure_fresh() -> None:
+    """Rebuild the index only when a source text or a wiki page is newer than it (cheap: file times only)."""
+    db, inst = db_path(), catalog.instance()
+    files = list((inst / "raw").glob("*/text.md")) + list((inst / "wiki").rglob("*.md"))
+    newest = max((f.stat().st_mtime for f in files), default=0.0)
+    if not db.exists() or db.stat().st_mtime < newest or db.stat().st_size == 0:
+        rebuild()
+
+
 def rebuild() -> int:
     con = sqlite3.connect(db_path())
     con.execute("DROP TABLE IF EXISTS seg")

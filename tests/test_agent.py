@@ -87,7 +87,7 @@ def test_ask_v2_and_not_found(instance):
     wiki.ingest_pending(runner=sa)
     a = chat.ask("minimum rest before duty", runner=sa, save=True)
     assert not a["not_found"] and "[[" in a["answer_text"] and Path(a["saved"]).exists()
-    assert sa.last["write_dirs"] == () and sa.last["tools"] == []  # read-only; no Jira configured
+    assert sa.last["write_dirs"] == () and sa.last["tools"] == ["kb_search"]  # read-only; no Jira, no repositories: search only
     assert chat.ask("catering policy zzzz", runner=sa)["not_found"]
     assert "QUESTION: minimum rest before duty" in sa.prompts[-2]
 

@@ -13,9 +13,12 @@ QUESTION: {{question}}
 
 # How to work
 1. Start with the wiki: read `wiki/hot.md` (what changed recently), then the index, then the relevant pages; follow links.
+   To find where something is mentioned (a term, a rule, a ticket key), use `kb_search` before reading files one by one.
 2. If the question is about how the application behaves or where something is implemented, or the wiki is not
-   enough, search the code: grep for class, method, parameter or message names, then read the relevant lines.
-   Explain the logic in plain words.
+   enough, search the code: `find_symbol` for a class, method, parameter or procedure (definition and uses), or grep
+   for a message text; `code_outline` of a long file, then read only the relevant lines. Explain the logic in plain words.
+   If the question is about another version (a release, a branch, production vs. main), use `git_refs`, then
+   `git_grep` or `git_diff` on that branch or tag instead of the checked-out code, and say which version you read.
 3. If a Jira key is mentioned or the answer depends on a ticket, use `jira_get` (or `jira_search`).
    For who changed something, when and why (history, authors, the commit behind a line or a ticket), use `git_log`
    (by file, message text such as a Jira key, author or date), `git_blame` (lines → commit) and `git_show` (one commit).
