@@ -42,7 +42,7 @@ def test_token_required(app):
 
 def test_static_app_files(app):
     base, token = app
-    with urllib.request.urlopen(base + "/static/app.js") as r:  # the app's code needs no token
+    with urllib.request.urlopen(base + "/static/js/main.js") as r:  # the app's code needs no token
         assert r.headers["Content-Type"].startswith("text/javascript") and r.headers["Cache-Control"] == "no-store"
     for bad in ("/static/../serve.py", "/static/%2e%2e/serve.py", "/static/nope.js", "/static/index.html"):
         with pytest.raises(urllib.error.HTTPError) as e:
