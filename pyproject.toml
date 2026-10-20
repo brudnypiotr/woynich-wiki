@@ -18,5 +18,8 @@ kb = "kb.cli:main"
 [tool.setuptools.packages.find]
 include = ["kb*"]
 
+[tool.setuptools.package-data]
+"kb.publish" = ["web/*", "web/**/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

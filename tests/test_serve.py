@@ -40,6 +40,19 @@ def test_token_required(app):
     assert e.value.code == 403
 
 
+def test_static_app_files(app):
+    base, token = app
+    with urllib.request.urlopen(base + "/static/app.js") as r:  # the app's code needs no token
+        assert r.headers["Content-Type"].startswith("text/javascript") and r.headers["Cache-Control"] == "no-store"
+    for bad in ("/static/../serve.py", "/static/%2e%2e/serve.py", "/static/nope.js", "/static/index.html"):
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(base + bad)
+        assert e.value.code == 404, bad
+    with urllib.request.urlopen(f"{base}/?t={token}") as r:
+        page = r.read().decode("utf-8")
+    assert f'"access": "{token}"' in page and "__CONFIG__" not in page and "__TITLE__" not in page
+
+
 def test_upload_steps_then_discussion(app):
     base, token = app
     job = call(base, token, "/api/upload", SAMPLE.read_bytes(), {"X-Filename": SAMPLE.name})
