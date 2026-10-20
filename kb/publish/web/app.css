@@ -202,3 +202,5 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
   body.side aside{transform:none}body.side .scrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:10}
   .menu{display:inline-grid}.col{padding:20px 16px 10px}.grid2,.sec-row,.repo{grid-template-columns:1fr}.repo .wide{grid-column:auto}.cwrap{padding:6px 12px 12px}.how{grid-template-columns:1fr}
   .stepper li{font-size:0}.top .ghost span{display:none}}
+.set details.alt{margin-top:12px}.set details.alt summary{cursor:pointer;color:var(--mute);font-size:13px}
+.set .howto{font-size:13px;margin:12px 0 4px}.set .cstat,.set .jstat{margin-top:6px}

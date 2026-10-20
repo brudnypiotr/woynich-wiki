@@ -3,6 +3,8 @@ default_adapter: copilot-sdk      # copilot-sdk | copilot-cli | fake
 # One model for every task (overrides the tiers below). Set per instance with `kb model set <id>`,
 # which writes instance/config/models.yaml; the env variable KB_MODEL overrides both.
 model_override: null
+# Preselected in the first-run setup (as the one model for every task) when the Copilot account offers it.
+recommended_model: gpt-6-luna
 # Agent sessions (ingest, ask, lint): one session per task; long sources may take several minutes.
 agent:
   timeout_s: 1800

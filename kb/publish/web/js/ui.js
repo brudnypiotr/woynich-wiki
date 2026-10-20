@@ -9,4 +9,5 @@ export const I = {menu: 'M4 6h16M4 12h16M4 18h16', clip: 'm21 11-8.5 8.5a5 5 0 0
   up: 'M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2', redo: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5', trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3'};
 export const topbar = (title, acts = '') => `<div class="top"><button class="icon menu" data-act="menu" title="Menu">${ic(I.menu)}</button><div class="ttl">${title}</div>${acts}</div>`;
 // a short status line next to buttons: green and fading, or red and staying
-export const msg = (id, t, ok = true) => {const e = $('#' + id); e.className = ok ? 'okmsg' : 'errmsg'; e.textContent = t; if (ok) setTimeout(() => {if (e.textContent === t) e.textContent = ''}, 4000)};
+export const msg = (id, t, ok = true) => note($('#' + id), t, ok);
+export const note = (e, t, ok = true) => {e.className = (ok ? 'okmsg' : 'errmsg') + ' note'; e.textContent = t; if (ok) setTimeout(() => {if (e.textContent === t) e.textContent = ''}, 4000)};

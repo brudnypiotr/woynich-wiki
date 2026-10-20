@@ -87,6 +87,7 @@ def state() -> dict:
     return {
         "model": {"effective": env or override or std, "source": "env" if env else ("override" if override else "tiers"),
                   "override": override or "", "env": env, "tiers": tiers, "tasks": m.get("tasks") or {},
+                  "recommended": str(m.get("recommended_model") or ""),
                   "timeout_s": int((m.get("agent") or {}).get("timeout_s") or 1800), "adapter": m.get("default_adapter")},
         "profile": {"title": (prof.get("instance") or {}).get("title") or "", "jira_base_url": jira.get("base_url") or "",
                     "jira_email": jira.get("email") or "",
