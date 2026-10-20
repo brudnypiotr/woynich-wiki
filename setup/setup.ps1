@@ -158,6 +158,7 @@ try {
   if ($pipCode -ne 0) { throw "pip exit code $pipCode" }
   Step 'Python packages' 'OK' 'requirements.txt installed'
   # Make `import kb` work from any folder (the embeddable Python ignores PYTHONPATH): a .pth file in site-packages.
+  # Shared by all clones (the last setup wins); kb.cmd does not rely on it (see below).
   $ErrorActionPreference = 'Continue'
   $site = (& $venvPy -c "import sysconfig; print(sysconfig.get_paths()['purelib'])" 2>$null | Select-Object -Last 1)
   $ErrorActionPreference = 'Stop'
@@ -212,13 +213,15 @@ else {
 }
 
 # ------------------------------------------------------------------ 5. kb.cmd + self-test
+# kb.cmd puts its own copy of the repository first on the module path. The embeddable Python ignores PYTHONPATH and
+# is shared by every clone; its woynich-wiki.pth points at whichever clone ran setup last, so `-m kb` alone would run
+# that clone's code (and its instance) from every kb.cmd.
 $shim = @"
 @echo off
 rem Runs from any folder, so relative file paths (kb add .\file.pdf) keep working.
 setlocal
-set "PYTHONPATH=%~dp0"
 set "PYTHONUTF8=1"
-"$venvPy" -m kb %*
+"$venvPy" -c "import sys; sys.path.insert(0, r'%~dp0.'); from kb.cli import main; sys.exit(main())" %*
 exit /b %ERRORLEVEL%
 "@
 Set-Content -Path (Join-Path $Repo 'kb.cmd') -Value $shim -Encoding ASCII
