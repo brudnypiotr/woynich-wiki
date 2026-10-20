@@ -93,6 +93,22 @@ def cmd_check(a) -> int:
     return 1 if any(v["ok"] is False for v in r.values()) else 0
 
 
+def cmd_diagnostics(a) -> int:
+    """Version and technical state for support (no keys, no content), saved to instance/reports/diagnostics.json."""
+    from kb.llm.gateway import Gateway
+    from kb.publish import diagnostics
+    r = diagnostics.report(Gateway(adapter=a.adapter))
+    out = config.paths().reports / "diagnostics.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(diagnostics.as_text(r), encoding="utf-8")
+    v = r["app"]
+    print(f"woynich-wiki {v['version']} ({v['commit'] or 'no git'}{', local changes' if v['dirty'] else ''}) · {r['runtime']['os']}")
+    for k, c in r["checks"].items():
+        print(f"{'OK  ' if c['ok'] else ('FAIL' if c['ok'] is False else '--  ')} {k:<8} {c['detail']}")
+    print(f"saved: {out}  (send this file for help; it has no keys and no content)")
+    return 0
+
+
 def cmd_ingest(a) -> int:
     from kb.knowledge import verify, wiki
     show = lambda step, detail: print(f"  {step}: {detail}", flush=True)
@@ -426,6 +442,8 @@ def main(argv=None) -> int:
     s.add_argument("action", choices=["get", "search", "add"]); s.add_argument("args", nargs="+")
     s.add_argument("--limit", type=int); s.add_argument("--links", action="store_true", help="add: also linked issues and sub-tasks")
     s.add_argument("--no-attachments", action="store_true"); s.set_defaults(fn=cmd_jira)
+    s = sub.add_parser("diagnostics", help="version and technical state for support, saved as instance/reports/diagnostics.json")
+    s.add_argument("--adapter"); s.set_defaults(fn=cmd_diagnostics)
     s = sub.add_parser("check", help="test the GitHub Copilot sign-in and the Jira token (no AI credits used)")
     s.add_argument("--adapter"); s.set_defaults(fn=cmd_check)
     s = sub.add_parser("ingest", help="the model reads new sources and writes the wiki (one agent session per source)")

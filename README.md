@@ -24,6 +24,10 @@ send `instance\reports\llm-smoke.json`), `kb init` and `kb serve`.
 | `serve.cmd [instance folder]` | starts the app in the browser; the first start opens the setup |
 | `kb.cmd <command>` | the command line (created by setup); each copy of the repository runs its own code and instance |
 
+The app's version and commit are under the status line in the sidebar; a click opens **About**, where *Collect diagnostics*
+gathers versions, paths, the model, counts, which keys are set (never their values), a Copilot and Jira check and the last
+errors, to copy or download for support. In a terminal: `kb diagnostics` (saved as `instance\reports\diagnostics.json`).
+
 ## First test: from a PDF to a cited answer (about 5 minutes)
 ```
 kb add samples\sources                 # fictional Example Air sources: OM PDF, meeting, Jira ticket, e-mail
@@ -70,7 +74,7 @@ Check with `kb repos`. Then:
   skill stores it) or Settings → Jira token; Jira URL in Settings. The assistant also fetches tickets while answering.
 
 ### All commands
-`add`, `collect inbox|git|jira`, `jira get|search|add`, `check`, `ingest`, `ask`, `code-ask`, `chat`, `repos`, `lint`, `remove`, `rollback`, `serve`, `search`, `check-answer`, `verify`, `site`, `status`, `model list|set|show`, `secrets set|check`, `login`, `llm-smoke`, `plugins`.
+`add`, `collect inbox|git|jira`, `jira get|search|add`, `check`, `diagnostics`, `ingest`, `ask`, `code-ask`, `chat`, `repos`, `lint`, `remove`, `rollback`, `serve`, `search`, `check-answer`, `verify`, `site`, `status`, `model list|set|show`, `secrets set|check`, `login`, `llm-smoke`, `plugins`.
 
 ## Documentation
 - [docs/architecture.html](docs/architecture.html): architecture (who decides what, workflows, source processing, modules, status) — open in a browser

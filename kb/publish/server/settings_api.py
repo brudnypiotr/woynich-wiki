@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 
 from kb.knowledge import catalog, pages
-from kb.publish import settings
+from kb.publish import diagnostics, settings
 from kb.publish.server import WRITE_LOCK, chat_api, ingest_api
 from kb.publish.server.http import route
 
@@ -56,6 +56,16 @@ def setup(h):
 @route("POST", r"/api/setup/(done|reset)")
 def setup_mark(h, what):
     return h.send(200, settings.setup_done(what == "done"))
+
+
+@route("GET", r"/api/about")
+def about(h):
+    return h.send(200, diagnostics.version())
+
+
+@route("GET", r"/api/diagnostics")
+def diagnostics_report(h):
+    return h.send(200, diagnostics.report(h.gw, list(ingest_api.JOBS.values())))
 
 
 @route("GET", r"/api/usage")

@@ -26,12 +26,16 @@ export function mark(v) {v = v || (location.hash.slice(1).split('/')[0] || 'new'
   document.querySelectorAll('#navp button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   document.querySelectorAll('#sl a').forEach(a => a.classList.toggle('on', a.dataset.id === sid))}
 
+// under the status line: the app's version and commit; a click opens About (diagnostics)
+async function appVersion() {try {const v = await api('/api/about');
+  $('#ver').textContent = `v${v.version}${v.commit ? ' · ' + v.commit : ''}${v.dirty ? ' · local changes' : ''}`} catch (e) {}}
+
 // onNew: "New discussion" while already on it (the hash does not change); onDelete: the × next to a discussion
 export function initShell({onNew, onDelete}) {
   $('#sl').onclick = e => {const d = e.target.closest('[data-del]'); if (d) {e.preventDefault(); e.stopPropagation(); return onDelete(d.dataset.del)}
     const a = e.target.closest('a'); if (a) location.hash = 's=' + a.dataset.id};
   $('#navp').onclick = e => {const b = e.target.closest('button'); if (!b) return; if (b.dataset.v === 'new' && !location.hash.slice(1)) return onNew(); location.hash = b.dataset.v === 'new' ? '' : b.dataset.v};
   $('#usage').onclick = () => usage(true);
-  setInterval(status, 5000); status();
+  setInterval(status, 5000); status(); appVersion();
   usage(); setInterval(() => usage(), 60000);
   loadSessions()}

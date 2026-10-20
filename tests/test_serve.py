@@ -66,6 +66,16 @@ def test_first_run_setup_flag(app):
     assert call(base, token, "/api/settings")["model"]["recommended"] == "gpt-6-luna"
 
 
+def test_about_and_diagnostics(app):
+    base, token = app
+    v = call(base, token, "/api/about")
+    assert v["version"] == "0.2.0" and "commit" in v
+    d = call(base, token, "/api/diagnostics")
+    assert d["app"]["version"] == v["version"] and set(d["checks"]) == {"copilot", "jira"}
+    assert all(isinstance(x, bool) or x is None for x in d["secrets"].values())  # whether a key is set, never its value
+    assert d["knowledge_base"]["sources"] == 0 and d["recent_errors"] == []
+
+
 def test_upload_steps_then_discussion(app):
     base, token = app
     job = call(base, token, "/api/upload", SAMPLE.read_bytes(), {"X-Filename": SAMPLE.name})
