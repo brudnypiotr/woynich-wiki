@@ -637,7 +637,8 @@ a.wl:hover{color:var(--vio);text-decoration-color:currentColor;opacity:1}
 .trace ol{list-style:none;margin:8px 0 2px 6px;padding:0 0 0 14px;border-left:2px solid var(--line)}
 .trace li{margin:5px 0;display:flex;gap:8px;align-items:baseline}.trace li>b{flex:none;width:16px;text-align:center;font-weight:400}
 .trace li>span,.trace li>i{flex:1;min-width:0;overflow-wrap:anywhere}
-.trace li i{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
+.trace li i{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;font-style:normal;line-height:1.45;color:var(--ink2)}
+.trace li i b{font-weight:600}
 .trace li i.more{cursor:pointer}.trace li i.full{-webkit-line-clamp:unset}
 .trace code{font:12px ui-monospace,Consolas,monospace;color:var(--ink2)}
 .trace small{margin-left:auto;padding-left:8px;opacity:.7;font-size:11px;flex:none}
@@ -948,9 +949,12 @@ let IM=[];
 function addImgs(fs){for(const f of fs){if(!f.type.startsWith('image/'))continue;const r=new FileReader();r.onload=()=>{IM.push({name:f.name||'screenshot.png',data:r.result});showImgs()};r.readAsDataURL(f)}}
 function showImgs(){const el=$('#imgs');if(!el)return;el.innerHTML=IM.map((x,k)=>`<span><img src="${x.data}" alt="">${esc(x.name)}<b onclick="IM.splice(${k},1);showImgs()" title="Remove">×</b></span>`).join('')}
 function userMsg(q,imgs){return `<div class="msg user"><div class="bubble">${esc(q)}</div>${imgs&&imgs.length?`<div class="att">📎 ${imgs.map(esc).join(', ')}</div>`:''}</div>`}
-function stepHtml(e){const t=String(e.text||'');
-  if(e.kind==='thinking'){const more=t.length>240||t.split('\n').length>3;  // only long thoughts are clamped, so only they expand
-    return `<li><b>💭</b><i${more?` class="more" title="Click to show all" onclick="this.classList.toggle('full')"`:''}>${inl(t)}</i><small>${e.s}s</small></li>`}
+// a thought opened in the live view stays open while the trace is redrawn every second
+function tglThought(el){el.classList.toggle('full');const k=el.dataset.k;if(k!=null&&PEND)PEND.open[el.classList.contains('full')?'add':'delete'](+k)}
+function stepHtml(e,k,live){const t=String(e.text||'');
+  if(e.kind==='thinking'){const x=t.replace(/\n{2,}/g,'\n'),more=x.length>240||x.split('\n').length>3;  // only long thoughts are clamped, so only they expand
+    const full=live&&PEND&&PEND.open.has(k)?' full':'';
+    return `<li><b>💭</b><i${more?` class="more${full}"${live?` data-k="${k}"`:''} title="Click to show all" onclick="tglThought(this)"`:''}>${inl(x)}</i><small>${e.s}s</small></li>`}
   if(e.kind==='intent')return `<li><b>→</b><span>${esc(t)}</span><small>${e.s}s</small></li>`;
   const m=t.match(/^(\S+)\s*(.*)$/)||[,t,''],tool=m[1],arg=m[2];
   const verb={view:'Read',glob:'Find',grep:'Search',rg:'Search'}[tool]||tool;
@@ -958,7 +962,7 @@ function stepHtml(e){const t=String(e.text||'');
     short=full.split(/,\s*/).map(x=>{const p=x.split('/');return p.length>4?'…/'+p.slice(-3).join('/'):x}).join(', ');
   return `<li><b>${verb==='Read'?'📄':'🔎'}</b><span>${esc(verb)} <code title="${esc(full)}">${esc(short)}</code></span><small>${e.s}s</small></li>`}
 function traceHtml(ev,open,label){if(!ev||!ev.length)return '';const th=ev.filter(e=>e.kind==='thinking').length,rd=ev.length-th;
-  return `<details class="trace"${open?' open':''}><summary>${label||`Thought${th>1?' '+th+'×':''} and read ${rd} item${rd===1?'':'s'}`} ▾</summary><ol>${ev.map(stepHtml).join('')}</ol></details>`}
+  return `<details class="trace"${open?' open':''}><summary>${label||`Thought${th>1?' '+th+'×':''} and read ${rd} item${rd===1?'':'s'}`} ▾</summary><ol>${ev.map((e,k)=>stepHtml(e,k,open)).join('')}</ol></details>`}
 function checkHtml(c){if(!c)return '';const b=c.broken||[];
   if(b.length)return `<span class="badc" title="${esc(b.join('\n'))}" onclick="alert(this.title)">⚠ ${b.length} citation${b.length>1?'s':''} not found</span>`;
   return c.ok?`<span class="okc" title="Every link and page/time reference was found in the wiki and its sources">✓ ${c.ok} citation${c.ok>1?'s':''} checked</span>`:''}
@@ -985,7 +989,7 @@ function busyUi(on){const b=$('#ask');if(!b)return;const mine=on&&pendHere();b.d
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&BUSY)stopAnswer()});
 async function go(){if(BUSY){if(pendHere())stopAnswer();return}const q=$('#q').value.trim();if(!q)return;
   const code=$('#code').getAttribute('aria-pressed')==='true',imgs=IM;IM=[];showImgs();$('#q').value='';$('#q').style.height='auto';
-  BUSY=true;PEND={sid:S?S.id:null,q,imgs:imgs.map(x=>x.name),now:`Reading the wiki${code?' and the code':''}…`,ev:[]};busyUi(true);
+  BUSY=true;PEND={sid:S?S.id:null,q,imgs:imgs.map(x=>x.name),now:`Reading the wiki${code?' and the code':''}…`,ev:[],open:new Set()};busyUi(true);
   const el=$('#turns');if(el.className==='hero'){el.className='col';el.innerHTML=''}
   el.insertAdjacentHTML('beforeend',pendHtml());scrollEnd();
   let live=true,started=false,since=0;
