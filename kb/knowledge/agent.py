@@ -74,7 +74,7 @@ class Sandbox:
     def _rel(self, p: str) -> str:
         try:
             q = Path(p)
-            return str((q if q.is_absolute() else self.root / q).resolve().relative_to(self.root.resolve()))
+            return (q if q.is_absolute() else self.root / q).resolve().relative_to(self.root.resolve()).as_posix()  # wiki/... also on Windows
         except (ValueError, OSError):
             return p
 

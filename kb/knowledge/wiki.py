@@ -92,7 +92,7 @@ def ingest_source(sid: str, runner=None, progress=None, cancelled=lambda: False)
     try:
         ensure_skeleton()
         slug = source_slug(rec)
-        before = {str(p.relative_to(inst)): p.stat().st_mtime for p in pages.wiki().rglob("*.md")}
+        before = {p.relative_to(inst).as_posix(): p.stat().st_mtime for p in pages.wiki().rglob("*.md")}
         task = agent.prompt("ingest", title=rec["title"], kind=rec["kind"], source_id=sid, source_slug=slug,
                             text_path=f"raw/{sid}/text.md", chars=f"{len(text):,}", extra=_extra(rec, d, len(text)),
                             today=pages.today())
@@ -103,7 +103,7 @@ def ingest_source(sid: str, runner=None, progress=None, cancelled=lambda: False)
         if cancelled():
             raise Cancelled()
         step("checking", "links, citations, contradictions")
-        after = {str(p.relative_to(inst)): p.stat().st_mtime for p in pages.wiki().rglob("*.md")}
+        after = {p.relative_to(inst).as_posix(): p.stat().st_mtime for p in pages.wiki().rglob("*.md")}
         created = sorted(set(after) - set(before))
         updated = sorted(k for k in after if k in before and after[k] != before[k])
         src_page = pages.wiki() / "sources" / f"{slug}.md"

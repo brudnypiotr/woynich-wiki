@@ -209,4 +209,4 @@ def save_page(h, sid):
         p.write_text("\n".join(body), encoding="utf-8")
         wiki._log_line(f"discussion saved: [[{p.stem}]] ({len(s['turns'])} questions)")
         gitops.commit(catalog.instance(), [pages.wiki()], gitops.message("ingest", f"discussion: {s['topic'][:80]}", scope="answer"))
-    return h.send(200, {"saved": str(p.relative_to(catalog.instance()))})
+    return h.send(200, {"saved": p.relative_to(catalog.instance()).as_posix()})

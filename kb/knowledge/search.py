@@ -36,7 +36,7 @@ def rebuild() -> int:
                 n += 1
     wiki = catalog.instance() / "wiki"
     for page in sorted(wiki.rglob("*.md")) if wiki.exists() else []:
-        rel = str(page.relative_to(wiki))
+        rel = page.relative_to(wiki).as_posix()
         if rel in ("log.md",):
             continue
         con.execute("INSERT INTO seg VALUES (?,?,?,?,?)", ("page", rel, page.stem, "", page.read_text(encoding="utf-8")[:20000]))
