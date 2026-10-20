@@ -293,7 +293,7 @@ class Conversation:
         return getattr(self.live, "id", None) if self.live else self.resume
 
     def wiki_changed(self, paths) -> None:
-        self.changed |= {str(p) for p in paths}
+        self.changed |= {str(p).replace("\\", "/") for p in paths}  # wiki/... as in the prompts, also on Windows
 
     def ask(self, question: str, attachments=(), focus: str = "wiki", progress=None) -> dict:
         from kb.knowledge import wiki
