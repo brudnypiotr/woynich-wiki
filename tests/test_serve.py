@@ -51,6 +51,10 @@ def test_static_app_files(app):
     with urllib.request.urlopen(f"{base}/?t={token}") as r:
         page = r.read().decode("utf-8")
     assert f'"access": "{token}"' in page and "__CONFIG__" not in page and "__TITLE__" not in page
+    for path, hdr, code in (("/api/nope", {"X-KB-Token": token}, 404), ("/api/nope", {}, 403), ("/", {}, 403)):
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(urllib.request.Request(base + path, headers=hdr))
+        assert e.value.code == code, path
 
 
 def test_upload_steps_then_discussion(app):
