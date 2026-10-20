@@ -227,9 +227,13 @@ exit /b %ERRORLEVEL%
 Set-Content -Path (Join-Path $Repo 'kb.cmd') -Value $shim -Encoding ASCII
 Step 'Command' 'OK' 'kb.cmd created (run: kb --help)'
 
+Write-Host 'Self-test: running all tests. This can take a few minutes on Windows (antivirus checks every file and process)...' -ForegroundColor Cyan
+$t0 = Get-Date
 Push-Location $Repo
 try {
-  if ((Invoke-Native $venvPy @('-m', 'pytest', '-q', '-p', 'no:cacheprovider')) -eq 0) { Step 'Self-test' 'OK' 'all tests passed' } else { Step 'Self-test' 'WARN' 'some tests failed; see setup.log' }
+  $code = Invoke-Native $venvPy @('-m', 'pytest', '-q', '-p', 'no:cacheprovider')
+  $took = '{0:N0} s' -f ((Get-Date) - $t0).TotalSeconds
+  if ($code -eq 0) { Step 'Self-test' 'OK' "PASSED: all tests passed ($took)" } else { Step 'Self-test' 'WARN' "FAILED: some tests failed ($took); see setup.log" }
 } finally { Pop-Location }
 
 Write-Host ''
