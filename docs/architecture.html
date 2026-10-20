@@ -156,7 +156,7 @@ screenshots.</p>
 <div class="flow">
 <div class="step"><span class="n">1</span><div><b>doctor.cmd</b> read-only machine check: PowerShell, policies, AppLocker, proxy, reachability, Python, Git, Copilot.<br><small>setup/doctor.ps1 → doctor-report.json</small></div><span class="who s">Scripts</span></div>
 <div class="step"><span class="n">2</span><div><b>setup.cmd</b> private Python 3.12 (installer or embeddable), packages, Git hooks, Copilot runtime, kb.cmd, self-test.<br><small>setup/setup.ps1 → setup.log</small></div><span class="who s">Scripts</span></div>
-<div class="step"><span class="n">3</span><div><b>copilot login</b>, <b>kb llm-smoke</b>, <b>kb model set gpt-6-luna</b>, <b>kb init</b><br><small>instance created as its own Git repository</small></div><span class="who u">User</span></div>
+<div class="step"><span class="n">3</span><div><b>serve.cmd</b> starts <code>kb serve</code>; the first start creates the instance and opens the first-run setup: Copilot sign-in, model (gpt-6-luna preselected), Jira, code repositories<br><small>instance created as its own Git repository; in a terminal: copilot login, kb llm-smoke, kb model set, kb init</small></div><span class="who u">User</span></div>
 </div>
 <h3>4.2 Add a source</h3>
 <div class="flow">
@@ -237,7 +237,7 @@ screenshots.</p>
 <tr><td><code>kb/publish/serve.py</code>, <code>server/</code></td><td>local web app server (ADR-0020): route table (<code>http</code>), the app and dashboard (<code>web</code>), discussions (<code>chat_api</code>), upload queue (<code>ingest_api</code>), settings, keys, usage, first-run setup (<code>settings_api</code>); <code>serve.py</code> is the facade</td></tr>
 <tr><td><code>kb/publish/web/</code></td><td>the browser app, no build step: <code>index.html</code> template, <code>app.css</code>, ES modules in <code>js/</code> (chat, live trace, uploads, wiki, settings, first-run setup) and shared settings parts in <code>js/parts/</code></td></tr>
 <tr><td><code>kb/core/</code></td><td>config, plugin registry, schemas, Git commits, secrets (Credential Manager), pre-commit guard</td></tr>
-<tr><td><code>setup/</code>, <code>doctor.cmd</code>, <code>setup.cmd</code></td><td>Windows bootstrap without admin rights (PowerShell 5.1 compatible)</td></tr>
+<tr><td><code>setup/</code>, <code>doctor.cmd</code>, <code>setup.cmd</code>, <code>serve.cmd</code></td><td>Windows bootstrap without admin rights (PowerShell 5.1 compatible); <code>serve.cmd [instance]</code> starts the app; the generated <code>kb.cmd</code> runs its own clone</td></tr>
 <tr><td><code>AGENTS.md</code>, <code>.agents/skills/</code></td><td>Copilot CLI instructions and skills: kb-add, kb-ingest, kb-ask, kb-code, kb-status, kb-verify</td></tr>
 <tr><td><code>tests/</code></td><td>30 tests offline, with a scripted agent instead of the model</td></tr></table>
 </section>

@@ -26,7 +26,7 @@ Next: the first real Orders documents ([REAL-DATA-TEST.md](REAL-DATA-TEST.md)).
 | Milestone | Delivered |
 |---|---|
 | M0 Foundation | blueprint repo (private), plugin registry, JSON schemas, config, scripted commits, pre-commit guard (secrets, schemas), ADR-0001…0017, PRODUCT.md |
-| M1 Setup | `doctor.cmd` (read-only machine check), `setup.cmd` (Python per user or embeddable, packages, Git, hooks, Copilot runtime, self-test), verified on the work laptop |
+| M1 Setup | `doctor.cmd` (read-only machine check), `setup.cmd` (Python per user or embeddable, packages, Git, hooks, Copilot runtime, self-test), verified on the work laptop; `serve.cmd` starts the app, the first start opens a setup (Copilot, model, Jira, repositories); each clone's `kb.cmd` runs its own code |
 | S1 Model from scripts | Copilot SDK and CLI adapters, both verified on Windows; `kb model list/set` (GPT-6 Luna) |
 | M2 Collect and extract | inbox, files, Git repository at a ref, Jira (JQL); PDF (pages, tables, figures), DOCX, HTML, e-mail, VTT/SRT, Jira JSON, code, text |
 | M3 Catalog and search | one source = one commit, dedup by SHA-256, large originals in `store/`, SQLite FTS5 search, glossary by rules |

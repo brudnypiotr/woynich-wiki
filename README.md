@@ -8,12 +8,21 @@ This repository is the **blueprint**: generic code, templates and instructions w
 1. Clone or unzip the repository into a **short path outside OneDrive**, e.g. `C:\kb\woynich-wiki`.
 2. Double-click **`doctor.cmd`**. It is a read-only check of the machine that changes nothing. If it reports blockers, send `doctor-report.json`.
 3. Double-click **`setup.cmd`**. It installs a private Python and the packages, finds or unpacks Git, and downloads the Copilot runtime. Safe to run again.
-4. In a terminal in the repository folder:
-   - `kb login`: sign in to GitHub Copilot once, in the browser
-   - `kb llm-smoke`: checks that scripts can use the model; send `instance\reports\llm-smoke.json`
-   - `kb init`: creates the knowledge base instance (`instance\`, its own git repository)
-5. Double-click **`serve.cmd`** to start the app (`kb serve`) in the browser; keep its window open. Another knowledge
-   base: `serve.cmd C:\kb\other-instance` (sets `KB_INSTANCE` for that window only).
+4. Double-click **`serve.cmd`**. It starts the app (`kb serve`) in the browser; keep its window open. The first start
+   creates the knowledge base instance (`instance\`, its own git repository) and opens a short **setup**: sign in to
+   GitHub Copilot, choose the model (gpt-6-luna preselected when your account offers it), Jira and code repositories
+   (both optional). Settings → "Run the first-run setup again" opens it later.
+   Another knowledge base: `serve.cmd C:\kb\other-instance` (sets `KB_INSTANCE` for that window only).
+
+In a terminal the same steps are `kb login` (Copilot sign-in), `kb llm-smoke` (checks that scripts can use the model;
+send `instance\reports\llm-smoke.json`), `kb init` and `kb serve`.
+
+| Script | What it does |
+|---|---|
+| `doctor.cmd` | read-only check of the machine (PowerShell, policies, proxy, Python, Git, Copilot); changes nothing |
+| `setup.cmd` | private Python and packages, Git, Copilot runtime, `kb.cmd`, self-test; safe to run again |
+| `serve.cmd [instance folder]` | starts the app in the browser; the first start opens the setup |
+| `kb.cmd <command>` | the command line (created by setup); each copy of the repository runs its own code and instance |
 
 ## First test: from a PDF to a cited answer (about 5 minutes)
 ```

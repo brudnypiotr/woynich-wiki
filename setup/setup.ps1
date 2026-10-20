@@ -238,9 +238,11 @@ $warned = @($script:Steps | Where-Object { $_.status -eq 'WARN' }).Count
 if ($failed) { Write-Host 'Setup finished with errors.' -ForegroundColor Red }
 elseif ($warned) { Write-Host 'Setup finished with warnings.' -ForegroundColor Yellow }
 else { Write-Host 'Setup finished.' -ForegroundColor Green }
-Write-Host 'Next steps:'
-Write-Host '  1. kb login        (sign in to GitHub Copilot once, in the browser)'
-Write-Host '  2. kb llm-smoke    (checks that scripts can use the model; send instance\reports\llm-smoke.json)'
+Write-Host 'Next step: double-click serve.cmd in this folder. It starts the app in your browser; keep its window open.'
+Write-Host '  The first start opens a short setup: GitHub Copilot sign-in, the model, Jira and code repositories (optional).'
+Write-Host '  Another knowledge base: serve.cmd C:\kb\other-instance'
+Write-Host 'In a terminal instead: kb login (Copilot sign-in), kb llm-smoke (model check), kb serve.'
+Write-Host "Each copy of the repository runs its own code and its own instance\ through its own kb.cmd ($Repo)."
 $script:Steps | ConvertTo-Json | Set-Content (Join-Path $Base 'setup-result.json') -Encoding UTF8
 try { Stop-Transcript | Out-Null } catch { Write-Verbose 'no transcript' }
 if ($failed) { exit 2 } else { exit 0 }
