@@ -157,11 +157,12 @@ def _quiet(lp, ctx):  # events the SDK cannot parse (attachment echo, newer runt
 
 
 def _session_kwargs(box: Sandbox, model: str, root: Path, tools, streaming: bool = False) -> dict:
-    # reasoning_summary: without it the runtime sends no thinking events (the CLI asks for it itself)
+    # reasoning_summary: without it the runtime sends no thinking events (the CLI asks for it itself); "detailed",
+    # not "concise": concise is only headings ("Analyzing code…"), detailed says what the model weighed
     kw = dict(on_permission_request=box.on_permission, hooks={"on_pre_tool_use": box.pre_tool_use},
               available_tools=sorted(READ_TOOLS | (WRITE_TOOLS if box.write_dirs else set()) | set(box.custom)),
               enable_skills=False, skip_custom_instructions=True, enable_config_discovery=False, working_directory=str(root),
-              reasoning_summary="concise")
+              reasoning_summary="detailed")
     if streaming:
         kw["streaming"] = True
     if model and model != "auto":
