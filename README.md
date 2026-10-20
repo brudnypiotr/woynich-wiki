@@ -50,7 +50,7 @@ Check with `kb repos`. Then:
 - `kb ask "What does this screen show?" --image screenshot.png` → the model explains the screen with the wiki;
 - `kb chat` → a conversation in the terminal (`/image <file>`, `/save`, `/exit`); in the browser: `kb serve` → a chat
   (paste a screenshot with Ctrl+V, toggle "Code" to include the repositories). On a new knowledge base `kb serve` starts
-  with a **first-run setup** (GitHub Copilot sign-in, Jira with where to create its token, code repositories); it can be
+  with a **first-run setup** (GitHub Copilot sign-in, the model with gpt-6-luna preselected, Jira with where to create its token, code repositories); it can be
   run again from Settings. **Settings** in `kb serve`: model per
   task tier or one model for all, GitHub Copilot sign-in and quota, keys and tokens (Windows Credential Manager), Jira URL;
 - Jira (read-only): `kb jira get PROJ-123` prints an issue (fields, links, custom fields, description, comments as

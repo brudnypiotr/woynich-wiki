@@ -31,5 +31,6 @@ Status: accepted (2026-10-20)
 - Each file has one job and fits on a few screens; a new view or API is a new module plus one import.
 - The JS is readable in the browser's dev tools as written; `node --check` catches syntax errors per file.
 - Browsers cache nothing (`Cache-Control: no-store`), so an update is picked up on reload.
-- Not done yet: the model choice as a part (Settings keeps its own model section; the first-run setup has no model
-  step), and `kb/publish/site.py` (the dashboard) still builds its HTML in Python.
+- The model choice is a part too (`parts/model.js`): Settings mounts it, and the first-run setup has a model step
+  after the Copilot sign-in that preselects `recommended_model` (gpt-6-luna) when the account offers it.
+- Not done yet: `kb/publish/site.py` (the dashboard) still builds its HTML in Python.

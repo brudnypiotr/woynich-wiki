@@ -4,11 +4,13 @@ import {$, esc, topbar} from './ui.js';
 import {api, post} from './api.js';
 import {mark} from './shell.js';
 import {mountCopilot} from './parts/copilot.js';
+import {mountModel} from './parts/model.js';
 import {mountJira} from './parts/jira.js';
 import {mountRepos} from './parts/repos.js';
 
 const STEPS = [
   {key: 'copilot', title: 'Sign in to GitHub Copilot', text: 'The assistant runs on your GitHub Copilot subscription. Sign in once in the browser; if that is not possible, store a GitHub token with Copilot access.', mount: mountCopilot},
+  {key: 'model', title: 'Choose the model', text: 'The model that writes the wiki and answers questions. The recommended one is preselected when your Copilot account offers it; each source or question costs AI credits. You can change it later in Settings.', mount: (el, C) => mountModel(el, C, {setup: true})},
   {key: 'jira', title: 'Connect Jira', optional: true, text: 'Optional. With Jira the assistant can read tickets you paste into a question (read only). You can add it later in Settings.', mount: mountJira},
   {key: 'repos', title: 'Add code repositories', optional: true, text: 'Optional. Local clones the assistant may read (never change), so answers can point to the exact line of code. You can add them later in Settings.', mount: mountRepos},
 ];
