@@ -763,7 +763,7 @@ const I={menu:'M4 6h16M4 12h16M4 18h16',clip:'m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a
   send:'M12 19V5m0 0-6 6m6-6 6 6',save:'M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6',ext:'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',file:'M6 3h8l5 5v13H6zM14 3v5h5',
   up:'M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',redo:'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5',trash:'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3'};
 const topbar=(title,acts='')=>`<div class="top"><button class="icon menu" onclick="document.body.classList.add('side')" title="Menu">${ic(I.menu)}</button><div class="ttl">${title}</div>${acts}</div>`;
-let S=null,BUSY=false,STEPS=['saved','extracted','writing','checking','verify','done'];
+let S=null,BUSY=false,PEND=null,STEPS=['saved','extracted','writing','checking','verify','done'];
 const STEP_LABEL={saved:'Saved',extracted:'Text extracted',writing:'Writing wiki',checking:'Checking',verify:'Citations verified',done:'Done'};
 
 async function status(){try{const s=await api('/api/status');$('#st').textContent=`${s.sources} sources · ${s.pages} pages · ${s.model}${s.busy?' · working…':''}${s.queued?` · ${s.queued} queued`:''}`;
@@ -828,12 +828,12 @@ const V={
   if(s)$('#delc').onclick=()=>delSession(S.id);
   if(s)$('#save').onclick=async()=>{const b=$('#save');b.disabled=true;try{const r=await api('/api/sessions/'+S.id+'/save',{method:'POST'});b.innerHTML=ic('M5 12l5 5 9-10',2)+'<span>Saved</span>';b.title=r.saved}
     catch(e){alert(e.message);b.disabled=false}};
-  const q=$('#q'),ask=$('#ask'),fit=()=>{q.style.height='auto';q.style.height=q.scrollHeight+'px';ask.disabled=!BUSY&&!q.value.trim()};
+  const q=$('#q'),ask=$('#ask'),fit=()=>{q.style.height='auto';q.style.height=q.scrollHeight+'px';ask.disabled=BUSY?!pendHere():!q.value.trim()};
   q.oninput=fit;q.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();if(!BUSY)go()}};
   $('#code').onclick=e=>{const b=e.currentTarget;b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')!=='true')};
   $('#att').onclick=()=>$('#img').click();$('#img').onchange=()=>{addImgs([...$('#img').files]);$('#img').value=''};
   q.onpaste=e=>{const fs=[...((e.clipboardData||{}).files||[])];if(fs.length){e.preventDefault();addImgs(fs)}};
-  ask.onclick=go;IM=[];showImgs();q.focus()},
+  ask.onclick=go;IM=[];showImgs();busyUi(BUSY);q.focus()},
  add(){mark('add');
   $('#main').innerHTML=topbar('Add sources')+`<div class="scroll"><div class="col wide">
    <div class="pagehead"><div class="kicker">Add sources</div><h2>Feed the knowledge base</h2>
@@ -963,37 +963,44 @@ function botMsg(t){const md=t.markdown||(t.sentences||[]).map(s=>s.text).join(' 
   return `<div class="msg bot">${MARK}<div class="body">${traceHtml(t.trace,false)}<div class="md ${t.not_found?'nf':''}">${t.not_found&&!md.trim()?'<p>No answer found in the knowledge base. Try other words, or add a source that covers it.</p>':mdl(md)}</div>
    <div class="meta">${checkHtml(t.check)}${meta.map(x=>`<span>${x}</span>`).join('')}${pr.length?`<details><summary>${pr.length} page${pr.length>1?'s':''} read ▾</summary><div>${pr.map(p=>`<a class="wl" href="#wiki/w:${encodeURIComponent(String(p).replace(/^.*\//,'').replace(/\.md$/,''))}">${esc(String(p).replace(/^.*\//,'').replace(/\.md$/,''))}</a>`).join(' ')}</div></details>`:''}</div></div></div>`}
 const scrollEnd=()=>{const s=$('#scroll');if(s)s.scrollTop=s.scrollHeight};
-function renderTurns(){const el=$('#turns');
-  if(!S||!S.turns.length){el.className='hero';el.innerHTML=`${MARK}<h2>${S?esc(S.topic):'What would you like to know?'}</h2>
+// the question being answered lives in PEND, not only in the DOM: leaving the chat and coming back shows it again
+const pendHere=()=>!!PEND&&(PEND.sid?!!S&&S.id===PEND.sid:!S);
+const pendHtml=()=>userMsg(PEND.q,PEND.imgs)+`<div class="msg bot" id="pending">${MARK}<div class="body"><div class="typing"><i></i><i></i><i></i> <span id="pnow">${esc(PEND.now)}</span></div><div id="ptrace">${traceHtml(PEND.ev,true,'Working… '+PEND.ev.length+' step'+(PEND.ev.length>1?'s':''))}</div></div></div>`;
+function renderTurns(){const el=$('#turns'),p=pendHere();
+  if(!p&&(!S||!S.turns.length)){el.className='hero';el.innerHTML=`${MARK}<h2>${S?esc(S.topic):'What would you like to know?'}</h2>
     <p>Ask a question. The assistant reads the wiki (and the code, Jira or your screenshots when useful) and cites every source it uses.</p>
     <div class="chips">${['What are the main topics in the wiki?','Which sources contradict each other?','Summarise the most recent source'].map(x=>`<button>${x}</button>`).join('')}</div>`;
     el.querySelectorAll('.chips button').forEach(b=>b.onclick=()=>{$('#q').value=b.textContent;$('#q').oninput();go()});return}
-  el.className='col';el.innerHTML=S.turns.map(t=>userMsg(t.question,t.images)+botMsg(t)).join('');scrollEnd()}
-async function stopAnswer(){if(!BUSY||!S)return;const p=$('#pnow');if(p)p.textContent='Stopping…';
-  try{await api('/api/sessions/'+S.id+'/stop',{method:'POST'})}catch(e){if(p)p.textContent=e.message}}
-function busyUi(on){const b=$('#ask');if(!b)return;b.disabled=false;b.classList.toggle('stop',on);b.title=on?'Stop (Esc)':'Send (Enter)';
-  b.innerHTML=on?'<svg class="i" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>':ic(I.send,2.2);
+  el.className='col';el.innerHTML=(S?S.turns.map(t=>userMsg(t.question,t.images)+botMsg(t)).join(''):'')+(p?pendHtml():'');scrollEnd()}
+async function stopAnswer(){if(!BUSY||!pendHere()||!PEND.sid)return;const p=$('#pnow');if(p)p.textContent='Stopping…';
+  try{await api('/api/sessions/'+PEND.sid+'/stop',{method:'POST'})}catch(e){if(p)p.textContent=e.message}}
+function busyUi(on){const b=$('#ask');if(!b)return;const mine=on&&pendHere();b.disabled=on&&!mine;b.classList.toggle('stop',mine);
+  b.title=mine?'Stop (Esc)':on?'Another discussion is still being answered':'Send (Enter)';
+  b.innerHTML=mine?'<svg class="i" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>':ic(I.send,2.2);
   if(!on)$('#q').oninput()}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&BUSY)stopAnswer()});
-async function go(){if(BUSY)return stopAnswer();const q=$('#q').value.trim();if(!q)return;BUSY=true;busyUi(true);
+async function go(){if(BUSY){if(pendHere())stopAnswer();return}const q=$('#q').value.trim();if(!q)return;
   const code=$('#code').getAttribute('aria-pressed')==='true',imgs=IM;IM=[];showImgs();$('#q').value='';$('#q').style.height='auto';
+  BUSY=true;PEND={sid:S?S.id:null,q,imgs:imgs.map(x=>x.name),now:`Reading the wiki${code?' and the code':''}…`,ev:[]};busyUi(true);
   const el=$('#turns');if(el.className==='hero'){el.className='col';el.innerHTML=''}
-  el.insertAdjacentHTML('beforeend',userMsg(q,imgs.map(x=>x.name))+`<div class="msg bot" id="pending">${MARK}<div class="body"><div class="typing"><i></i><i></i><i></i> <span id="pnow">Reading the wiki${code?' and the code':''}…</span></div><div id="ptrace"></div></div></div>`);scrollEnd();
-  let live=true,started=false,since=0,EV=[];
-  const tick=async()=>{if(!live||!S)return setTimeout(()=>live&&tick(),700);
-    try{const r=await api(`/api/sessions/${S.id}/progress?since=${started?since:0}`);
-      if(r.running&&!started){started=true;EV=[]}
-      if(started&&r.events.length){EV=EV.concat(r.events);since=r.total;const pt=$('#ptrace');
-        if(pt){pt.innerHTML=traceHtml(EV,true,'Working… '+EV.length+' step'+(EV.length>1?'s':''));const l=EV[EV.length-1];
-          $('#pnow').textContent=l.kind==='thinking'?'Thinking…':l.kind==='intent'?l.text:'Reading '+String(l.text).replace(/^\S+\s*/,'').replace(/^.*[\\/]/,'')+'…';scrollEnd()}}}
+  el.insertAdjacentHTML('beforeend',pendHtml());scrollEnd();
+  let live=true,started=false,since=0;
+  const tick=async()=>{if(!live)return;if(!PEND.sid)return setTimeout(tick,700);
+    try{const r=await api(`/api/sessions/${PEND.sid}/progress?since=${started?since:0}`);if(!live)return;
+      if(r.running&&!started){started=true;PEND.ev=[]}
+      if(started&&r.events.length){PEND.ev=PEND.ev.concat(r.events);since=r.total;const l=PEND.ev[PEND.ev.length-1];
+        PEND.now=l.kind==='thinking'?'Thinking…':l.kind==='intent'?l.text:'Reading '+String(l.text).replace(/^\S+\s*/,'').replace(/^.*[\\/]/,'')+'…';
+        const pt=$('#ptrace');if(pt){pt.innerHTML=traceHtml(PEND.ev,true,'Working… '+PEND.ev.length+' step'+(PEND.ev.length>1?'s':''));$('#pnow').textContent=PEND.now;scrollEnd()}}}
     catch(e){}if(live)setTimeout(tick,800)};
   tick();
-  try{if(!S){S=await api('/api/sessions',{method:'POST',body:JSON.stringify({topic:q.replace(/\s+/g,' ').slice(0,80)})});
-      history.replaceState(null,'','#s='+S.id);$('.top .ttl').textContent=S.topic;loadSessions()}
-    const t=await api('/api/sessions/'+S.id+'/ask',{method:'POST',body:JSON.stringify({question:q,images:imgs,focus:code?'code':'wiki'})});
-    S.turns.push(t);if(!$('#save'))V.chat(S);else renderTurns();loadSessions()}
-  catch(e){const p=$('#pending');if(p)p.querySelector('.body').innerHTML=`<p class="err">${esc(e.message)}</p>`;if($('#q')&&!$('#q').value){$('#q').value=q;$('#q').oninput()}}
-  finally{live=false;BUSY=false;busyUi(false);if($('#q'))$('#q').focus()}}
+  try{let sess=S;
+    if(!sess){sess=await api('/api/sessions',{method:'POST',body:JSON.stringify({topic:q.replace(/\s+/g,' ').slice(0,80)})});PEND.sid=sess.id;
+      if(!S&&$('#turns')){S=sess;history.replaceState(null,'','#s='+S.id);$('.top .ttl').textContent=S.topic}loadSessions()}  // still on this view: it becomes the discussion
+    const t=await api('/api/sessions/'+sess.id+'/ask',{method:'POST',body:JSON.stringify({question:q,images:imgs,focus:code?'code':'wiki'})});
+    sess.turns.push(t);live=false;BUSY=false;PEND=null;
+    if(S&&S.id===sess.id&&$('#turns')){if(S!==sess)S.turns.push(t);if(!$('#save'))V.chat(S);else renderTurns()}loadSessions()}  // reopened meanwhile: S is a fresh copy
+  catch(e){const p=pendHere()&&$('#pending');if(p){p.querySelector('.body').innerHTML=`<p class="err">${esc(e.message)}</p>`;if($('#q')&&!$('#q').value){$('#q').value=q;$('#q').oninput()}}}
+  finally{live=false;BUSY=false;PEND=null;busyUi(false);if($('#q'))$('#q').focus()}}
 
 // ---------------------------------------------------------------- uploads
 async function upload(files){for(const file of files){const j=await api('/api/upload',{method:'POST',headers:{'X-Filename':encodeURIComponent(file.name)},body:file})
