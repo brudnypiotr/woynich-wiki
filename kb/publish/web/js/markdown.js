@@ -1,10 +1,12 @@
 // Markdown of answers and thoughts, with citations shown as muted footnotes.
 import {esc} from './ui.js';
 
-const CITEGRP = /\(([^()]*?(?:\[\[|:\d[\d,\-–]*@[0-9a-f]{6,}|\b[A-Z][A-Z0-9]+-\d+#)[^()]*)\)/g; // "(…source…)": a footnote, shown muted
+const CITEGRP = /\(([^()]*?(?:\[\[|:\d[\d,\-–]*@[0-9a-f]{6,}|\b[A-Za-z][\w.-]*@[0-9a-f]{7,40}\b|\b[A-Z][A-Z0-9]+-\d+#)[^()]*)\)/g; // "(…source…)": a footnote, shown muted
+const COMMIT = /^([A-Za-z][\w.-]*)@([0-9a-f]{7,40})$/;  // "inventory-service@a1b2c3d4e5": a commit
 // "repo/dir/File.cs:78-94@75f338ff8f" → a small "File.cs:78–94" label, the full reference on hover;
 // FitNesse pages are all content.txt, so they are named by their folder
-function citeHtml(g) {return g.split(/;\s*/).map(c => {const m = c.match(/^(?:(.*)\/)?([^\/\s]+):([\d,\-–]+)@([0-9a-f]{6,})$/); if (!m) return c;
+function citeHtml(g) {return g.split(/;\s*/).map(c => {const k = c.match(COMMIT); if (k) return `<span class="cref" title="commit ${c}">${k[1]}@${k[2].slice(0, 7)}</span>`;
+  const m = c.match(/^(?:(.*)\/)?([^\/\s]+):([\d,\-–]+)@([0-9a-f]{6,})$/); if (!m) return c;
   const dir = (m[1] || '').split('/'), name = /^(content\.txt|index\.\w+)$/.test(m[2]) && dir.length ? dir[dir.length - 1] : m[2],
     r = m[3].replace(/-/g, '–').split(','), lines = r.length > 2 ? r.slice(0, 2).join(', ') + ' +' + (r.length - 2) : r.join(', ');
   return `<span class="cref" title="${c}">${name}:${lines}</span>`}).join('; ')}

@@ -95,6 +95,8 @@ def verify_all() -> dict:
 
 CODE_CITE = re.compile(r"\b([\w.-]+)/([^\s:()\[\]`]+):(\d+)(?:-(\d+))?@([0-9a-f]{6,40})\b")
 JIRA_CITE = re.compile(r"\b[A-Z][A-Z0-9]+-\d+#(?:c\d+|description)\b")
+# "inventory-service@a1b2c3d": a commit (not "File.java:42@a1b2c3d", which is CODE_CITE); only configured repository names count
+COMMIT_CITE = re.compile(r"(?<![\w./:@-])([A-Za-z][\w.-]*)@([0-9a-f]{7,40})\b")
 
 
 def check_answer(text: str) -> dict:
@@ -140,10 +142,16 @@ def check_answer(text: str) -> dict:
             out["broken"].append(f"{ref}: the file has only {len(r.stdout.splitlines())} lines at {commit}")
         else:
             out["ok"].append(ref)
+    for m in COMMIT_CITE.finditer(text):
+        repo, commit = m.group(1), m.group(2)
+        if repo not in repos:
+            continue  # e.g. an e-mail address, not a citation
+        r = subprocess.run(["git", "-C", str(repos[repo]["path"]), "cat-file", "-e", f"{commit}^{{commit}}"], capture_output=True)
+        (out["ok"] if r.returncode == 0 else out["broken"]).append(m.group(0) + ("" if r.returncode == 0 else f": no commit {commit} in {repo}"))
     out["unchecked"] = sorted(set(JIRA_CITE.findall(text)))
     for line in text.splitlines():
         body = line.strip().lstrip("-*0123456789. ")
-        if len(body) > 80 and not (LINK.search(body) or CODE_CITE.search(body) or JIRA_CITE.search(body)) \
+        if len(body) > 80 and not (LINK.search(body) or CODE_CITE.search(body) or JIRA_CITE.search(body) or COMMIT_CITE.search(body)) \
                 and not body.upper().startswith("NOT FOUND") and not body.startswith(("#", "|", "```", ">")):
             out["uncited_lines"] += 1
     return out
