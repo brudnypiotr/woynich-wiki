@@ -23,3 +23,4 @@ Format: the same decision-record format the product uses for project decisions.
 | [ADR-0017](ADR-0017-build-vs-adopt-an-existing-llm-wiki-implementation.md) | Build vs adopt an existing LLM Wiki implementation | proposed |
 | [ADR-0018](ADR-0018-the-model-writes-the-wiki.md) | The model writes the wiki (agent ingest), scripts check and commit | accepted |
 | [ADR-0019](ADR-0019-questions-in-the-users-session-long-discussions-sandboxed-ingest.md) | Questions in the user's own agent session, long discussions, ingest stays sandboxed | accepted |
+| [ADR-0020](ADR-0020-web-app-as-static-es-modules-route-table-shared-parts.md) | The web app as static ES modules, a route table, shared settings parts | accepted |

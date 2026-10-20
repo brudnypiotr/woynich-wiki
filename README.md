@@ -49,7 +49,9 @@ Check with `kb repos`. Then:
 - `kb code-ask "How is minimum rest computed?" --evidence` → answer from wiki + code, citing `file:line@commit`;
 - `kb ask "What does this screen show?" --image screenshot.png` → the model explains the screen with the wiki;
 - `kb chat` → a conversation in the terminal (`/image <file>`, `/save`, `/exit`); in the browser: `kb serve` → a chat
-  (paste a screenshot with Ctrl+V, toggle "Code" to include the repositories). **Settings** in `kb serve`: model per
+  (paste a screenshot with Ctrl+V, toggle "Code" to include the repositories). On a new knowledge base `kb serve` starts
+  with a **first-run setup** (GitHub Copilot sign-in, Jira with where to create its token, code repositories); it can be
+  run again from Settings. **Settings** in `kb serve`: model per
   task tier or one model for all, GitHub Copilot sign-in and quota, keys and tokens (Windows Credential Manager), Jira URL;
 - Jira (read-only): `kb jira get PROJ-123` prints an issue (fields, links, custom fields, description, comments as
   `#cN`), `kb jira search "<JQL>"`, `kb jira add PROJ-123 --links` registers issues as sources (screenshots become

@@ -233,7 +233,9 @@ screenshots.</p>
 <tr><td><code>kb/extractors/</code></td><td>PDF, DOCX, HTML, e-mail, transcripts, Jira JSON, code, text</td></tr>
 <tr><td><code>kb/connectors/</code></td><td>inbox folder, Git repository at a ref, Jira (JQL)</td></tr>
 <tr><td><code>kb/llm/</code></td><td>model routing and override per task, adapters (SDK, CLI, fake), smoke test, quota</td></tr>
-<tr><td><code>kb/publish/site.py</code>, <code>serve.py</code></td><td>dashboard; local web app (upload with steps, Discuss, screenshots)</td></tr>
+<tr><td><code>kb/publish/site.py</code></td><td>dashboard (static HTML)</td></tr>
+<tr><td><code>kb/publish/serve.py</code>, <code>server/</code></td><td>local web app server (ADR-0020): route table (<code>http</code>), the app and dashboard (<code>web</code>), discussions (<code>chat_api</code>), upload queue (<code>ingest_api</code>), settings, keys, usage, first-run setup (<code>settings_api</code>); <code>serve.py</code> is the facade</td></tr>
+<tr><td><code>kb/publish/web/</code></td><td>the browser app, no build step: <code>index.html</code> template, <code>app.css</code>, ES modules in <code>js/</code> (chat, live trace, uploads, wiki, settings, first-run setup) and shared settings parts in <code>js/parts/</code></td></tr>
 <tr><td><code>kb/core/</code></td><td>config, plugin registry, schemas, Git commits, secrets (Credential Manager), pre-commit guard</td></tr>
 <tr><td><code>setup/</code>, <code>doctor.cmd</code>, <code>setup.cmd</code></td><td>Windows bootstrap without admin rights (PowerShell 5.1 compatible)</td></tr>
 <tr><td><code>AGENTS.md</code>, <code>.agents/skills/</code></td><td>Copilot CLI instructions and skills: kb-add, kb-ingest, kb-ask, kb-code, kb-status, kb-verify</td></tr>
