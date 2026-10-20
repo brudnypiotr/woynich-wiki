@@ -7,7 +7,8 @@ import {secretRow, bindSecrets, secretItem} from './secret.js';
 
 const SECRET_NAME = 'jira-token';
 const EXT = 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6';
-const isCloud = url => /\.atlassian\.net/i.test(url || '');
+// no URL yet counts as Cloud (*.atlassian.net, an API token), so the setup shows the token button from the start
+const isCloud = url => !url || /\.atlassian\.net/i.test(url);
 // where the token is created: Atlassian account (Cloud) or the Jira profile (Data Center / Server)
 const tokenPage = url => isCloud(url) ? 'https://id.atlassian.com/manage-profile/security/api-tokens'
   : /^https?:\/\/\S+/.test(url || '') ? url.replace(/\/+$/, '') + '/secure/ViewProfile.jspa?selectedTab=com.atlassian.pats.pats-plugin:jira-user-personal-access-tokens' : '';
