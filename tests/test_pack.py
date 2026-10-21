@@ -40,8 +40,14 @@ def test_export_then_import_replaces_wiki_and_sources(tmp_path, monkeypatch):
     subprocess.run(["git", "-C", str(tmp_path / "colleague"), "add", "wiki"], check=True)
     subprocess.run(["git", "-C", str(tmp_path / "colleague"), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "docs: mine"], check=True)
     (tmp_path / "colleague" / "sessions").mkdir(exist_ok=True); (tmp_path / "colleague" / "sessions" / "own.json").write_text("{}")
+    (tmp_path / "colleague" / "catalog" / "queries.jsonl").write_text('{"q": "old question"}\n', encoding="utf-8")
+    catalog.add_file(Path(__file__))  # the colleague's own knowledge base has a source: it is backed up first
+    monkeypatch.setenv("KB_ROOT", str(tmp_path / "app"))
     out = pack.import_pack(Path(r["path"]))
     c = tmp_path / "colleague"
+    assert out["backup"] and Path(out["backup"]).parent == tmp_path / "app" / "local" / "backups"
+    assert pack.read_manifest(Path(out["backup"]))["sources"] == 1 and set(out["took"]) >= {"unpack", "commit"}
+    assert not (c / "catalog" / "queries.jsonl").exists() and list((c / "catalog").glob("queries-before-import-*.jsonl"))
     assert out["sources"] == 1 and (c / "wiki" / "topics" / "rest.md").exists() and not (c / "wiki" / "mine.md").exists()
     assert (c / "store" / "big.pdf").read_bytes() == b"large original"
     assert (c / "sessions" / "own.json").exists() and not (c / "sessions" / "s1.json").exists()   # own discussions stay

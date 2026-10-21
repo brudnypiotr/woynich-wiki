@@ -28,7 +28,7 @@ export async function openSettings(){mark('settings');
    <section class="set"><h3>Project branding</h3><p class="d">Project logo, header background, icon and knowledge base title, kept out of Git.
     Got a <code>branding.zip</code> from a colleague? Import it here; the desktop shortcut gets the icon too.</p><div id="p-brand"></div></section>
    <section class="set"><h3>Knowledge pack</h3><p class="d">Start from a colleague's finished knowledge base, or give yours to the team.
-    Importing replaces this knowledge base's wiki and sources (your settings and discussions stay; the current wiki stays in its history).</p><div id="p-pack"></div></section>
+    Importing replaces this knowledge base's wiki and sources; the current one is saved first as a pack in <code>local/backups</code>, your settings and discussions stay.</p><div id="p-pack"></div></section>
    <section class="set"><h3>Knowledge base</h3><p class="d">Name shown in the sidebar.</p>
     <div class="f"><label for="ptitle">Title</label><input id="ptitle" value="${esc(p.title)}"></div>
     <div class="btns"><button class="pri" id="psave">Save</button><a class="ghost" href="#setup">Run the first-run setup again</a><span id="pmsg"></span></div></section>`;

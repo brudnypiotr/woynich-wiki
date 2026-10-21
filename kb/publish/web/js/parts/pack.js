@@ -21,11 +21,11 @@ export function mountPack(el, C, opts = {}) {
   const exp = el.querySelector('[data-a=export]');
   if (exp) exp.onclick = () => note(n, 'Preparing the pack… the download starts when it is ready (large originals take a while).');
   const send = async f => {if (!f) return; if (!/\.zip$/i.test(f.name)) return note(n, 'Choose the .kbpack.zip file.', false);
-    if (opts.confirm !== false && !confirm(`Replace this knowledge base's wiki and sources with ${f.name}?\nYour settings and discussions stay; the current wiki stays in the history.`)) return;
+    if (opts.confirm !== false && !confirm(`Replace this knowledge base's wiki and sources with ${f.name}?\nThe current knowledge base is saved first (local/backups); your settings and discussions stay.`)) return;
     drop.classList.add('busy');
     try {const r = await upload(f, p => note(n, p < 1 ? `Uploading ${Math.round(p * 100)}%…` : 'Unpacking and indexing…'));
-      note(n, `Imported “${r.title}”: ${r.sources} sources, ${r.pages} pages. Reloading…`);
-      setTimeout(() => opts.after ? opts.after(r) : location.reload(), 1200)}
+      note(n, `Imported “${r.title}”: ${r.sources} sources, ${r.pages} pages.${r.backup ? ' The previous knowledge base is saved in local/backups.' : ''} Reloading…`);
+      setTimeout(() => opts.after ? opts.after(r) : location.reload(), r.backup ? 3500 : 1200)}
     catch (e) {note(n, e.message, false)} finally {drop.classList.remove('busy'); input.value = ''}};
   input.onchange = () => send(input.files[0]);
   drop.ondragover = e => {e.preventDefault(); drop.classList.add('over')};

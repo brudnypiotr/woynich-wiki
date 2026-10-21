@@ -53,8 +53,9 @@ Knowledge pack → *Export this knowledge base…* (or `kb pack export`) makes `
 source (originals, extracted text, the large originals in `store\`), the project branding and the shared settings (title,
 Jira URL). Nothing personal: no discussions, usage, Jira e-mail, keys, model choice or code repository paths. A
 colleague drops it into the first step of the setup (*Ready knowledge base*), or Settings → Knowledge pack, or
-`kb pack import <file>`. Importing **replaces** the wiki and sources (no merging; the previous ones stay in the
-instance's Git history); their settings and discussions stay. The pack is company content: share it only through
+`kb pack import <file>`. Importing **replaces** the wiki and sources (no merging). The current knowledge base is first saved as a
+pack in `local\backups\` (complete, large originals too) and also stays in the instance's Git history; settings and
+discussions stay; the usage and question logs (about the previous knowledge base) are archived. No AI credits are used. The pack is company content: share it only through
 Teams or SharePoint, never GitHub (`*.kbpack.zip` is git-ignored here).
 
 The shortcut's icon is `instance\branding\icon.ico` or `icon.png` when the knowledge base has branding (kept out of Git),
