@@ -60,7 +60,7 @@ discussions stay; the usage and question logs (about the previous knowledge base
 Teams or SharePoint, never GitHub (`*.kbpack.zip` is git-ignored here).
 
 **Feedback.** The bubble in the bottom right corner: the user writes what happened (screenshots with Ctrl+V), Luna asks
-at most two short rounds of questions and writes a report (in English; 1 AI credit per message), then *Create feedback
+at most two short rounds of questions (in the user's language) and writes a report (in English; 1 AI credit per message), then *Create feedback
 file* saves `wiki-feedback-<date>.zip` on the Desktop for the user to send in Teams. It holds the report and
 conversation, screenshots, diagnostics (no keys), the app log, the user's discussions and the wiki as it is now:
 company content, inside the company only. After a few days of use a note above the bubble invites feedback (again

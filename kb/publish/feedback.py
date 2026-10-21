@@ -26,7 +26,7 @@ REPORT_FIELDS = ("title", "kind", "what_happened", "expected", "steps", "where",
 PROMPT = """You help a user of Wiki (a project knowledge base app: chat with citations, Add sources, Wiki,
 Settings, Welcome, About/Updates) report a problem or an idea to its author. The user may not be technical.
 
-Always write in English (the message and the report), whatever language the user writes in.
+Talk to the user in the language they write in. Write the report in English (it is for the app's author).
 
 Conversation so far (user and you):
 {transcript}
@@ -35,7 +35,7 @@ Conversation so far (user and you):
 
 Reply with JSON only, no other text:
 {{"done": true|false,
-  "message": "what you say to the user now, short and friendly, in English",
+  "message": "what you say to the user now, short and friendly, in the user's language",
   "report": {{"title": "...", "kind": "bug|idea|question", "what_happened": "...", "expected": "...",
              "steps": "...", "where": "screen or feature", "impact": "how much it blocks the user"}} }}
 """
