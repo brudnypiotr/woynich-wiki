@@ -48,6 +48,15 @@ Git history (`kb changelog [--all] [--md]`).
 (all tests on Linux and Windows, the real `setup.ps1` on Windows) and that bumps `version` in `pyproject.toml`: patch for
 every change, minor for a big new feature, major for a release. Each merge is one version that users get through Update.
 
+**Knowledge pack (start from a finished knowledge base).** Ingest once, give the result to the team: Settings →
+Knowledge pack → *Export this knowledge base…* (or `kb pack export`) makes `<title>.kbpack.zip` with the wiki, every
+source (originals, extracted text, the large originals in `store\`), the project branding and the shared settings (title,
+Jira URL). Nothing personal: no discussions, usage, Jira e-mail, keys, model choice or code repository paths. A
+colleague drops it into the first step of the setup (*Ready knowledge base*), or Settings → Knowledge pack, or
+`kb pack import <file>`. Importing **replaces** the wiki and sources (no merging; the previous ones stay in the
+instance's Git history); their settings and discussions stay. The pack is company content: share it only through
+Teams or SharePoint, never GitHub (`*.kbpack.zip` is git-ignored here).
+
 The shortcut's icon is `instance\branding\icon.ico` or `icon.png` when the knowledge base has branding (kept out of Git),
 otherwise a neutral one; after adding branding run `setup.cmd` again.
 

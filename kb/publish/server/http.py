@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlparse
 from kb.llm.gateway import Gateway
 
 ROUTES: list[tuple[str, re.Pattern, object, bool]] = []
-SLOW_OK = ("/ask", "/upload", "/api/usage", "/api/settings/account", "/api/settings/models", "/api/settings/check", "/api/update")  # slow by nature
+SLOW_OK = ("/ask", "/upload", "/api/usage", "/api/settings/account", "/api/settings/models", "/api/settings/check", "/api/update", "/api/pack/export", "/api/pack/import")  # slow by nature
 
 
 def route(method: str, pattern: str, public: bool = False):

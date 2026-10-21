@@ -7,6 +7,7 @@ import {mountCopilot} from './parts/copilot.js';
 import {mountJira} from './parts/jira.js';
 import {mountRepos} from './parts/repos.js';
 import {mountBranding} from './parts/branding.js';
+import {mountPack} from './parts/pack.js';
 import {secretRow, bindSecrets} from './parts/secret.js';
 
 export async function openSettings(){mark('settings');
@@ -26,6 +27,8 @@ export async function openSettings(){mark('settings');
      <div></div><input id="nk-val" type="password" placeholder="value" autocomplete="off"><div class="b"><button class="ghost" id="nk-add">Add</button></div></div></section>
    <section class="set"><h3>Project branding</h3><p class="d">Project logo, header background, icon and knowledge base title, kept out of Git.
     Got a <code>branding.zip</code> from a colleague? Import it here; the desktop shortcut gets the icon too.</p><div id="p-brand"></div></section>
+   <section class="set"><h3>Knowledge pack</h3><p class="d">Start from a colleague's finished knowledge base, or give yours to the team.
+    Importing replaces this knowledge base's wiki and sources (your settings and discussions stay; the current wiki stays in its history).</p><div id="p-pack"></div></section>
    <section class="set"><h3>Knowledge base</h3><p class="d">Name shown in the sidebar.</p>
     <div class="f"><label for="ptitle">Title</label><input id="ptitle" value="${esc(p.title)}"></div>
     <div class="btns"><button class="pri" id="psave">Save</button><a class="ghost" href="#setup">Run the first-run setup again</a><span id="pmsg"></span></div></section>`;
@@ -36,6 +39,6 @@ export async function openSettings(){mark('settings');
   secs(C.secrets);bindSecrets($('#secs'),st=>secs(st));
   $('#nk-add').onclick=async()=>{const n=$('#nk-name').value.trim(),v=$('#nk-val').value;if(!n||!v)return;
     try{secs(await post('/api/secrets/'+encodeURIComponent(n),{value:v}));$('#nk-name').value=$('#nk-val').value=''}catch(e){alert(e.message)}};
-  mountBranding($('#p-brand'),C);
+  mountBranding($('#p-brand'),C);mountPack($('#p-pack'),C,{exportable:true});
   $('#psave').onclick=async()=>{try{const r=await post('/api/settings',{profile:{title:$('#ptitle').value}});
     document.querySelector('aside header h1').textContent=r.profile.title;msg('pmsg','Saved.')}catch(e){msg('pmsg',e.message,false)}}}

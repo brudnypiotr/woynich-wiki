@@ -4,6 +4,8 @@ pitch/assets/
 branding/*
 !branding/README.md
 branding.zip
+# knowledge packs: company content (the wiki and every source), shared only through company channels
+*.kbpack.zip
 # instance data (client/project content) and large originals: never in the blueprint
 instance/
 instance-*/

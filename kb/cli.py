@@ -344,6 +344,27 @@ def cmd_branding(a) -> int:
         return 1
 
 
+def cmd_pack(a) -> int:
+    """Knowledge pack: export this knowledge base as one file for the team, or start from one (replaces wiki and sources)."""
+    from kb.knowledge import pack
+    try:
+        if a.action == "export":
+            r = pack.export(Path(a.file) if a.file else None)
+            print(f"created {r['path']} ({r['bytes'] / 1e6:.0f} MB): {r['sources']} sources, {r['pages']} pages.\n"
+                  "It holds company content: share it only through company channels (Teams, SharePoint), never GitHub.")
+        else:
+            if not a.file:
+                print("kb pack import <file.kbpack.zip>")
+                return 2
+            r = pack.import_pack(Path(a.file))
+            print(f"imported {r['title']!r}: {r['sources']} sources, {r['pages']} pages (made {r['created']}); "
+                  "the previous wiki and sources are in the instance's Git history")
+        return 0
+    except (OSError, ValueError) as e:
+        print(f"pack: {e}")
+        return 1
+
+
 def cmd_changelog(a) -> int:
     from kb.publish import changelog
     groups = changelog.groups()
@@ -570,6 +591,9 @@ def main(argv=None) -> int:
     s = sub.add_parser("branding", help="project logo, background, icon and title (out of Git): show, pack branding.zip, import one")
     s.add_argument("action", nargs="?", choices=["show", "pack", "import"], default="show"); s.add_argument("zip", nargs="?", default="branding.zip")
     s.set_defaults(fn=cmd_branding)
+    s = sub.add_parser("pack", help="knowledge pack: export this knowledge base for the team, or import one (replaces wiki and sources)")
+    s.add_argument("action", choices=["export", "import"]); s.add_argument("file", nargs="?")
+    s.set_defaults(fn=cmd_pack)
     s = sub.add_parser("changelog", help="what changed in each version, read from Git history")
     s.add_argument("--all", action="store_true", help="also docs, tests, refactoring"); s.add_argument("--md", action="store_true")
     s.set_defaults(fn=cmd_changelog)
