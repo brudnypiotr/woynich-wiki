@@ -238,6 +238,11 @@ else {
   }
   else { Step 'Updates' 'WARN' 'could not reach the repository (internet or proxy?); run setup.cmd again later to enable Update' }
 }
+$brandZip = Join-Path $Repo 'branding.zip'
+if (Test-Path $brandZip) {   # a colleague's branding pack put next to setup.cmd
+  if ((Invoke-Native (Join-Path $Repo 'kb.cmd') @('branding', 'import', $brandZip)) -eq 0) { Step 'Branding' 'OK' 'branding.zip imported into branding\' }
+  else { Step 'Branding' 'WARN' 'could not import branding.zip; import it later in Settings → Branding' }
+}
 try {
   $sc = & (Join-Path $ScriptDir 'shortcut.ps1') -Repo $Repo
   Step 'Shortcut' 'OK' ("Wiki on the desktop and in the Start menu ({0} icon)" -f $sc.icon)

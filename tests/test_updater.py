@@ -112,3 +112,28 @@ def test_changelog_groups_by_version(repos):
 def test_parse():
     assert updater.parse("abc", "2026-10-21", "fix(setup)!: x: y")["text"] == "x: y"
     assert updater.parse("abc", "2026-10-21", 'Revert "feat: x"')["kind"] == "Other"
+
+
+def test_branding_pack_and_import(tmp_path, monkeypatch):
+    import io
+    import zipfile
+    from kb.publish import branding
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    (src / "branding").mkdir(parents=True); (dst / "branding").mkdir(parents=True)
+    (src / "branding" / "icon.png").write_bytes(b"png"); (src / "branding" / "logo.svg").write_text("<svg/>")
+    monkeypatch.setenv("KB_INSTANCE", str(tmp_path / "inst"))
+    monkeypatch.setenv("KB_ROOT", str(src))
+    z = branding.pack()
+    monkeypatch.setenv("KB_ROOT", str(dst))
+    (dst / "branding" / "icon.svg").write_text("<svg/>")  # replaced by the imported icon.png
+    r = branding.import_zip(z.read_bytes())
+    assert r["imported"] == ["icon.png", "logo.svg"] and not (dst / "branding" / "icon.svg").exists()
+    assert branding.find("icon") == dst / "branding" / "icon.png"
+    (tmp_path / "inst" / "branding").mkdir(parents=True); (tmp_path / "inst" / "branding" / "icon.png").write_bytes(b"own")
+    assert branding.find("icon") == tmp_path / "inst" / "branding" / "icon.png"  # the knowledge base's own wins
+    evil = io.BytesIO()
+    with zipfile.ZipFile(evil, "w") as zf:
+        zf.writestr("../../logo.png", b"x"); zf.writestr("notes.txt", b"x")
+    assert branding.import_zip(evil.getvalue())["imported"] == ["logo.png"] and (dst / "branding" / "logo.png").exists()
+    with pytest.raises(ValueError):
+        branding.import_zip(b"not a zip")

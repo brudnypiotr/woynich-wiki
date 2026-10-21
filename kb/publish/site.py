@@ -76,12 +76,13 @@ def _data_uri(p: Path) -> str:
 
 
 def branding_file(stem: str) -> Path | None:
-    d = catalog.instance() / "branding"
-    return next((p for ext in (".svg", ".png", ".jpg", ".jpeg") if (p := d / f"{stem}{ext}").exists()), None)
+    from kb.publish import branding
+    return branding.find(stem)
 
 
 def _branding() -> str:
-    """Optional company branding, kept in the instance (never in the blueprint): instance/branding/logo.(svg|png),
+    """Optional company branding, never in the blueprint (kb/publish/branding.py: instance/branding/, else the copy's
+    branding/ folder): logo.(svg|png),
     background.(jpg|png) and icon.(svg|png) (assistant avatar and browser tab icon in `kb serve`). Embedded so the dashboard stays a single file that works offline."""
     find = branding_file
     out = ""

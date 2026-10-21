@@ -1,5 +1,9 @@
 # Example imagery for the internal pitch: company property, never in the blueprint
 pitch/assets/
+# company branding of this copy (logo, background, icon) and the pack to share it: never in the blueprint
+branding/*
+!branding/README.md
+branding.zip
 # instance data (client/project content) and large originals: never in the blueprint
 instance/
 instance-*/

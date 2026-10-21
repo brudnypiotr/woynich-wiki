@@ -310,6 +310,24 @@ def cmd_update(a) -> int:
         return 1
 
 
+def cmd_branding(a) -> int:
+    """Company branding out of Git: pack branding.zip for a colleague, or import one (also refreshes the shortcut icon)."""
+    from kb.publish import branding
+    try:
+        if a.action == "pack":
+            print(f"created {branding.pack()}: send it; they import it in Settings → Branding (or kb branding import)")
+        elif a.action == "import":
+            r = branding.import_zip(Path(a.zip).read_bytes())
+            print(f"imported {', '.join(r['imported'])} into {r['folder']}; shortcut {r['shortcut']}")
+        else:
+            for k, v in branding.state()["files"].items():
+                print(f"{k:<11} {v or '-'}")
+        return 0
+    except (OSError, ValueError) as e:
+        print(f"branding: {e}")
+        return 1
+
+
 def cmd_changelog(a) -> int:
     from kb.publish import updater
     groups = updater.changelog()
@@ -530,6 +548,9 @@ def main(argv=None) -> int:
     g.add_argument("--finish", action="store_true", help="install packages if the last update changed requirements.txt")
     g.add_argument("--attach", action="store_true", help="connect a ZIP copy to the official remote (setup does this)")
     s.set_defaults(fn=cmd_update)
+    s = sub.add_parser("branding", help="company logo, background and icon (out of Git): show, pack branding.zip, import one")
+    s.add_argument("action", nargs="?", choices=["show", "pack", "import"], default="show"); s.add_argument("zip", nargs="?", default="branding.zip")
+    s.set_defaults(fn=cmd_branding)
     s = sub.add_parser("changelog", help="what changed in each version, read from Git history")
     s.add_argument("--all", action="store_true", help="also docs, tests, refactoring"); s.add_argument("--md", action="store_true")
     s.set_defaults(fn=cmd_changelog)

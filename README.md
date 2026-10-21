@@ -32,9 +32,9 @@ The app's version and commit are under the status line in the sidebar; a click o
 gathers versions, paths, the model, counts, which keys are set (never their values), a Copilot and Jira check and the last
 errors, to copy or download for support. In a terminal: `kb diagnostics` (saved as `instance\reports\diagnostics.json`).
 
-**Updates.** The app checks this repository at start and every 6 hours; a new version shows as *Update available* in the
+**Updates.** The app checks this repository at start and every hour; a new version shows as *Update available* in the
 sidebar. About → **Update now** downloads it, keeps the knowledge base, settings and keys, installs changed packages and
-restarts the app; **Roll back to previous** undoes the last update. When the app does not start at all, its window offers
+restarts the app (it waits while sources are being added or an answer is being written); **Roll back to previous** undoes the last update. When the app does not start at all, its window offers
 to update (press U), or run `update.cmd`. Terminal: `kb update [--check | --rollback]`. The source is `update` in
 `setup/sources.json` (change it for a company mirror). About → **Changelog** lists what changed in each version, read from
 Git history (`kb changelog [--all] [--md]`); bump `version` in `pyproject.toml` for each release.
