@@ -1,6 +1,10 @@
 """Updates from the Git remote (check, apply, rollback, attach a ZIP copy) and the changelog from Git history."""
 import json
+import os
+import shutil
+import stat
 import subprocess
+import sys
 
 import pytest
 
@@ -34,6 +38,11 @@ def repos(tmp_path, monkeypatch):
     monkeypatch.setenv("KB_ROOT", str(app))
     monkeypatch.setattr(updater, "_LAST", None)
     return dev, app
+
+
+def _writable_and_retry(func, path, _exc):
+    os.chmod(path, stat.S_IWRITE)  # Windows: Git's object files are read-only and rmtree cannot delete them
+    func(path)
 
 
 def publish(dev, msg, files):
@@ -85,7 +94,8 @@ def test_attach_zip_copy(repos, tmp_path, monkeypatch):
     publish(dev, "feat(serve): newer than the zip", {"c.py": "z = 3\n"})
     zipcopy = tmp_path / "zip"
     subprocess.run(["git", "clone", "-q", str(app), str(zipcopy)], check=True)
-    subprocess.run(["rm", "-rf", str(zipcopy / ".git")], check=True)
+    hook = "onexc" if sys.version_info >= (3, 12) else "onerror"  # onerror is deprecated from 3.12
+    shutil.rmtree(zipcopy / ".git", **{hook: _writable_and_retry})  # what a ZIP download looks like
     (zipcopy / "instance").mkdir(); (zipcopy / "instance" / "x.md").write_text("keep", encoding="utf-8")
     monkeypatch.setenv("KB_ROOT", str(zipcopy))
     assert updater.check()["clone"] is False
