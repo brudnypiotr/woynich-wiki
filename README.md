@@ -26,6 +26,7 @@ send `instance\reports\llm-smoke.json`), `kb init` and `kb serve`.
 | `setup.cmd` | private Python and packages, Git, Copilot runtime, `kb.cmd`, shortcut, 5 smoke tests (`-FullTest`: all); safe to run again |
 | `Wiki.cmd [instance folder]` | starts the app in the browser; the first start opens the setup; restarts it after an update; offers an update when the app fails to start |
 | `update.cmd` | downloads and installs the newest version (the same as Update in the app) |
+| `test.cmd [pytest options]` | runs every test (setup runs only the 5 smoke tests); e.g. `test.cmd -k update` |
 | `kb.cmd <command>` | the command line (created by setup); each copy of the repository runs its own code and instance |
 
 The app's version and commit are under the status line in the sidebar; a click opens **About**, where *Collect diagnostics*
