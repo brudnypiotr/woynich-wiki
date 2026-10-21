@@ -1,4 +1,4 @@
-// Knowledge pack: start from a colleague's finished knowledge base (first-run setup, Settings), or export this one
+// Knowledge pack: start from a colleague's finished knowledge base (Welcome, Settings), or export this one
 // (Settings). Importing replaces the wiki and sources; the previous ones stay in the instance's Git history.
 import {esc, note, ACCESS} from '../ui.js';
 

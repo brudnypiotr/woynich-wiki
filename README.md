@@ -12,9 +12,10 @@ This repository is the **blueprint**: generic code, templates and instructions w
    Copilot runtime and puts a **Wiki** shortcut on the desktop and in the Start menu. Safe to run again.
 4. Start **Wiki** (the shortcut, or `Wiki.cmd` in the folder). It starts the app (`kb serve`)
    in the browser; keep its window open. The first start
-   creates the knowledge base instance (`instance\`, its own git repository) and opens a short **setup**: sign in to
-   GitHub Copilot, choose the model (gpt-6-luna preselected when your account offers it), Jira and code repositories
-   (both optional). Settings → "Run the first-run setup again" opens it later.
+   creates the knowledge base instance (`instance\`, its own git repository) and opens a short **Welcome**: a ready
+   knowledge base (knowledge pack) and project branding (both optional), sign in to GitHub Copilot, choose the model
+   (gpt-6-luna preselected when your account offers it), Jira, code repositories (optional). Settings → "Open the
+   welcome steps again" opens it later. (`setup.cmd` only prepares the computer; Welcome sets up the app.)
    Another knowledge base: `"Wiki.cmd" C:\kb\other-instance` (sets `KB_INSTANCE` for that window only).
 
 In a terminal the same steps are `kb login` (Copilot sign-in), `kb llm-smoke` (checks that scripts can use the model;
@@ -24,7 +25,7 @@ send `instance\reports\llm-smoke.json`), `kb init` and `kb serve`.
 |---|---|
 | `doctor.cmd` | read-only check of the machine (PowerShell, policies, proxy, Python, Git, Copilot); changes nothing |
 | `setup.cmd` | private Python and packages, Git, Copilot runtime, `kb.cmd`, shortcut, 5 smoke tests (`-FullTest`: all); safe to run again |
-| `Wiki.cmd [instance folder]` | starts the app in the browser; the first start opens the setup; restarts it after an update; offers an update when the app fails to start |
+| `Wiki.cmd [instance folder]` | starts the app in the browser; the first start opens Welcome; restarts it after an update; offers an update when the app fails to start |
 | `update.cmd` | downloads and installs the newest version (the same as Update in the app) |
 | `test.cmd [pytest options]` | runs every test (setup runs only the 5 smoke tests); e.g. `test.cmd -k update` |
 | `kb.cmd <command>` | the command line (created by setup); each copy of the repository runs its own code and instance |
@@ -52,7 +53,7 @@ every change, minor for a big new feature, major for a release. Each merge is on
 Knowledge pack → *Export this knowledge base…* (or `kb pack export`) makes `<title>.kbpack.zip` with the wiki, every
 source (originals, extracted text, the large originals in `store\`), the project branding and the shared settings (title,
 Jira URL). Nothing personal: no discussions, usage, Jira e-mail, keys, model choice or code repository paths. A
-colleague drops it into the first step of the setup (*Ready knowledge base*), or Settings → Knowledge pack, or
+colleague drops it into the first step of Welcome (*Ready knowledge base*), or Settings → Knowledge pack, or
 `kb pack import <file>`. Importing **replaces** the wiki and sources (no merging). The current knowledge base is first saved as a
 pack in `local\backups\` (complete, large originals too) and also stays in the instance's Git history; settings and
 discussions stay; the usage and question logs (about the previous knowledge base) are archived. No AI credits are used. The pack is company content: share it only through
@@ -98,7 +99,7 @@ Check with `kb repos`. Then:
 - `kb ask "What does this screen show?" --image screenshot.png` → the model explains the screen with the wiki;
 - `kb chat` → a conversation in the terminal (`/image <file>`, `/save`, `/exit`); in the browser: `kb serve` → a chat
   (paste a screenshot with Ctrl+V, toggle "Code" to include the repositories). On a new knowledge base `kb serve` starts
-  with a **first-run setup** (GitHub Copilot sign-in, the model with gpt-6-luna preselected, Jira with where to create its token, code repositories); it can be
+  with **Welcome** (a ready knowledge base, project branding, GitHub Copilot sign-in, the model with gpt-6-luna preselected, Jira with where to create its token, code repositories); it can be
   run again from Settings. **Settings** in `kb serve`: model per
   task tier or one model for all, GitHub Copilot sign-in and quota, keys and tokens (Windows Credential Manager), Jira URL;
 - Jira (read-only): `kb jira get PROJ-123` prints an issue (fields, links, custom fields, description, comments as

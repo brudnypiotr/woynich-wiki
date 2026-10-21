@@ -1,6 +1,6 @@
 """Company branding (logo, header background, icon), kept out of Git: the copy's `branding/` folder, or the knowledge
 base's own `instance/branding/` (wins). Shared as a branding.zip: `kb branding pack` makes it, with branding.json
-carrying the knowledge base title; the first-run setup, Settings → Project branding, `kb branding import` or setup.cmd (when
+carrying the knowledge base title; Welcome, Settings → Project branding, `kb branding import` or setup.cmd (when
 branding.zip lies next to it) unpacks it, sets the title, and on Windows gives the Wiki shortcut the icon.
 """
 from __future__ import annotations

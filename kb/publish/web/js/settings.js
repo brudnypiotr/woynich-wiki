@@ -1,4 +1,4 @@
-// Settings: the parts shared with the first-run setup (model, Copilot, Jira, repositories), other keys, the title.
+// Settings: the parts shared with Welcome (model, Copilot, Jira, repositories), other keys, the title.
 import {$, esc, topbar, msg, loader} from './ui.js';
 import {api, post} from './api.js';
 import {mark} from './shell.js';
@@ -31,7 +31,7 @@ export async function openSettings(){mark('settings');
     Importing replaces this knowledge base's wiki and sources; the current one is saved first as a pack in <code>local/backups</code>, your settings and discussions stay.</p><div id="p-pack"></div></section>
    <section class="set"><h3>Knowledge base</h3><p class="d">Name shown in the sidebar.</p>
     <div class="f"><label for="ptitle">Title</label><input id="ptitle" value="${esc(p.title)}"></div>
-    <div class="btns"><button class="pri" id="psave">Save</button><a class="ghost" href="#setup">Run the first-run setup again</a><span id="pmsg"></span></div></section>`;
+    <div class="btns"><button class="pri" id="psave">Save</button><a class="ghost" href="#setup">Open the welcome steps again</a><span id="pmsg"></span></div></section>`;
   mountModel($('#p-model'),C);mountCopilot($('#p-copilot'),C);mountJira($('#p-jira'),C);mountRepos($('#p-repos'),C);
   // keys and tokens other than the ones the parts above own (Copilot token, Jira token)
   const OWNED=new Set(['copilot-github-token','jira-token']);

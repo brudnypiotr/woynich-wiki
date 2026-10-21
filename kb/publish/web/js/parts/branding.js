@@ -1,5 +1,5 @@
 // Project branding from a colleague's branding.zip (logo, header background, icon, the knowledge base title):
-// in Settings and as the first step of the first-run setup. The page reloads after an import to show the logo.
+// in Settings and as a step of Welcome. The page reloads after an import to show the logo.
 import {esc, note} from '../ui.js';
 import {api} from '../api.js';
 

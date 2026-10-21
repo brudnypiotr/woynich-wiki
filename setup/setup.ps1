@@ -277,7 +277,7 @@ elseif ($warned) { Write-Host 'Setup finished with warnings.' -ForegroundColor Y
 else { Write-Host 'Setup finished.' -ForegroundColor Green }
 Write-Host 'Next step: start Wiki from the desktop shortcut (or Wiki.cmd in this folder).'
 Write-Host '  It opens the app in your browser; keep its window open. New versions: Update in the app (or update.cmd).'
-Write-Host '  The first start opens a short setup: GitHub Copilot sign-in, the model, Jira and code repositories (optional).'
+Write-Host '  The first start opens Welcome: a ready knowledge base, GitHub Copilot sign-in, the model, Jira (and optional steps).'
 Write-Host '  Another knowledge base: "Wiki.cmd" C:\kb\other-instance'
 Write-Host 'In a terminal instead: kb login (Copilot sign-in), kb llm-smoke (model check), kb serve.'
 Write-Host "Each copy of the repository runs its own code and its own instance\ through its own kb.cmd ($Repo)."

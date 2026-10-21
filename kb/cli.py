@@ -330,7 +330,7 @@ def cmd_branding(a) -> int:
     from kb.publish import branding
     try:
         if a.action == "pack":
-            print(f"created {branding.pack()}: send it; they drop it into the first step of the setup or Settings → Project branding (or kb branding import)")
+            print(f"created {branding.pack()}: send it; they drop it into Welcome or Settings → Project branding (or kb branding import)")
         elif a.action == "import":
             r = branding.import_zip(Path(a.zip).read_bytes())
             print(f"imported {', '.join(r['imported']) or 'no images'} into {r['folder']}; shortcut {r['shortcut']}"
