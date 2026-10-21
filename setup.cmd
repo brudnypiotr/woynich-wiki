@@ -8,6 +8,6 @@ set "PSModulePath="
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup\setup.ps1" %*
 set RC=%ERRORLEVEL%
 echo.
-if "%RC%"=="0" (echo Setup finished. Close this window and double-click serve.cmd to start the app.) else (echo Setup did not finish. See setup.log and send it for help.)
+if "%RC%"=="0" (echo Setup finished. Close this window and start Wiki from the desktop shortcut.) else (echo Setup did not finish. See setup.log and send it for help.)
 pause
 exit /b %RC%

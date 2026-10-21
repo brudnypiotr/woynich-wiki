@@ -1,20 +1,46 @@
 @echo off
-rem woynich-wiki: double-click me to start the app (kb serve) and open it in the browser.
-rem Another knowledge base: serve.cmd C:\kb\other-instance  (sets KB_INSTANCE for this window only)
+rem Wiki: double-click me (or the desktop shortcut setup.cmd made) to start the app and open it in the browser.
+rem Another knowledge base: "Wiki.cmd" C:\kb\other-instance  (sets KB_INSTANCE for this window only)
+rem After Update in the app, kb serve exits with code 3 and this window starts it again.
+rem An update may replace this file while it runs, and cmd reads a running script line by line from disk: so it runs
+rem from a copy in %TEMP% and finds the app through KB_REPO.
+if defined KB_REPO goto copied
+set "KB_REPO=%~dp0"
+copy /y "%~f0" "%TEMP%\wiki.cmd" >nul || goto copied
+"%TEMP%\wiki.cmd" %*
+
+:copied
 setlocal
-cd /d "%~dp0"
-if not exist "%~dp0kb.cmd" (
+title Wiki
+if not defined KB_REPO set "KB_REPO=%~dp0"
+if not "%~1"=="" set "KB_INSTANCE=%~f1"
+cd /d "%KB_REPO%"
+if not exist "%KB_REPO%kb.cmd" (
   echo kb.cmd not found: run setup.cmd first.
   pause
   exit /b 1
 )
-if not "%~1"=="" set "KB_INSTANCE=%~f1"
 if defined KB_INSTANCE echo Knowledge base: %KB_INSTANCE%
-call "%~dp0kb.cmd" serve
+set "KB_LAUNCHER=1"
+
+:start
+call "%KB_REPO%kb.cmd" serve
 set RC=%ERRORLEVEL%
-if not "%RC%"=="0" (
-  echo.
-  echo kb serve stopped with an error ^(%RC%^). See the messages above.
-  pause
+if "%RC%"=="3" (
+  call "%KB_REPO%kb.cmd" update --finish
+  goto start
 )
-exit /b %RC%
+if "%RC%"=="0" exit /b 0
+
+echo.
+echo Wiki stopped with an error (%RC%). See the messages above.
+echo If the fix is already published, an update may solve it.
+choice /c UQ /n /m "Press U to update and start again, or Q to quit: "
+if errorlevel 2 exit /b %RC%
+call "%KB_REPO%kb.cmd" update
+if errorlevel 1 (
+  echo Update did not work. Run doctor.cmd and send doctor-report.json for help.
+  pause
+  exit /b %RC%
+)
+goto start

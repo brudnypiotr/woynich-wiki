@@ -143,6 +143,18 @@ else { Add-Check 'tools' 'Python 3.11+' 'WARN' 'not found (the Microsoft Store a
 
 $r = Invoke-Tool 'git' @('--version')
 if ($r.found) { Add-Check 'tools' 'Git' 'OK' $r.output } else { Add-Check 'tools' 'Git' 'WARN' 'not found' 'Setup can unpack Portable Git into %LOCALAPPDATA%, no admin needed.' }
+$upd = (Get-Content (Join-Path $ScriptDir 'sources.json') -Raw | ConvertFrom-Json).update
+if (-not (Test-Path (Join-Path $repo '.git'))) { Add-Check 'updates' 'Git history' 'WARN' 'none (copy unpacked from a ZIP)' 'setup.cmd connects it to the official repository so Update works.' }
+elseif ($r.found) {
+  $origin = (& $r.path -C $repo remote get-url origin 2>$null | Out-String).Trim()
+  if ($origin) { Add-Check 'updates' 'Update source' 'OK' $origin } else { Add-Check 'updates' 'Update source' 'WARN' 'no origin remote' 'Run setup.cmd again.' }
+}
+if ($r.found -and $upd) {
+  $env:GIT_TERMINAL_PROMPT = '0'
+  $ls = (& $r.path ls-remote --heads $upd.remote $upd.branch 2>&1 | Out-String).Trim()
+  if ($LASTEXITCODE -eq 0 -and $ls) { Add-Check 'updates' 'Reach the repository' 'OK' $upd.remote }
+  else { Add-Check 'updates' 'Reach the repository' 'WARN' $ls 'Update needs github.com over HTTPS (proxy: git config --global http.proxy ...).' }
+}
 
 $r = Invoke-Tool 'copilot' @('--version')
 if ($r.found) { Add-Check 'tools' 'GitHub Copilot CLI' 'OK' ($r.output -split "`r?`n")[0] } else { Add-Check 'tools' 'GitHub Copilot CLI' 'INFO' 'not on PATH' 'Not required: the Python Copilot SDK bundles its own CLI.' }

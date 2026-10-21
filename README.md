@@ -5,14 +5,17 @@
 This repository is the **blueprint**: generic code, templates and instructions with no project data.
 
 ## Quick start on Windows (no admin rights)
-1. Clone or unzip the repository into a **short path outside OneDrive**, e.g. `C:\kb\woynich-wiki`.
+1. Download the repository (GitHub → Code → **Download ZIP**, or `git clone`) and unpack it into a **short path outside
+   OneDrive**, e.g. `C:\kb\woynich-wiki`. A ZIP copy is fine: setup connects it to this repository so updates work.
 2. Double-click **`doctor.cmd`**. It is a read-only check of the machine that changes nothing. If it reports blockers, send `doctor-report.json`.
-3. Double-click **`setup.cmd`**. It installs a private Python and the packages, finds or unpacks Git, and downloads the Copilot runtime. Safe to run again.
-4. Double-click **`serve.cmd`**. It starts the app (`kb serve`) in the browser; keep its window open. The first start
+3. Double-click **`setup.cmd`**. It installs a private Python and the packages, finds or unpacks Git, downloads the
+   Copilot runtime and puts a **Wiki** shortcut on the desktop and in the Start menu. Safe to run again.
+4. Start **Wiki** (the shortcut, or `Wiki.cmd` in the folder). It starts the app (`kb serve`)
+   in the browser; keep its window open. The first start
    creates the knowledge base instance (`instance\`, its own git repository) and opens a short **setup**: sign in to
    GitHub Copilot, choose the model (gpt-6-luna preselected when your account offers it), Jira and code repositories
    (both optional). Settings → "Run the first-run setup again" opens it later.
-   Another knowledge base: `serve.cmd C:\kb\other-instance` (sets `KB_INSTANCE` for that window only).
+   Another knowledge base: `"Wiki.cmd" C:\kb\other-instance` (sets `KB_INSTANCE` for that window only).
 
 In a terminal the same steps are `kb login` (Copilot sign-in), `kb llm-smoke` (checks that scripts can use the model;
 send `instance\reports\llm-smoke.json`), `kb init` and `kb serve`.
@@ -21,12 +24,23 @@ send `instance\reports\llm-smoke.json`), `kb init` and `kb serve`.
 |---|---|
 | `doctor.cmd` | read-only check of the machine (PowerShell, policies, proxy, Python, Git, Copilot); changes nothing |
 | `setup.cmd` | private Python and packages, Git, Copilot runtime, `kb.cmd`, self-test; safe to run again |
-| `serve.cmd [instance folder]` | starts the app in the browser; the first start opens the setup |
+| `Wiki.cmd [instance folder]` | starts the app in the browser; the first start opens the setup; restarts it after an update; offers an update when the app fails to start |
+| `update.cmd` | downloads and installs the newest version (the same as Update in the app) |
 | `kb.cmd <command>` | the command line (created by setup); each copy of the repository runs its own code and instance |
 
 The app's version and commit are under the status line in the sidebar; a click opens **About**, where *Collect diagnostics*
 gathers versions, paths, the model, counts, which keys are set (never their values), a Copilot and Jira check and the last
 errors, to copy or download for support. In a terminal: `kb diagnostics` (saved as `instance\reports\diagnostics.json`).
+
+**Updates.** The app checks this repository at start and every 6 hours; a new version shows as *Update available* in the
+sidebar. About → **Update now** downloads it, keeps the knowledge base, settings and keys, installs changed packages and
+restarts the app; **Roll back to previous** undoes the last update. When the app does not start at all, its window offers
+to update (press U), or run `update.cmd`. Terminal: `kb update [--check | --rollback]`. The source is `update` in
+`setup/sources.json` (change it for a company mirror). About → **Changelog** lists what changed in each version, read from
+Git history (`kb changelog [--all] [--md]`); bump `version` in `pyproject.toml` for each release.
+
+The shortcut's icon is `instance\branding\icon.ico` or `icon.png` when the knowledge base has branding (kept out of Git),
+otherwise a neutral one; after adding branding run `setup.cmd` again.
 
 ## First test: from a PDF to a cited answer (about 5 minutes)
 ```
@@ -95,3 +109,6 @@ uv venv .venv -p 3.11 && VIRTUAL_ENV=.venv uv pip install -r requirements.txt
 Status: M0–M6 mini-flow works on macOS with the real Copilot model (4 samples: 22 verified facts, 47/47 citations, discrepancy found; answer in ~7 s). Windows: doctor passes, setup next.
 
 > `pitch/assets/` (Example logo and product imagery, for the internal pitch only) is company property and is git-ignored.
+
+## License
+MIT, see [LICENSE](LICENSE).

@@ -7,7 +7,9 @@
   2. Creates .venv in the repository and installs packages (uses the system proxy; offline from .\wheels if present).
   3. Finds Git or unpacks Portable Git (git-scm / git-for-windows) into %LOCALAPPDATA%.
   4. Downloads the Copilot runtime used by the Python SDK (no Node.js needed).
-  5. Creates kb.cmd and runs a self-test. Writes setup.log.
+  5. Creates kb.cmd; connects a copy unpacked from a ZIP to the official repository (setup\sources.json → update), so
+     Update in the app works; creates the "Wiki" shortcuts with an icon (setup\shortcut.ps1).
+  6. Runs a self-test. Writes setup.log.
   Downloads are checked against setup\sources.json (SHA-256). Replace URLs with company mirrors if needed.
 .EXAMPLE
   setup.cmd                 (double-click)
@@ -227,6 +229,20 @@ exit /b %ERRORLEVEL%
 Set-Content -Path (Join-Path $Repo 'kb.cmd') -Value $shim -Encoding ASCII
 Step 'Command' 'OK' 'kb.cmd created (run: kb --help)'
 
+# ------------------------------------------------------------------ 6. updates + shortcut
+if ($SkipGit -or -not $gitExe) { Step 'Updates' 'WARN' 'no Git: Update in the app will not work until setup.cmd runs with Git' }
+else {
+  if ((Invoke-Native (Join-Path $Repo 'kb.cmd') @('update', '--attach')) -eq 0) {
+    $null = Invoke-Native $gitPath @('-C', $Repo, 'config', 'core.hooksPath', '.githooks')   # a ZIP copy has Git only now
+    Step 'Updates' 'OK' 'connected to the official repository (Update in the app, update.cmd)'
+  }
+  else { Step 'Updates' 'WARN' 'could not reach the repository (internet or proxy?); run setup.cmd again later to enable Update' }
+}
+try {
+  $sc = & (Join-Path $ScriptDir 'shortcut.ps1') -Repo $Repo
+  Step 'Shortcut' 'OK' ("Wiki on the desktop and in the Start menu ({0} icon)" -f $sc.icon)
+} catch { Step 'Shortcut' 'WARN' ("could not create the shortcut: $($_.Exception.Message); start Wiki.cmd instead") }
+
 Write-Host 'Self-test: running all tests. This can take a few minutes on Windows (antivirus checks every file and process)...' -ForegroundColor Cyan
 $t0 = Get-Date
 Push-Location $Repo
@@ -247,9 +263,10 @@ $warned = @($script:Steps | Where-Object { $_.status -eq 'WARN' }).Count
 if ($failed) { Write-Host 'Setup finished with errors.' -ForegroundColor Red }
 elseif ($warned) { Write-Host 'Setup finished with warnings.' -ForegroundColor Yellow }
 else { Write-Host 'Setup finished.' -ForegroundColor Green }
-Write-Host 'Next step: double-click serve.cmd in this folder. It starts the app in your browser; keep its window open.'
+Write-Host 'Next step: start Wiki from the desktop shortcut (or Wiki.cmd in this folder).'
+Write-Host '  It opens the app in your browser; keep its window open. New versions: Update in the app (or update.cmd).'
 Write-Host '  The first start opens a short setup: GitHub Copilot sign-in, the model, Jira and code repositories (optional).'
-Write-Host '  Another knowledge base: serve.cmd C:\kb\other-instance'
+Write-Host '  Another knowledge base: "Wiki.cmd" C:\kb\other-instance'
 Write-Host 'In a terminal instead: kb login (Copilot sign-in), kb llm-smoke (model check), kb serve.'
 Write-Host "Each copy of the repository runs its own code and its own instance\ through its own kb.cmd ($Repo)."
 $script:Steps | ConvertTo-Json | Set-Content (Join-Path $Base 'setup-result.json') -Encoding UTF8
