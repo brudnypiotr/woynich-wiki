@@ -9,14 +9,16 @@ from __future__ import annotations
 import json
 import re
 import secrets
+import sys
 import time
+import traceback
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
 from kb.llm.gateway import Gateway
 
 ROUTES: list[tuple[str, re.Pattern, object, bool]] = []
-SLOW_OK = ("/ask", "/upload", "/api/usage", "/api/settings/account", "/api/settings/models", "/api/settings/check", "/api/update", "/api/pack/export", "/api/pack/import")  # slow by nature
+SLOW_OK = ("/ask", "/upload", "/api/usage", "/api/settings/account", "/api/settings/models", "/api/settings/check", "/api/update", "/api/pack/export", "/api/pack/import", "/api/feedback/chat", "/api/feedback/package")  # slow by nature
 
 
 def route(method: str, pattern: str, public: bool = False):
@@ -90,6 +92,8 @@ class Handler(BaseHTTPRequestHandler):
             except (KeyError, FileNotFoundError):
                 return self.send(404, {"error": "no such discussion"})
             except Exception as e:
+                traceback.print_exc()  # into the app log (local/logs/serve.log) for support and feedback packages
+                print(f"error in {method} {path}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
                 return self.send(500, {"error": f"{type(e).__name__}: {e}"[:500]})
         if not self.authorised():
             return self.send(403, {"error": "missing or wrong token"})

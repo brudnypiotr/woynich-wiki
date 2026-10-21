@@ -13,8 +13,8 @@ from http.server import ThreadingHTTPServer
 from kb.core import config
 from kb.knowledge import catalog
 from kb.llm.gateway import Gateway
-from kb.publish import updater
-from kb.publish.server import chat_api, ingest_api, pack_api, settings_api, update_api, web  # noqa: F401  (importing registers their routes)
+from kb.publish import applog, updater
+from kb.publish.server import chat_api, feedback_api, ingest_api, pack_api, settings_api, update_api, web  # noqa: F401  (importing registers their routes)
 from kb.publish.server.http import Handler
 
 
@@ -77,6 +77,8 @@ def _warm_up() -> None:
 
 def serve(port: int = 8765, open_browser: bool = True, adapter: str | None = None) -> int:
     """Runs until Ctrl+C (0) or an update asks for a restart (updater.RESTART_CODE, for the launcher)."""
+    log = applog.start()
+    print(f"log: {log}", flush=True)
     resumed = _resumed()
     httpd = make_server(resumed["port"] if resumed else port, adapter=adapter, token=resumed and resumed["token"])
     port = httpd.server_address[1]

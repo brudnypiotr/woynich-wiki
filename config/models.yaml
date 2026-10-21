@@ -31,6 +31,7 @@ tasks:                     # task -> tier
   verify_support: basic
   query: standard
   decision_draft: standard
+  feedback: standard          # Luna's short interview when a user sends feedback
 
 # Prices per 1M tokens for the cost meter (fill in from your plan; 0 = unknown).
 prices:

@@ -227,3 +227,17 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
 .drop{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding:22px;border:2px dashed var(--line);border-radius:14px;color:var(--mute);font-size:14px}
 .drop b{color:var(--ink2)}.drop.over{border-color:var(--vio);background:var(--vio-soft)}
 .drop.busy{opacity:.6;pointer-events:none}
+.fb-bubble{position:fixed;right:22px;bottom:22px;width:52px;height:52px;border-radius:50%;border:0;background:var(--vio);color:#fff;box-shadow:0 8px 24px rgba(6,16,61,.28);display:grid;place-items:center;z-index:60;cursor:pointer}
+.fb-bubble:hover{background:var(--blue)}.fb-bubble svg{width:24px;height:24px}
+.fb-nudge{position:fixed;right:22px;bottom:86px;width:290px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:0 10px 30px rgba(6,16,61,.18);z-index:60;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.fb-nudge span{color:var(--mute)}.fb-nudge div{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.fb-nudge button{font-size:12px;padding:5px 10px}
+.fb-panel{position:fixed;right:22px;bottom:86px;width:380px;max-width:calc(100vw - 32px);max-height:calc(100vh - 120px);display:flex;flex-direction:column;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:18px;box-shadow:0 16px 40px rgba(6,16,61,.25);z-index:61;overflow:hidden}
+.fb-panel header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--side);color:#fff}.fb-panel header .icon{color:#fff;font-size:20px;width:30px;height:30px}
+.fb-body{padding:14px 16px;overflow:auto;display:flex;flex-direction:column;gap:10px;font-size:14px}.fb-body p{margin:0}.fb-body textarea{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;resize:vertical}
+.fb-body .btns{margin-top:0}.fb-chat{display:flex;flex-direction:column;gap:8px;max-height:280px;overflow:auto}.fb-chat:empty{display:none}
+.fb-msg{padding:8px 12px;border-radius:12px;white-space:pre-wrap;max-width:88%}.fb-msg.user{align-self:flex-end;background:var(--bubble)}.fb-msg.assistant{align-self:flex-start;background:var(--soft)}
+.fb-typing{color:var(--mute);font-style:italic}.fb-report{border:1px solid var(--line);border-left:3px solid var(--vio);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}.fb-report small{color:var(--mute)}
+.fb-shots{display:flex;gap:6px;flex-wrap:wrap}.fb-shot{position:relative}.fb-shot img{width:64px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+.fb-shot button{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:0;background:#c23b3b;color:#fff;font-size:12px;line-height:18px;padding:0}.fb-note{color:var(--mute);font-size:13px}
+/* narrow windows: the chat box reaches the right edge, so the bubble sits above it */
+@media (max-width:1240px){body:has(.composer) .fb-bubble{bottom:134px}body:has(.composer) .fb-panel,body:has(.composer) .fb-nudge{bottom:198px}}

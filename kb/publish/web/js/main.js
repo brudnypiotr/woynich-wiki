@@ -9,6 +9,7 @@ import {openWiki} from './wiki.js';
 import {openSettings} from './settings.js';
 import {openSetup, needsSetup} from './setup.js';
 import {openAbout} from './about.js';
+import {initFeedback} from './feedback.js';
 
 async function route() {document.body.classList.remove('side'); const h = location.hash.slice(1), m = h.match(/^s=([0-9a-f]{12})$/);
   if (m) {if (currentId() === m[1] && $('#turns')) return; try {openChat(await api('/api/sessions/' + m[1]))} catch (e) {location.hash = ''}}
@@ -20,5 +21,6 @@ document.addEventListener('click', e => {  // the menu on narrow screens
   else if (e.target.closest('.scrim')) document.body.classList.remove('side')});
 initShell({onNew: () => openChat(null), onDelete: delSession});
 initChat();
+initFeedback();
 window.onhashchange = route;
 if (!location.hash.startsWith('#setup') && await needsSetup()) location.hash = 'setup'; else route();
