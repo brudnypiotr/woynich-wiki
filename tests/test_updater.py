@@ -37,6 +37,7 @@ def repos(tmp_path, monkeypatch):
     subprocess.run(["git", "clone", "-q", str(origin), str(app)], check=True)
     monkeypatch.setenv("KB_ROOT", str(app))
     monkeypatch.setattr(updater, "_LAST", None)
+    git(app, "config", "user.name", "t"); git(app, "config", "user.email", "t@t")
     return dev, app
 
 
@@ -148,3 +149,49 @@ def test_branding_pack_and_import(tmp_path, monkeypatch):
     assert branding.import_zip(evil.getvalue())["imported"] == ["logo.png"] and (dst / "branding" / "logo.png").exists()
     with pytest.raises(ValueError):
         branding.import_zip(b"not a zip")
+
+
+def test_channels_follow_a_branch_then_back_to_main_when_merged(repos):
+    dev, app = repos
+    git(dev, "switch", "-q", "-c", "feat/x")
+    commit(dev, "feat(x): try me", {"x.py": "1\n"}); git(dev, "push", "-q", "origin", "feat/x")
+    with pytest.raises(updater.UpdateError):
+        updater.switch("feat/x")                                    # needs admin mode
+    updater.set_prefs(admin=True)
+    assert "feat/x" in [b["name"] for b in updater.branches()]
+    r = updater.switch("feat/x")
+    assert r["channel"] == "feat/x" and (app / "x.py").exists() and git(app, "branch", "--show-current") == "feat/x"
+    commit(dev, "fix(x): better", {"x.py": "2\n"}); git(dev, "push", "-q", "origin", "feat/x")
+    assert updater.check()["behind"] == 1 and updater.apply()["updated"]
+    assert (app / "x.py").read_text() == "2\n"
+    git(dev, "switch", "-q", "main"); git(dev, "merge", "-q", "--squash", "feat/x")      # merged on GitHub, branch deleted
+    git(dev, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "feat(x): try me (#1)")
+    git(dev, "push", "-q", "origin", "main", ":feat/x")
+    c = updater.check()
+    assert c["gone"] and c["available"]
+    r = updater.apply()
+    assert r["channel"] == "main" and updater.prefs()["channel"] == "main" and git(app, "branch", "--show-current") == "main"
+    assert (app / "x.py").read_text() == "2\n"
+
+
+def test_developer_clone_on_another_branch_is_never_moved(repos):
+    dev, app = repos
+    git(app, "switch", "-q", "-c", "my-work")
+    commit(app, "wip", {"w.py": "1\n"})
+    publish(dev, "fix: on main", {"m.py": "1\n"})
+    c = updater.check()
+    assert c["off_channel"] and not c["available"] and c["on_branch"] == "my-work"
+    with pytest.raises(updater.UpdateError):
+        updater.apply()
+    assert git(app, "branch", "--show-current") == "my-work" and (app / "w.py").exists()
+
+
+def test_rollback_after_a_channel_switch_returns_to_main(repos):
+    dev, app = repos
+    before = git(app, "rev-parse", "HEAD")
+    git(dev, "switch", "-q", "-c", "feat/y")
+    commit(dev, "feat(y): y", {"y.py": "1\n"}); git(dev, "push", "-q", "origin", "feat/y")
+    updater.set_prefs(admin=True)
+    updater.switch("feat/y")
+    r = updater.rollback()
+    assert r["channel"] == "main" and git(app, "branch", "--show-current") == "main" and git(app, "rev-parse", "HEAD") == before

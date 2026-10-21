@@ -24,20 +24,35 @@ def update_state(h):
     return h.send(200, {**u, "blocked": update_blocker()})
 
 
-@route("POST", r"/api/update/(apply|rollback)")
-def update_run(h, what):
-    if (why := update_blocker()):
-        raise ValueError(why)
-    try:
-        out = updater.apply() if what == "apply" else updater.rollback()
-    except updater.UpdateError as e:
-        raise ValueError(str(e)) from e
+def _restart_after(h, out: dict) -> dict:
     if out.get("restart"):
         out["launcher"] = updater.launched()
         if out["launcher"]:  # the launcher starts the app again with the same address and token
             updater.RESTART.set()
             threading.Timer(0.5, h.server.shutdown).start()
-    return h.send(200, out)
+    return out
+
+
+@route("POST", r"/api/update/(apply|rollback|switch)")
+def update_run(h, what):
+    if (why := update_blocker()):
+        raise ValueError(why)
+    try:
+        out = (updater.apply() if what == "apply" else updater.rollback() if what == "rollback"
+               else updater.switch(str(h.json_body().get("channel") or "")))
+    except updater.UpdateError as e:
+        raise ValueError(str(e)) from e
+    return h.send(200, _restart_after(h, out))
+
+
+@route("GET", r"/api/update/branches")
+def update_branches(h):
+    if not updater.prefs()["admin"]:
+        raise ValueError("admin mode is off (kb update --admin on)")
+    try:
+        return h.send(200, updater.branches())
+    except updater.UpdateError as e:
+        raise ValueError(str(e)) from e
 
 
 @route("GET", r"/api/changelog")

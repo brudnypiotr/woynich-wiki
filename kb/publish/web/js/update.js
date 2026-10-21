@@ -9,13 +9,14 @@ export const entry = e => `<li><span class="kind k-${esc(e.kind.toLowerCase())}"
 // a newer version label only when it was bumped; otherwise just the number of changes (a quick fix)
 export const newer = u => u.latest_version && u.latest_version !== u.current_version ? 'v' + u.latest_version : '';
 export async function notice(refresh) {try {const u = await api('/api/update' + (refresh ? '?refresh=1' : ''));
-  const a = $('#upd'); a.hidden = !u.available; if (u.available) a.textContent = `Update available${newer(u) ? ' · ' + newer(u) : ''} · ${u.behind} change${u.behind > 1 ? 's' : ''}`;
+  const a = $('#upd'); a.hidden = !u.available; if (u.available) a.textContent = u.gone ? `Branch merged · back to ${u.default_channel}`
+    : `Update available${newer(u) ? ' · ' + newer(u) : ''} · ${u.behind} change${u.behind > 1 ? 's' : ''}`;
   return u} catch (e) {return null}}
 
-// what: 'apply' or 'rollback'; say: shows progress next to the buttons
-export async function run(what, say) {
-  say(what === 'apply' ? 'Updating… (downloads the new version)' : 'Rolling back…');
-  const r = await post('/api/update/' + what);
+// what: 'apply', 'rollback' or 'switch' (body: {channel}); say: shows progress next to the buttons
+export async function run(what, say, body) {
+  say({apply: 'Updating… (downloads the new version)', rollback: 'Rolling back…', switch: `Switching to ${body && body.channel}…`}[what]);
+  const r = await post('/api/update/' + what, body);
   if (r.updated === false) return say(r.message);
   const notes = (r.notes || []).join('; ');
   if (!r.launcher) return say(`Done (version ${r.version}${notes ? '; ' + notes : ''}). Close the app window and start Wiki again.`);

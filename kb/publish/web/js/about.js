@@ -15,7 +15,7 @@ export async function openAbout() {mark('about');
       <span>Local changes</span><b>${v.dirty ? 'yes' : 'no'}</b></div></section>
     <section class="set" id="updates"><h3>Updates</h3><p class="d">New versions come from the official repository. Update keeps your
       knowledge base, settings and keys; the app restarts by itself. If a new version misbehaves, Roll back returns to the previous one.</p>
-      <div class="kv" id="u-state"><span>Status</span><b>checking…</b></div><ul class="chg" id="u-list"></ul>
+      <div class="kv" id="u-state"><span>Status</span><b>checking…</b></div><ul class="chg" id="u-list"></ul><div id="u-chan"></div>
       <div class="btns"><button class="pri" data-a="update" hidden>Update now</button><button class="ghost" data-a="check">Check now</button>
         <button class="ghost" data-a="rollback">Roll back to previous</button><span class="note"></span></div></section>
     <section class="set"><h3>Diagnostics</h3>
@@ -39,10 +39,15 @@ export async function openAbout() {mark('about');
 async function updates(refresh) {const sec = $('#updates'), n = sec.querySelector('.note'), btn = a => sec.querySelector(`[data-a=${a}]`);
   const say = (t, ok = true) => {n.className = (ok ? 'okmsg' : 'errmsg') + ' note'; n.textContent = t};
   const u = await notice(refresh);
-  const st = !u ? 'not available' : u.error ? `cannot check: ${u.error}` : u.available
-    ? `${newer(u) ? 'version ' + newer(u).slice(1) : 'a newer version'} is available (${u.behind} change${u.behind > 1 ? 's' : ''})` : 'this is the newest version';
-  $('#u-state').innerHTML = `<span>Status</span><b>${esc(st)}</b>` + (u && u.checked_at ? `<span>Checked</span><b>${new Date(u.checked_at * 1000).toLocaleString()}</b>` : '');
+  const n_ = u && u.behind, many = n_ > 1 ? 's' : '';
+  const st = !u ? 'not available' : u.error ? `cannot check: ${u.error}`
+    : u.off_channel ? `this copy is on branch ${u.on_branch}, not on its channel ${u.channel}: updates are off`
+    : u.gone ? `branch ${u.channel} is gone (merged?): Update returns to ${u.default_channel}`
+    : u.available ? `${newer(u) ? 'version ' + newer(u).slice(1) : 'a newer version'} is available (${n_} change${many})` : 'this is the newest version';
+  const chan = u && u.channel ? `<span>Channel</span><b>${esc(u.channel)}${u.channel !== u.default_channel ? ' (testing a branch)' : ''}</b>` : '';
+  $('#u-state').innerHTML = `<span>Status</span><b>${esc(st)}</b>` + chan + (u && u.checked_at ? `<span>Checked</span><b>${new Date(u.checked_at * 1000).toLocaleString()}</b>` : '');
   $('#u-list').innerHTML = u && u.available ? u.incoming.map(entry).join('') : '';
+  channels(u, say);
   btn('update').hidden = !(u && u.available);
   if (u && u.blocked) say(u.blocked, false);
   btn('check').onclick = async () => {say('Checking…'); await updates(true); say('')};
@@ -51,6 +56,21 @@ async function updates(refresh) {const sec = $('#updates'), n = sec.querySelecto
     try {await run(what, say)} catch (e) {say(e.message, false)} finally {sec.querySelectorAll('button').forEach(b => b.disabled = false)}};
   btn('update').onclick = go('apply');
   btn('rollback').onclick = () => confirm('Go back to the version before the last update?') && go('rollback')()}
+
+// admin mode (kb update --admin on): follow any branch of the repository; anyone on a branch can go back to the default
+async function channels(u, say) {const box = $('#u-chan'); box.innerHTML = '';
+  if (!u || !u.clone) return;
+  const back = u.channel !== u.default_channel ? `<button class="ghost" data-c="back">Back to ${esc(u.default_channel)}</button>` : '';
+  if (!u.admin) {box.innerHTML = back ? `<div class="btns">${back}</div>` : ''}
+  else {let bs = []; try {bs = await api('/api/update/branches')} catch (e) {say(e.message, false)}
+    box.innerHTML = `<div class="f" style="margin-top:14px"><label for="u-br">Admin: follow a branch (try a feature before it is merged)</label>
+      <select id="u-br">${bs.map(b => `<option value="${esc(b.name)}"${b.name === u.channel ? ' selected' : ''}>${esc(b.name)} · ${esc(b.date)} · ${esc(b.subject)}</option>`).join('')}</select></div>
+      <div class="btns"><button class="ghost" data-c="follow">Follow this branch</button>${back}</div>`}
+  const sw = channel => async () => {const now = await notice(true); if (now && now.blocked) return say(now.blocked, false);
+    try {await run('switch', say, {channel})} catch (e) {say(e.message, false)}};
+  const f = box.querySelector('[data-c=follow]'), b = box.querySelector('[data-c=back]');
+  if (f) f.onclick = () => sw($('#u-br').value)();
+  if (b) b.onclick = sw(u.default_channel)}
 
 async function changelog() {let groups; try {groups = await api('/api/changelog')} catch (e) {$('#chg').innerHTML = `<p class="errmsg">${esc(e.message)}</p>`; return}
   const draw = () => {const all = $('#chg-all').checked;

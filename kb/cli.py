@@ -286,23 +286,38 @@ def cmd_update(a) -> int:
             if updater.finish()["packages"]:
                 print("packages updated")
             return 0
+        if a.admin:
+            p = updater.set_prefs(admin=a.admin == "on")
+            print(f"admin mode {'on: About → Updates lists every branch as a channel' if p['admin'] else 'off'}"
+                  f" (channel: {p['channel']})")
+            return 0
+        if a.branches:
+            for b in updater.branches():
+                print(f"{b['name']:<40} {b['date']}  {b['subject']}")
+            return 0
         if a.check:
             r = updater.check()
             if r.get("error"):
                 print(f"cannot check for updates: {r['error']}")
                 return 1
-            print(f"{r['behind']} new change(s) available" if r["available"] else "up to date")
+            if r["off_channel"]:
+                print(f"on branch {r['on_branch']}, not on the update channel {r['channel']}: updates are off")
+                return 0
+            if r["gone"]:
+                print(f"branch {r['channel']} is gone (merged?): kb update returns to {r['default_channel']}")
+                return 0
+            print(f"channel {r['channel']}: " + (f"{r['behind']} new change(s) available" if r["available"] else "up to date"))
             for e in r["incoming"]:
                 print(f"  {e['date']} {e['text']}")
             return 0
-        r = updater.rollback() if a.rollback else updater.apply()
+        r = updater.switch(a.channel) if a.channel else updater.rollback() if a.rollback else updater.apply()
         if a.rollback:
             print(f"rolled back to {r['to']} (version {r['version']})")
         elif not r["updated"]:
             print(r["message"])
             return 0
         else:
-            print(f"updated {r['from']} → {r['to']} (version {r['version']})" + "".join(f"; {n}" for n in r["notes"]))
+            print(f"updated {r['from']} → {r['to']} on {r['channel']} (version {r['version']})" + "".join(f"; {n}" for n in r["notes"]))
         updater.finish()
         return 0
     except updater.UpdateError as e:
@@ -547,6 +562,9 @@ def main(argv=None) -> int:
     g.add_argument("--rollback", action="store_true", help="back to the version before the last update")
     g.add_argument("--finish", action="store_true", help="install packages if the last update changed requirements.txt")
     g.add_argument("--attach", action="store_true", help="connect a ZIP copy to the official remote (setup does this)")
+    g.add_argument("--channel", metavar="BRANCH", help="follow this branch from now on and move to it (admin mode; main always)")
+    g.add_argument("--branches", action="store_true", help="admin mode: list the branches you can follow")
+    g.add_argument("--admin", choices=["on", "off"], help="admin mode for this copy: every branch can be a channel")
     s.set_defaults(fn=cmd_update)
     s = sub.add_parser("branding", help="company logo, background and icon (out of Git): show, pack branding.zip, import one")
     s.add_argument("action", nargs="?", choices=["show", "pack", "import"], default="show"); s.add_argument("zip", nargs="?", default="branding.zip")

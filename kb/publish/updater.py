@@ -1,5 +1,10 @@
 """Updates of this copy of the app from its Git remote (the changelog is in kb/publish/changelog.py).
 
+Channels: a copy follows one branch of the remote, `main` by default (setup/sources.json → update.branch). Admin mode
+(local/update.json, per copy) lets it follow any branch to try a feature before it is merged; when that branch is
+merged and deleted, the next Update returns to main. A copy checked out on another branch than its channel (a
+developer's clone) is never moved.
+
 One click for people who are not technical: `check()` fetches and counts the new commits, `apply()` fast-forwards (local
 edits are stashed, local commits kept on a backup branch), notes whether requirements.txt changed and asks for a restart;
 the launcher (`Wiki.cmd`) starts the app again when it exits with RESTART_CODE and runs `kb update --finish`
@@ -61,28 +66,70 @@ def attach() -> dict:
     return {"attached": False, "remote": appgit.git("remote", "get-url", "origin")}
 
 
+def _prefs_file():
+    return appgit.local() / "update.json"
+
+
+def prefs() -> dict:
+    """This copy's own update settings (local/update.json, not in Git): the channel and whether admin mode is on.
+    Admin mode lists every branch of the repository as a channel, to try a feature before it is merged."""
+    try:
+        p = json.loads(_prefs_file().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        p = {}
+    return {"channel": p.get("channel") or settings()["branch"], "admin": bool(p.get("admin"))}
+
+
+def set_prefs(**kw) -> dict:
+    p = {**prefs(), **{k: v for k, v in kw.items() if v is not None}}
+    _prefs_file().write_text(json.dumps(p, indent=2), encoding="utf-8")
+    return p
+
+
+def _branch() -> str:
+    return appgit.git("rev-parse", "--abbrev-ref", "HEAD")
+
+
+def _fetch(channel: str, timeout: int = 90) -> bool:
+    """Fetch the channel's branch; False when it is gone from the remote (merged and deleted)."""
+    try:
+        appgit.git("fetch", "-q", "--prune", "origin", f"+refs/heads/{channel}:refs/remotes/origin/{channel}", timeout=timeout)
+        return True
+    except UpdateError as e:
+        if "couldn't find remote ref" in str(e).lower():
+            appgit.git("update-ref", "-d", f"refs/remotes/origin/{channel}", check=False)
+            return False
+        raise
+
+
 def check(fetch: bool = True) -> dict:
-    """Is there a newer version on the remote? Fetches (unless fetch=False) and lists the incoming commits."""
+    """Is there a newer version on this copy's channel? Fetches (unless fetch=False) and lists the incoming commits.
+    A copy whose checked-out branch is not its channel (a developer's clone on a feature branch) is never touched."""
     global _LAST
-    s = settings()
+    s, p = settings(), prefs()
     with _LOCK:
-        if not appgit.is_clone():
-            _LAST = {"available": False, "clone": False, "error": "this copy has no Git history: run setup.cmd again",
-                     "checked_at": time.time()}
-            return _LAST
-        out = {"available": False, "clone": True, "behind": 0, "ahead": 0, "incoming": [], "error": None,
-               "branch": s["branch"], "launcher": launched(), "checked_at": time.time()}
-        try:
-            if fetch:
-                appgit.git("fetch", "-q", "origin", s["branch"], timeout=90)
-            up = f"origin/{s['branch']}"
-            ahead, behind = (int(x) for x in appgit.git("rev-list", "--left-right", "--count", f"HEAD...{up}").split())
-            out.update(ahead=ahead, behind=behind, available=behind > 0, current=appgit.git("rev-parse", "--short", "HEAD"),
-                       latest=appgit.git("rev-parse", "--short", up), incoming=changelog.commits(f"HEAD..{up}", 200),
-                       dirty=bool(appgit.git("status", "--porcelain", "--untracked-files=no")),
-                       latest_version=appgit.version_at(up), current_version=appgit.version_at("HEAD"))
-        except (UpdateError, ValueError) as e:
-            out["error"] = str(e)[:400]
+        out = {"available": False, "clone": appgit.is_clone(), "behind": 0, "ahead": 0, "incoming": [], "error": None,
+               "channel": p["channel"], "default_channel": s["branch"], "admin": p["admin"], "on_branch": None,
+               "off_channel": False, "gone": False, "launcher": launched(), "checked_at": time.time()}
+        if not out["clone"]:
+            out["error"] = "this copy has no Git history: run setup.cmd again"
+        else:
+            try:
+                out["on_branch"] = _branch()
+                out["current"], out["current_version"] = appgit.git("rev-parse", "--short", "HEAD"), appgit.version_at("HEAD")
+                if out["on_branch"] != p["channel"]:
+                    out["off_channel"] = True  # updates are off: nothing to do with this checkout
+                elif fetch and not _fetch(p["channel"]):
+                    out.update(gone=True, available=p["channel"] != s["branch"])  # merged: Update returns to the default
+                else:
+                    up = f"origin/{p['channel']}"
+                    ahead, behind = (int(x) for x in appgit.git("rev-list", "--left-right", "--count", f"HEAD...{up}").split())
+                    out.update(ahead=ahead, behind=behind, available=behind > 0,
+                               latest=appgit.git("rev-parse", "--short", up), incoming=changelog.commits(f"HEAD..{up}", 200),
+                               dirty=bool(appgit.git("status", "--porcelain", "--untracked-files=no")),
+                               latest_version=appgit.version_at(up))
+            except (UpdateError, ValueError) as e:
+                out["error"] = str(e)[:400]
         _LAST = out
         return out
 
@@ -91,56 +138,103 @@ def last() -> dict | None:
     return _LAST
 
 
+def branches() -> list[dict]:
+    """Admin mode: every branch on the remote, newest first, as channels to choose from."""
+    appgit.git("fetch", "-q", "--prune", "origin", "+refs/heads/*:refs/remotes/origin/*", timeout=120)
+    out = appgit.git("for-each-ref", "--sort=-committerdate", "refs/remotes/origin",
+                     "--format=%(refname:lstrip=3)\x1f%(committerdate:short)\x1f%(subject)")
+    return [dict(zip(("name", "date", "subject"), ln.split("\x1f", 2))) for ln in out.splitlines()
+            if ln.count("\x1f") == 2 and not ln.startswith("HEAD\x1f")]
+
+
 def _requirements_changed(old: str, new: str) -> bool:
     return bool(appgit.git("diff", "--name-only", old, new, "--", "requirements.txt", check=False))
 
 
+def _move(channel: str, kind: str) -> dict:
+    """Put this copy on origin/<channel>: record where it was (rollback), put local edits aside, keep local commits on a
+    backup branch, check the branch out at the remote's commit. The caller holds _LOCK and restarts the app."""
+    up = f"origin/{channel}"
+    old, old_branch = appgit.git("rev-parse", "HEAD"), _branch()
+    new = appgit.git("rev-parse", up)
+    notes = []
+    if appgit.git("status", "--porcelain", "--untracked-files=no"):
+        appgit.git("stash", "push", "-m", f"kb {kind} {time.strftime('%Y-%m-%d %H:%M')}")
+        notes.append("local edits were put aside (git stash)")
+    (appgit.local() / "update-previous").write_text(json.dumps({"branch": old_branch, "commit": old}), encoding="utf-8")
+    local = appgit.git("rev-parse", "-q", "--verify", f"refs/heads/{channel}", check=False)
+    if local and appgit.git("rev-list", "--count", f"{new}..{local}") != "0":  # commits only here: keep them
+        backup = f"backup/{time.strftime('%Y%m%d-%H%M%S')}"
+        appgit.git("branch", backup, local)
+        notes.append(f"local commits kept on branch {backup}")
+    appgit.git("checkout", "-q", "-B", channel, up)
+    appgit.git("branch", "-q", "-u", up)
+    set_prefs(channel=channel)
+    deps = _requirements_changed(old, new)
+    if deps:
+        (appgit.local() / "update-deps").write_text(new, encoding="utf-8")
+    return {"updated": True, "from": old[:7], "to": new[:7], "channel": channel, "version": appgit.version_at("HEAD"),
+            "packages": deps, "notes": notes, "restart": True}
+
+
 def apply() -> dict:
-    """Move this copy to the newest version. Local edits are stashed, local commits saved on a backup branch.
+    """Move this copy to the newest version of its channel (back to the default channel when that branch is gone).
     Returns what happened; the caller restarts the app (and `kb update --finish` installs packages if needed)."""
-    s = settings()
+    s, p = settings(), prefs()
     with _LOCK:
         if not appgit.is_clone():
             raise UpdateError("this copy has no Git history: run setup.cmd again")
-        up = f"origin/{s['branch']}"
-        appgit.git("fetch", "-q", "origin", s["branch"], timeout=300)
-        old = appgit.git("rev-parse", "HEAD")
-        new = appgit.git("rev-parse", up)
-        if old == new:
+        if _branch() != p["channel"]:
+            raise UpdateError(f"this copy is on branch {_branch()}, not on its update channel {p['channel']}: "
+                              "updates are off (switch the channel in admin mode, or git switch yourself)")
+        channel = p["channel"]
+        if not _fetch(channel, timeout=300):
+            if channel == s["branch"]:
+                raise UpdateError(f"branch {channel} is not on the remote")
+            channel = s["branch"]  # the feature was merged (or dropped): back to the default channel
+            _fetch(channel, timeout=300)
+        if channel == p["channel"] and appgit.git("rev-parse", "HEAD") == appgit.git("rev-parse", f"origin/{channel}"):
             return {"updated": False, "message": "Already up to date."}
-        notes = []
-        if appgit.git("status", "--porcelain", "--untracked-files=no"):
-            appgit.git("stash", "push", "-m", f"kb update {time.strftime('%Y-%m-%d %H:%M')}")
-            notes.append("local edits were put aside (git stash)")
-        (appgit.local() / "update-previous").write_text(old, encoding="utf-8")
-        appgit.git("merge", "-q", "--ff-only", up, check=False)
-        if appgit.git("rev-parse", "HEAD") != new:  # local commits: keep them on a branch and take the official version
-            backup = f"backup/{time.strftime('%Y%m%d-%H%M%S')}"
-            appgit.git("branch", backup, old)
-            appgit.git("reset", "-q", "--hard", up)
-            notes.append(f"local commits kept on branch {backup}")
-        deps = _requirements_changed(old, new)
-        if deps:
-            (appgit.local() / "update-deps").write_text(new, encoding="utf-8")
-        return {"updated": True, "from": old[:7], "to": new[:7], "version": appgit.version_at("HEAD"),
-                "packages": deps, "notes": notes, "restart": True}
+        return _move(channel, "update")
+
+
+def switch(channel: str) -> dict:
+    """Admin mode (or back to the default channel): follow another branch from now on, and move to it now."""
+    s, p = settings(), prefs()
+    if channel != s["branch"] and not p["admin"]:
+        raise UpdateError("other channels need admin mode (kb update --admin on)")
+    with _LOCK:
+        if not appgit.is_clone():
+            raise UpdateError("this copy has no Git history: run setup.cmd again")
+        if not _fetch(channel, timeout=300):
+            raise UpdateError(f"branch {channel} is not on the remote")
+        if _branch() == channel and appgit.git("rev-parse", "HEAD") == appgit.git("rev-parse", f"origin/{channel}"):
+            set_prefs(channel=channel)
+            return {"updated": False, "message": f"Already on {channel}."}
+        return _move(channel, "switch")
 
 
 def rollback() -> dict:
-    """Back to the commit before the last update (for when a new version breaks something)."""
+    """Back to the branch and commit before the last update or channel switch (for when a version breaks something)."""
     f = appgit.local() / "update-previous"
     if not f.exists():
         raise UpdateError("no earlier version recorded on this computer")
-    prev = f.read_text(encoding="utf-8").strip()
+    raw = f.read_text(encoding="utf-8").strip()
+    prev = json.loads(raw) if raw.startswith("{") else {"branch": None, "commit": raw}  # older copies: commit only
     with _LOCK:
         cur = appgit.git("rev-parse", "HEAD")
         if appgit.git("status", "--porcelain", "--untracked-files=no"):
             appgit.git("stash", "push", "-m", f"kb rollback {time.strftime('%Y-%m-%d %H:%M')}")
-        appgit.git("reset", "-q", "--hard", prev)
-        if _requirements_changed(cur, prev):
-            (appgit.local() / "update-deps").write_text(prev, encoding="utf-8")
+        if prev["branch"] and prev["branch"] != "HEAD":
+            appgit.git("checkout", "-q", "-B", prev["branch"], prev["commit"])
+            set_prefs(channel=prev["branch"])
+        else:
+            appgit.git("reset", "-q", "--hard", prev["commit"])
+        if _requirements_changed(cur, prev["commit"]):
+            (appgit.local() / "update-deps").write_text(prev["commit"], encoding="utf-8")
         f.unlink()
-    return {"rolled_back": True, "to": prev[:7], "version": appgit.version_at("HEAD"), "restart": True}
+    return {"rolled_back": True, "to": prev["commit"][:7], "channel": prefs()["channel"], "version": appgit.version_at("HEAD"),
+            "restart": True}
 
 
 def finish(python: str | None = None) -> dict:

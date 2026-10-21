@@ -35,7 +35,11 @@ errors, to copy or download for support. In a terminal: `kb diagnostics` (saved 
 
 **Updates.** The app checks this repository at start and every hour; a new version shows as *Update available* in the
 sidebar. About → **Update now** downloads it, keeps the knowledge base, settings and keys, installs changed packages and
-restarts the app (it waits while sources are being added or an answer is being written); **Roll back to previous** undoes the last update. When the app does not start at all, its window offers
+restarts the app (it waits while sources are being added or an answer is being written); **Roll back to previous** undoes the last update.
+**Channels.** A copy follows `main` by default. To try a feature before it is merged: `kb update --admin on` (this copy
+only, kept in `local/update.json`), then About → Updates → *Follow this branch* (or `kb update --channel feat/x`). Updates
+then come from that branch; when it is merged and deleted, the next Update returns to `main` (or *Back to main* at any
+time). A clone checked out on another branch than its channel (a developer's working copy) is never moved by Update. When the app does not start at all, its window offers
 to update (press U), or run `update.cmd`. Terminal: `kb update [--check | --rollback]`. The source is `update` in
 `setup/sources.json` (change it for a company mirror). About → **Changelog** lists what changed in each version, read from
 Git history (`kb changelog [--all] [--md]`).
