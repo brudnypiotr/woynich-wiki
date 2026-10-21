@@ -9,18 +9,20 @@
   4. Downloads the Copilot runtime used by the Python SDK (no Node.js needed).
   5. Creates kb.cmd; connects a copy unpacked from a ZIP to the official repository (setup\sources.json → update), so
      Update in the app works; creates the "Wiki" shortcuts with an icon (setup\shortcut.ps1).
-  6. Runs a self-test. Writes setup.log.
+  6. Runs a short self-test (5 smoke tests; -FullTest runs all). Writes setup.log.
   Downloads are checked against setup\sources.json (SHA-256). Replace URLs with company mirrors if needed.
 .EXAMPLE
   setup.cmd                 (double-click)
   setup.cmd -Offline        (install packages only from .\wheels)
+  setup.cmd -FullTest       (run every test, not only the smoke tests)
 #>
 [CmdletBinding()]
 param(
   [switch]$Offline,
   [switch]$SkipGit,
   [switch]$SkipCopilot,
-  [switch]$NoUserPath
+  [switch]$NoUserPath,
+  [switch]$FullTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -200,7 +202,10 @@ else {
 }
 
 $gitExe = (Get-Command git -ErrorAction SilentlyContinue)
-if (-not $gitExe -and (Test-Path (Join-Path $Base 'git\cmd\git.exe'))) { $gitExe = Get-Item (Join-Path $Base 'git\cmd\git.exe') }
+if (-not $gitExe -and (Test-Path (Join-Path $Base 'git\cmd\git.exe'))) {
+  $gitExe = Get-Item (Join-Path $Base 'git\cmd\git.exe')
+  $env:Path = (Join-Path $Base 'git\cmd') + ';' + $env:Path   # this window too (self-test, kb update --attach), not only new ones
+}
 if ($gitExe) {
   $gitPath = if ($gitExe.Source) { $gitExe.Source } else { $gitExe.FullName }
   $null = Invoke-Native $gitPath @('-C', $Repo, 'config', 'core.hooksPath', '.githooks')
@@ -248,18 +253,20 @@ try {
   Step 'Shortcut' 'OK' ("Wiki on the desktop and in the Start menu ({0} icon)" -f $sc.icon)
 } catch { Step 'Shortcut' 'WARN' ("could not create the shortcut: $($_.Exception.Message); start Wiki.cmd instead") }
 
-Write-Host 'Self-test: running all tests. This can take a few minutes on Windows (antivirus checks every file and process)...' -ForegroundColor Cyan
+$testArgs = if ($FullTest) { @() } else { @('-m', 'smoke') }
+$what = if ($FullTest) { 'all tests (a few minutes on Windows: antivirus checks every file and process)' } else { 'smoke tests: instance, app, About, a PDF to a cited answer, update' }
+Write-Host "Self-test: $what ..." -ForegroundColor Cyan
 $t0 = Get-Date
 Push-Location $Repo
 try {
   # Straight to the console, not through Invoke-Native's line pipe: with -v pytest prints each test's name when it
   # starts and PASSED/FAILED with the progress in % when it ends, so a slow test shows what it is busy with.
   $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  & $venvPy -m pytest -v -p no:cacheprovider --color=yes
+  & $venvPy -m pytest -v -p no:cacheprovider --color=yes @testArgs
   $code = $LASTEXITCODE
   $ErrorActionPreference = $old
   $took = '{0:N0} s' -f ((Get-Date) - $t0).TotalSeconds
-  if ($code -eq 0) { Step 'Self-test' 'OK' "PASSED: all tests passed ($took)" } else { Step 'Self-test' 'WARN' "FAILED: some tests failed ($took); see setup.log" }
+  if ($code -eq 0) { Step 'Self-test' 'OK' "PASSED ($took)" } else { Step 'Self-test' 'WARN' "FAILED: some tests failed ($took); see setup.log" }
 } finally { Pop-Location }
 
 Write-Host ''

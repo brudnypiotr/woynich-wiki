@@ -40,6 +40,7 @@ def test_token_required(app):
     assert e.value.code == 403
 
 
+@pytest.mark.smoke
 def test_static_app_files(app):
     base, token = app
     with urllib.request.urlopen(base + "/static/js/main.js") as r:  # the app's code needs no token
@@ -66,6 +67,7 @@ def test_first_run_setup_flag(app):
     assert call(base, token, "/api/settings")["model"]["recommended"] == "gpt-6-luna"
 
 
+@pytest.mark.smoke
 def test_about_and_diagnostics(app):
     base, token = app
     v = call(base, token, "/api/about")
@@ -98,6 +100,7 @@ def test_update_waits_for_ingest(app, monkeypatch):
     assert e.value.code == 400 and "2 in the queue" in json.loads(e.value.read())["error"]
 
 
+@pytest.mark.smoke
 def test_upload_steps_then_discussion(app):
     base, token = app
     job = call(base, token, "/api/upload", SAMPLE.read_bytes(), {"X-Filename": SAMPLE.name})

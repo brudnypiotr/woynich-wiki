@@ -41,6 +41,7 @@ def publish(dev, msg, files):
     git(dev, "push", "-q", "origin", "main")
 
 
+@pytest.mark.smoke
 def test_check_and_apply(repos):
     dev, app = repos
     assert updater.check()["available"] is False

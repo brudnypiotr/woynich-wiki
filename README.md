@@ -23,7 +23,7 @@ send `instance\reports\llm-smoke.json`), `kb init` and `kb serve`.
 | Script | What it does |
 |---|---|
 | `doctor.cmd` | read-only check of the machine (PowerShell, policies, proxy, Python, Git, Copilot); changes nothing |
-| `setup.cmd` | private Python and packages, Git, Copilot runtime, `kb.cmd`, self-test; safe to run again |
+| `setup.cmd` | private Python and packages, Git, Copilot runtime, `kb.cmd`, shortcut, 5 smoke tests (`-FullTest`: all); safe to run again |
 | `Wiki.cmd [instance folder]` | starts the app in the browser; the first start opens the setup; restarts it after an update; offers an update when the app fails to start |
 | `update.cmd` | downloads and installs the newest version (the same as Update in the app) |
 | `kb.cmd <command>` | the command line (created by setup); each copy of the repository runs its own code and instance |
