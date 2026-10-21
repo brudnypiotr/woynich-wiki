@@ -1,10 +1,11 @@
 """Settings, keys and tokens, GitHub Copilot sign-in, AI-credit usage and the status line (kb/publish/settings.py does the work)."""
 from __future__ import annotations
 
+import threading
 import time
 
 from kb.knowledge import catalog, pages
-from kb.publish import diagnostics, settings
+from kb.publish import diagnostics, settings, updater
 from kb.publish.server import WRITE_LOCK, chat_api, ingest_api
 from kb.publish.server.http import route
 
@@ -66,6 +67,32 @@ def about(h):
 @route("GET", r"/api/diagnostics")
 def diagnostics_report(h):
     return h.send(200, diagnostics.report(h.gw, list(ingest_api.JOBS.values())))
+
+
+@route("GET", r"/api/update")
+def update_state(h):
+    return h.send(200, updater.check() if h.query("refresh") or not updater.last() else updater.last())
+
+
+@route("POST", r"/api/update/(apply|rollback)")
+def update_run(h, what):
+    if WRITE_LOCK.locked():
+        raise ValueError("the app is busy writing the wiki; update when it is done")
+    try:
+        out = updater.apply() if what == "apply" else updater.rollback()
+    except updater.UpdateError as e:
+        raise ValueError(str(e)) from e
+    if out.get("restart"):
+        out["launcher"] = updater.launched()
+        if out["launcher"]:  # the launcher starts the app again with the same address and token
+            updater.RESTART.set()
+            threading.Timer(0.5, h.server.shutdown).start()
+    return h.send(200, out)
+
+
+@route("GET", r"/api/changelog")
+def changelog(h):
+    return h.send(200, updater.changelog())
 
 
 @route("GET", r"/api/usage")

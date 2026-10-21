@@ -1,6 +1,7 @@
 // The sidebar: status line, AI-credit usage, the list of discussions, which entry is highlighted.
 import {$, esc} from './ui.js';
 import {api} from './api.js';
+import {notice} from './update.js';
 
 export async function status() {try {const s = await api('/api/status'); $('#st').textContent = `${s.sources} sources · ${s.pages} pages · ${s.model}${s.busy ? ' · working…' : ''}${s.queued ? ` · ${s.queued} queued` : ''}`;
   $('#dot').classList.toggle('busy', s.busy)} catch (e) {$('#st').textContent = 'not connected'; $('#dot').classList.add('busy')}}
@@ -36,6 +37,6 @@ export function initShell({onNew, onDelete}) {
     const a = e.target.closest('a'); if (a) location.hash = 's=' + a.dataset.id};
   $('#navp').onclick = e => {const b = e.target.closest('button'); if (!b) return; if (b.dataset.v === 'new' && !location.hash.slice(1)) return onNew(); location.hash = b.dataset.v === 'new' ? '' : b.dataset.v};
   $('#usage').onclick = () => usage(true);
-  setInterval(status, 5000); status(); appVersion();
+  setInterval(status, 5000); status(); appVersion(); notice(); setInterval(notice, 600000);
   usage(); setInterval(() => usage(), 60000);
   loadSessions()}

@@ -271,7 +271,57 @@ def cmd_quota(a) -> int:
 
 def cmd_serve(a) -> int:
     from kb.publish import serve
-    serve.serve(port=a.port, open_browser=not a.no_browser, adapter=a.adapter)
+    return serve.serve(port=a.port, open_browser=not a.no_browser, adapter=a.adapter)
+
+
+def cmd_update(a) -> int:
+    """Update this copy from its Git remote (what the Update button does), check only, roll back, or finish (packages)."""
+    from kb.publish import updater
+    try:
+        if a.attach:
+            r = updater.attach()
+            print(f"remote: {r['remote']}" + (" (connected this copy)" if r["attached"] else ""))
+            return 0
+        if a.finish:
+            if updater.finish()["packages"]:
+                print("packages updated")
+            return 0
+        if a.check:
+            r = updater.check()
+            if r.get("error"):
+                print(f"cannot check for updates: {r['error']}")
+                return 1
+            print(f"{r['behind']} new change(s) available" if r["available"] else "up to date")
+            for e in r["incoming"]:
+                print(f"  {e['date']} {e['text']}")
+            return 0
+        r = updater.rollback() if a.rollback else updater.apply()
+        if a.rollback:
+            print(f"rolled back to {r['to']} (version {r['version']})")
+        elif not r["updated"]:
+            print(r["message"])
+            return 0
+        else:
+            print(f"updated {r['from']} → {r['to']} (version {r['version']})" + "".join(f"; {n}" for n in r["notes"]))
+        updater.finish()
+        return 0
+    except updater.UpdateError as e:
+        print(f"update failed: {e}")
+        return 1
+
+
+def cmd_changelog(a) -> int:
+    from kb.publish import updater
+    groups = updater.changelog()
+    if a.md:
+        print(updater.changelog_markdown(groups, all_types=a.all))
+        return 0
+    for g in groups:
+        entries = [e for e in g["entries"] if a.all or e["kind"] != "Other"]
+        if entries:
+            print(f"{g['version']}")
+            for e in entries:
+                print(f"  {e['date']} [{e['type']}] {e['text']}")
     return 0
 
 
@@ -473,6 +523,16 @@ def main(argv=None) -> int:
     s = sub.add_parser("serve", help="local web app: add files with visible steps, discussion sessions, dashboard")
     s.add_argument("--port", type=int, default=8765); s.add_argument("--no-browser", action="store_true"); s.add_argument("--adapter")
     s.set_defaults(fn=cmd_serve)
+    s = sub.add_parser("update", help="update this copy of the app from its Git remote (as the Update button in kb serve)")
+    g = s.add_mutually_exclusive_group()
+    g.add_argument("--check", action="store_true", help="only say whether a newer version exists")
+    g.add_argument("--rollback", action="store_true", help="back to the version before the last update")
+    g.add_argument("--finish", action="store_true", help="install packages if the last update changed requirements.txt")
+    g.add_argument("--attach", action="store_true", help="connect a ZIP copy to the official remote (setup does this)")
+    s.set_defaults(fn=cmd_update)
+    s = sub.add_parser("changelog", help="what changed in each version, read from Git history")
+    s.add_argument("--all", action="store_true", help="also docs, tests, refactoring"); s.add_argument("--md", action="store_true")
+    s.set_defaults(fn=cmd_changelog)
     s = sub.add_parser("status", help="counts and model usage"); s.add_argument("--json", action="store_true")
     s.add_argument("--sources", action="store_true", help="list sources with id and status"); s.set_defaults(fn=cmd_status)
     s = sub.add_parser("remove", help="delete sources (original, text, source page); the model cleans pages that cited them; one commit")

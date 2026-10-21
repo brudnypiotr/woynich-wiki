@@ -1,4 +1,6 @@
 {
+  "update": {"remote": "https://github.com/brudnypiotr/woynich-wiki.git", "branch": "main",
+             "_comment": "Where Update in the app and kb update fetch new versions from; change to the company mirror when the code moves"},
   "_comment": "Official download sources used by setup.ps1. Replace URLs with company mirrors if the internet is blocked; keep the sha256 values in sync.",
   "python_installer": {"version": "3.12.10", "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe",
                        "sha256": "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb"},

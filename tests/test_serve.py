@@ -69,11 +69,22 @@ def test_first_run_setup_flag(app):
 def test_about_and_diagnostics(app):
     base, token = app
     v = call(base, token, "/api/about")
-    assert v["version"] == "0.2.0" and "commit" in v
+    from kb import __version__
+    assert v["version"] == __version__ and "commit" in v
     d = call(base, token, "/api/diagnostics")
     assert d["app"]["version"] == v["version"] and set(d["checks"]) == {"copilot", "jira"}
     assert all(isinstance(x, bool) or x is None for x in d["secrets"].values())  # whether a key is set, never its value
     assert d["knowledge_base"]["sources"] == 0 and d["recent_errors"] == []
+
+
+def test_update_state_and_changelog(app, monkeypatch):
+    from kb.publish import updater
+    monkeypatch.setattr(updater, "_LAST", None)
+    monkeypatch.setattr(updater, "check", lambda fetch=True: {"available": True, "behind": 1, "incoming": [], "error": None})
+    base, token = app
+    assert call(base, token, "/api/update")["behind"] == 1
+    log = call(base, token, "/api/changelog")
+    assert log and all({"version", "date", "entries"} <= set(g) for g in log)
 
 
 def test_upload_steps_then_discussion(app):
