@@ -1,0 +1,62 @@
+# Every pull request: all tests on Linux, the real Windows setup (setup.ps1) plus all tests on Windows, and a version
+# bump (each merge to main is a release that users get through Update). Required checks for main.
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}  # the changelog and update tests read Git history
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - run: pip install -r requirements.txt
+      - run: git config --global user.name ci && git config --global user.email ci@example.com
+      - run: python -m pytest -q
+
+  setup-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: git config --global user.name ci; git config --global user.email ci@example.com
+      - name: setup.ps1 (Windows PowerShell 5.1, like the work laptops; smoke tests included)
+        shell: powershell
+        run: |
+          $env:PSModulePath = ''
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File setup\setup.ps1 -SkipCopilot
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $failed = Get-Content "$env:LOCALAPPDATA\woynich-wiki\setup-result.json" -Raw | ConvertFrom-Json | Where-Object { $_.status -eq 'FAIL' }
+          if ($failed) { $failed | Format-Table | Out-String | Write-Host; exit 1 }
+      - name: kb.cmd works
+        shell: cmd
+        run: |
+          call kb.cmd --version || exit /b 1
+          call kb.cmd changelog || exit /b 1
+      - name: all tests on Windows
+        shell: cmd
+        run: .venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+
+  version-bump:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: pyproject.toml version is higher than on main
+        run: |
+          new=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          old=$(git show origin/${{ github.base_ref }}:pyproject.toml | grep -m1 '^version = ' | cut -d'"' -f2)
+          echo "main: $old  this PR: $new"
+          python3 -c "import sys; v=lambda s: tuple(map(int, s.split('.'))); sys.exit(0 if v('$new') > v('$old') else 1)" \
+            || { echo "::error::bump version in pyproject.toml (patch: fix or small change, minor: big feature, major: release)"; exit 1; }

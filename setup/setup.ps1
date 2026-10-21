@@ -7,7 +7,7 @@
   2. Creates .venv in the repository and installs packages (uses the system proxy; offline from .\wheels if present).
   3. Finds Git or unpacks Portable Git (git-scm / git-for-windows) into %LOCALAPPDATA%.
   4. Downloads the Copilot runtime used by the Python SDK (no Node.js needed).
-  5. Creates kb.cmd; connects a copy unpacked from a ZIP to the official repository (setup\sources.json → update), so
+  5. Creates kb.cmd; connects a copy unpacked from a ZIP to the official repository (setup\sources.json, "update"), so
      Update in the app works; creates the "Wiki" shortcuts with an icon (setup\shortcut.ps1).
   6. Runs a short self-test (5 smoke tests; -FullTest runs all). Writes setup.log.
   Downloads are checked against setup\sources.json (SHA-256). Replace URLs with company mirrors if needed.
@@ -246,7 +246,7 @@ else {
 $brandZip = Join-Path $Repo 'branding.zip'
 if (Test-Path $brandZip) {   # a colleague's branding pack put next to setup.cmd
   if ((Invoke-Native (Join-Path $Repo 'kb.cmd') @('branding', 'import', $brandZip)) -eq 0) { Step 'Branding' 'OK' 'branding.zip imported into branding\' }
-  else { Step 'Branding' 'WARN' 'could not import branding.zip; import it later in Settings → Branding' }
+  else { Step 'Branding' 'WARN' 'could not import branding.zip; import it later in Settings, Branding' }
 }
 try {
   $sc = & (Join-Path $ScriptDir 'shortcut.ps1') -Repo $Repo

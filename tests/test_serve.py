@@ -75,7 +75,8 @@ def test_about_and_diagnostics(app):
     assert v["version"] == __version__ and "commit" in v
     d = call(base, token, "/api/diagnostics")
     assert d["app"]["version"] == v["version"] and set(d["checks"]) == {"copilot", "jira"}
-    assert all(isinstance(x, bool) or x is None for x in d["secrets"].values())  # whether a key is set, never its value
+    keys = {k: v for k, v in d["secrets"].items() if k != "error"}  # "error": no secret store (Linux CI has no keyring)
+    assert all(isinstance(x, bool) or x is None for x in keys.values())  # whether a key is set, never its value
     assert d["knowledge_base"]["sources"] == 0 and d["recent_errors"] == []
 
 

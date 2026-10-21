@@ -37,7 +37,11 @@ sidebar. About → **Update now** downloads it, keeps the knowledge base, settin
 restarts the app (it waits while sources are being added or an answer is being written); **Roll back to previous** undoes the last update. When the app does not start at all, its window offers
 to update (press U), or run `update.cmd`. Terminal: `kb update [--check | --rollback]`. The source is `update` in
 `setup/sources.json` (change it for a company mirror). About → **Changelog** lists what changed in each version, read from
-Git history (`kb changelog [--all] [--md]`); bump `version` in `pyproject.toml` for each release.
+Git history (`kb changelog [--all] [--md]`).
+
+**Changes and versions.** Nothing is committed to `main` directly: every change is a pull request that CI checks
+(all tests on Linux and Windows, the real `setup.ps1` on Windows) and that bumps `version` in `pyproject.toml`: patch for
+every change, minor for a big new feature, major for a release. Each merge is one version that users get through Update.
 
 The shortcut's icon is `instance\branding\icon.ico` or `icon.png` when the knowledge base has branding (kept out of Git),
 otherwise a neutral one; after adding branding run `setup.cmd` again.
