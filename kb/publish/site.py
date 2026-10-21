@@ -6,8 +6,11 @@ verification report and log. Every wiki page is embedded and readable with clien
 from __future__ import annotations
 
 import base64
+import hashlib
 import html
 import json
+import subprocess
+import time
 from collections import defaultdict
 from pathlib import Path
 
@@ -93,13 +96,38 @@ def _branding() -> str:
     return out
 
 
-def build() -> Path:
-    data = collect_data()
+def _inputs_key() -> str:
+    """What the dashboard is made of, cheaply: the instance's commit and uncommitted state (pages, sources), the usage
+    and verification logs, the branding files and this code. Same key: the page from last time is still right."""
+    from kb.publish import branding
+    inst = catalog.instance()
+    g = lambda *a: subprocess.run(["git", "-C", str(inst), *a], capture_output=True, text=True, encoding="utf-8",
+                                  errors="replace").stdout.strip()
+    stat = lambda p: f"{p.stat().st_mtime_ns}:{p.stat().st_size}" if p.exists() else "-"
+    files = [inst / "catalog" / "metering.jsonl", inst / "reports" / "verify.json", Path(__file__),
+             config.paths().instance / "config" / "profile.yaml",
+             *(p for d in branding.dirs() if d.exists() for p in sorted(d.iterdir()))]
+    try:
+        state = g("rev-parse", "HEAD") + "|" + g("status", "--porcelain")
+    except OSError:
+        state = str(time.time())  # no git: always rebuild
+    return hashlib.sha256("|".join([state, *map(stat, files)]).encode()).hexdigest()
+
+
+def build(force: bool = True) -> Path:
+    """Write the dashboard (instance/site/index.html). force=False: keep last time's page when nothing it shows changed
+    (the Wiki view in kb serve opens instantly instead of reading every page again)."""
     out = catalog.instance() / "site" / "index.html"
+    marker = out.with_name(".inputs")
+    key = _inputs_key()
+    if not force and out.exists() and marker.exists() and marker.read_text(encoding="utf-8") == key:
+        return out
+    data = collect_data()
     out.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     page = TEMPLATE.replace("__DATA__", payload).replace("__TITLE__", html.escape(data["name"])).replace("__LOGO__", _branding())
     out.write_text(page, encoding="utf-8")
+    marker.write_text(key, encoding="utf-8")
     return out
 
 

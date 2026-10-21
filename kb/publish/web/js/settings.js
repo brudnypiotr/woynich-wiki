@@ -1,5 +1,5 @@
 // Settings: the parts shared with the first-run setup (model, Copilot, Jira, repositories), other keys, the title.
-import {$, esc, topbar, msg} from './ui.js';
+import {$, esc, topbar, msg, loader} from './ui.js';
 import {api, post} from './api.js';
 import {mark} from './shell.js';
 import {mountModel} from './parts/model.js';
@@ -9,7 +9,7 @@ import {mountRepos} from './parts/repos.js';
 import {secretRow, bindSecrets} from './parts/secret.js';
 
 export async function openSettings(){mark('settings');
-  $('#main').innerHTML=topbar('Settings')+`<div class="scroll"><div class="col wide" id="setc"><p class="empty">Loading…</p></div></div>`;
+  $('#main').innerHTML=topbar('Settings')+`<div class="scroll"><div class="col wide" id="setc">${loader()}</div></div>`;
   let C;try{C=await api('/api/settings')}catch(e){$('#setc').innerHTML=`<p class="errmsg">${esc(e.message)}</p>`;return}
   const p=C.profile;
   $('#setc').innerHTML=`<div class="pagehead"><div class="kicker">Settings</div><h2>Models, sign-in and keys</h2>

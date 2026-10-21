@@ -1,11 +1,11 @@
 // About: the app's version, updates, a diagnostics report to copy or download for support (no keys, no content), the changelog.
-import {$, esc, topbar, note} from './ui.js';
+import {$, esc, topbar, note, loader} from './ui.js';
 import {api} from './api.js';
 import {mark} from './shell.js';
 import {entry, newer, notice, run} from './update.js';
 
 export async function openAbout() {mark('about');
-  $('#main').innerHTML = topbar('About') + `<div class="scroll"><div class="col wide" id="about"><p class="empty">Loading…</p></div></div>`;
+  $('#main').innerHTML = topbar('About') + `<div class="scroll"><div class="col wide" id="about">${loader()}</div></div>`;
   let v; try {v = await api('/api/about')} catch (e) {$('#about').innerHTML = `<p class="errmsg">${esc(e.message)}</p>`; return}
   $('#about').innerHTML = `<div class="pagehead"><div class="kicker">About</div><h2>woynich-wiki ${esc(v.version)}</h2>
     <p>Project knowledge base with a paper trail.</p></div>
@@ -25,7 +25,7 @@ export async function openAbout() {mark('about');
         <button class="ghost" data-a="save" hidden>Download</button><span class="note"></span></div><pre hidden></pre></section>
     <section class="set"><h3>Changelog</h3><p class="d">What changed in each version, from the history of this copy.</p>
       <label class="d"><input type="checkbox" id="chg-all"> Show all changes (also documentation, tests and internal work)</label>
-      <div id="chg"><p class="empty">Loading…</p></div></section>`;
+      <div id="chg">${loader('Reading the history…')}</div></section>`;
   const root = $('#about'), pre = root.querySelector('pre'), n = root.querySelector('.note'), btn = a => root.querySelector(`[data-a=${a}]`);
   let text = '';
   btn('run').onclick = async () => {btn('run').disabled = true; note(n, 'Collecting… (checks GitHub Copilot and Jira, a few seconds)');
@@ -51,23 +51,34 @@ async function updates(refresh) {const sec = $('#updates'), n = sec.querySelecto
   btn('update').hidden = !(u && u.available);
   if (u && u.blocked) say(u.blocked, false);
   btn('check').onclick = async () => {say('Checking…'); await updates(true); say('')};
-  const go = what => async () => {const now = await notice(true); if (now && now.blocked) return say(now.blocked, false);  // ingest started meanwhile
-    sec.querySelectorAll('button').forEach(b => b.disabled = true);
-    try {await run(what, say)} catch (e) {say(e.message, false)} finally {sec.querySelectorAll('button').forEach(b => b.disabled = false)}};
+  const go = what => () => act(sec, say, () => run(what, say));
   btn('update').onclick = go('apply');
   btn('rollback').onclick = () => confirm('Go back to the version before the last update?') && go('rollback')()}
+
+// a click shows at once that something happens: buttons off, a spinner and a line; then whether an ingest or an answer
+// is running (the server knows at once, no fetch), then the work; the app restarts or the buttons come back
+async function act(sec, say, work) {const bs = [...sec.querySelectorAll('button, select')];
+  if (bs.some(b => b.dataset.busy)) return;
+  bs.forEach(b => {b.disabled = true; b.dataset.busy = 1}); sec.classList.add('busy'); say('Starting…');
+  try {const now = await api('/api/update'); if (now.blocked) return say(now.blocked, false);
+    await work()}
+  catch (e) {say(e.message, false)}
+  finally {bs.forEach(b => {b.disabled = false; delete b.dataset.busy}); sec.classList.remove('busy')}}
 
 // admin mode (kb update --admin on): follow any branch of the repository; anyone on a branch can go back to the default
 async function channels(u, say) {const box = $('#u-chan'); box.innerHTML = '';
   if (!u || !u.clone) return;
   const back = u.channel !== u.default_channel ? `<button class="ghost" data-c="back">Back to ${esc(u.default_channel)}</button>` : '';
   if (!u.admin) {box.innerHTML = back ? `<div class="btns">${back}</div>` : ''}
-  else {let bs = []; try {bs = await api('/api/update/branches')} catch (e) {say(e.message, false)}
+  else {  // the section first, the branches when the remote answered (a fetch of every branch takes a moment)
     box.innerHTML = `<div class="f" style="margin-top:14px"><label for="u-br">Admin: follow a branch (try a feature before it is merged)</label>
-      <select id="u-br">${bs.map(b => `<option value="${esc(b.name)}"${b.name === u.channel ? ' selected' : ''}>${esc(b.name)} · ${esc(b.date)} · ${esc(b.subject)}</option>`).join('')}</select></div>
-      <div class="btns"><button class="ghost" data-c="follow">Follow this branch</button>${back}</div>`}
-  const sw = channel => async () => {const now = await notice(true); if (now && now.blocked) return say(now.blocked, false);
-    try {await run('switch', say, {channel})} catch (e) {say(e.message, false)}};
+      <select id="u-br" disabled><option>Loading branches…</option></select></div>
+      <div class="btns"><button class="ghost" data-c="follow" disabled>Follow this branch</button>${back}</div>`;
+    api('/api/update/branches').then(bs => {const sel = $('#u-br'); if (!sel) return;
+      sel.innerHTML = bs.map(b => `<option value="${esc(b.name)}"${b.name === u.channel ? ' selected' : ''}>${esc(b.name)} · ${esc(b.date)} · ${esc(b.subject)}</option>`).join('');
+      sel.disabled = box.querySelector('[data-c=follow]').disabled = false})
+      .catch(e => {const sel = $('#u-br'); if (sel) sel.innerHTML = `<option>${esc(e.message)}</option>`})}
+  const sw = channel => () => act($('#updates'), say, () => run('switch', say, {channel}));
   const f = box.querySelector('[data-c=follow]'), b = box.querySelector('[data-c=back]');
   if (f) f.onclick = () => sw($('#u-br').value)();
   if (b) b.onclick = sw(u.default_channel)}

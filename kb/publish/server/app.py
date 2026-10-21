@@ -63,6 +63,18 @@ def make_server(port: int = 8765, gw: Gateway | None = None, adapter: str | None
     return httpd
 
 
+def _warm_up() -> None:
+    """Do the slow first-time work now, not when someone opens Settings or Wiki: load the Windows secret store, read
+    the state of the code repositories (git status), build the dashboard if the wiki changed."""
+    from kb.knowledge import chat
+    from kb.publish import settings, site
+    for step in (settings.secrets_state, chat.repos, lambda: site.build(force=False)):
+        try:
+            step()
+        except Exception:  # noqa: BLE001  warming up must never stop the app
+            pass
+
+
 def serve(port: int = 8765, open_browser: bool = True, adapter: str | None = None) -> int:
     """Runs until Ctrl+C (0) or an update asks for a restart (updater.RESTART_CODE, for the launcher)."""
     resumed = _resumed()
@@ -74,6 +86,7 @@ def serve(port: int = 8765, open_browser: bool = True, adapter: str | None = Non
         webbrowser.open(url)
     stop = threading.Event()
     threading.Thread(target=updater.background, args=(stop,), daemon=True, name="kb-update-check").start()
+    threading.Thread(target=_warm_up, daemon=True, name="kb-warm-up").start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

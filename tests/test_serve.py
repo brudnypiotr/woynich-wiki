@@ -286,3 +286,19 @@ def test_usage_estimate_adds_what_kb_used_since_the_reading(instance):
     met.write_text('{"at": "2026-10-19T11:59:00+00:00", "credits": 5}\n{"at": "2026-10-19T12:01:00+00:00", "credits": 1.5}\n')
     e = settings.usage_estimate(u)
     assert (e["used"], e["since_check"], e["kb_month"]) == (809.5, 1.5, 5.0) and round(e["remaining_pct"], 1) == 57.4
+
+
+def test_dashboard_is_rebuilt_only_when_the_wiki_changes(instance, monkeypatch):
+    from kb.knowledge import catalog
+    from kb.publish import site
+    catalog.init()
+    calls = []
+    real = site.collect_data
+    monkeypatch.setattr(site, "collect_data", lambda: calls.append(1) or real())
+    site.build(force=False); site.build(force=False)
+    assert len(calls) == 1                                   # unchanged: last time's page
+    (instance / "wiki").mkdir(exist_ok=True); (instance / "wiki" / "new.md").write_text("# New\n", encoding="utf-8")
+    site.build(force=False)
+    assert len(calls) == 2                                   # a new page: built again
+    site.build()
+    assert len(calls) == 3                                   # kb site and Rebuild always build

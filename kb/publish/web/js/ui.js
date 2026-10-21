@@ -11,3 +11,5 @@ export const topbar = (title, acts = '') => `<div class="top"><button class="ico
 // a short status line next to buttons: green and fading, or red and staying
 export const msg = (id, t, ok = true) => note($('#' + id), t, ok);
 export const note = (e, t, ok = true) => {e.className = (ok ? 'okmsg' : 'errmsg') + ' note'; e.textContent = t; if (ok) setTimeout(() => {if (e.textContent === t) e.textContent = ''}, 4000)};
+// a spinner with a short text, shown at once while a view waits for the server
+export const loader = (t = 'Loading…') => `<div class="loading"><i></i><span>${t}</span></div>`;

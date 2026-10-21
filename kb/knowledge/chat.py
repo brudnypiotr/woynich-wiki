@@ -44,17 +44,32 @@ _GIT: dict[str, tuple[float, dict]] = {}
 
 
 def _git_state(p: Path, ttl: float = 60) -> dict:
-    """Branch, commit and local changes of a repository, cached for a minute: `git status` on a large repository
-    is slow on Windows, and this runs for every question and every Settings page."""
-    hit = _GIT.get(str(p))
-    if hit and time.time() - hit[0] < ttl:
+    """Branch, commit and local changes of a repository. `git status` on a large repository is slow on Windows and this
+    runs for every question and every Settings page, so a known state is returned at once and refreshed in the
+    background when it is older than ttl; only the very first look waits (kb serve warms it up at start)."""
+    key = str(p)
+    hit = _GIT.get(key)
+    if hit:
+        if time.time() - hit[0] > ttl and key not in _GIT_BUSY:
+            _GIT_BUSY.add(key)
+            threading.Thread(target=_git_refresh, args=(p,), daemon=True, name="kb-repo-state").start()
         return hit[1]
+    return _git_refresh(p)
+
+
+_GIT_BUSY: set[str] = set()
+
+
+def _git_refresh(p: Path) -> dict:
     g = lambda *a: subprocess.run(["git", "-C", str(p), *a], capture_output=True, text=True, encoding="utf-8",
                                   errors="replace").stdout.strip()
-    st = {"commit": g("rev-parse", "--short", "HEAD") or None, "branch": g("rev-parse", "--abbrev-ref", "HEAD") or None,
-          "dirty": bool(g("status", "--porcelain", "--untracked-files=no"))}
-    _GIT[str(p)] = (time.time(), st)
-    return st
+    try:
+        st = {"commit": g("rev-parse", "--short", "HEAD") or None, "branch": g("rev-parse", "--abbrev-ref", "HEAD") or None,
+              "dirty": bool(g("status", "--porcelain", "--untracked-files=no"))}
+        _GIT[str(p)] = (time.time(), st)
+        return st
+    finally:
+        _GIT_BUSY.discard(str(p))
 
 
 def architecture() -> str:

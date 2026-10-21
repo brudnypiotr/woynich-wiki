@@ -46,7 +46,7 @@ def static(h, rel):
 
 @route("GET", r"/dashboard")
 def dashboard(h):
-    page = site.build().read_bytes()
+    page = site.build(force=bool(h.query("rebuild"))).read_bytes()  # unchanged wiki: last time's page
     if h.query("embed"):  # inside the app: the app already shows the logo and title
         page = page.replace(b"</head>", EMBED_CSS + b"</head>", 1)
     return h.send(200, page, "text/html; charset=utf-8")

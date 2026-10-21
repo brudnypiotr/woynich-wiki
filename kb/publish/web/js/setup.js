@@ -1,6 +1,6 @@
 // First-run setup: one screen per part (the same parts as Settings), then the app.
 // Shown when the instance has no setup.done_at yet; Settings → "Run the first-run setup again" opens it any time.
-import {$, esc, topbar} from './ui.js';
+import {$, esc, topbar, loader} from './ui.js';
 import {api, post} from './api.js';
 import {mark} from './shell.js';
 import {mountCopilot} from './parts/copilot.js';
@@ -16,7 +16,7 @@ const STEPS = [
 ];
 
 export async function openSetup(at = 0) {mark('setup');
-  $('#main').innerHTML = topbar('Setup') + `<div class="scroll"><div class="col wide" id="setup"><p class="empty">Loading…</p></div></div>`;
+  $('#main').innerHTML = topbar('Setup') + `<div class="scroll"><div class="col wide" id="setup">${loader()}</div></div>`;
   let C; try {C = await api('/api/settings')} catch (e) {$('#setup').innerHTML = `<p class="errmsg">${esc(e.message)}</p>`; return}
   const s = STEPS[at], last = at === STEPS.length - 1;
   $('#setup').innerHTML = `<ol class="stepper">${STEPS.map((x, i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}">${esc(x.title)}</li>`).join('')}</ol>
