@@ -329,10 +329,10 @@ def cmd_branding(a) -> int:
 
 
 def cmd_changelog(a) -> int:
-    from kb.publish import updater
-    groups = updater.changelog()
+    from kb.publish import changelog
+    groups = changelog.groups()
     if a.md:
-        print(updater.changelog_markdown(groups, all_types=a.all))
+        print(changelog.markdown(groups, all_types=a.all))
         return 0
     for g in groups:
         entries = [e for e in g["entries"] if a.all or e["kind"] != "Other"]

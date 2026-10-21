@@ -8,12 +8,12 @@ from __future__ import annotations
 import json
 import os
 import platform
-import subprocess
 import sys
 import time
 from importlib import metadata
 
 from kb.core import config
+from kb.publish import appgit
 
 _VERSION: dict | None = None
 
@@ -28,12 +28,11 @@ def version() -> dict:
             v = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
         except Exception:
             v = "unknown"
-        g = lambda *a: subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True, encoding="utf-8",
-                                      errors="replace").stdout.strip()
         try:
-            commit, date = (g("log", "-1", "--format=%h %cs").split() + ["", ""])[:2]
-            branch, dirty = g("rev-parse", "--abbrev-ref", "HEAD"), bool(g("status", "--porcelain", "--untracked-files=no"))
-        except OSError:  # no git on this computer
+            commit, date = (appgit.git("log", "-1", "--format=%h %cs").split() + ["", ""])[:2]
+            branch = appgit.git("rev-parse", "--abbrev-ref", "HEAD")
+            dirty = bool(appgit.git("status", "--porcelain", "--untracked-files=no"))
+        except appgit.GitError:  # no git on this computer, or a copy without Git history
             commit = date = branch = ""; dirty = False
         _VERSION = {"version": v, "commit": commit or None, "date": date or None, "branch": branch or None, "dirty": dirty}
     return _VERSION

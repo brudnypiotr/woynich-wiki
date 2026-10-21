@@ -6,8 +6,14 @@ rem An update may replace this file while it runs, and cmd reads a running scrip
 rem from a copy in %TEMP% and finds the app through KB_REPO.
 if defined KB_REPO goto copied
 set "KB_REPO=%~dp0"
-copy /y "%~f0" "%TEMP%\wiki.cmd" >nul || goto copied
-"%TEMP%\wiki.cmd" %*
+rem one copy per app folder (two folders may hold different versions of this script): C:\kb\app\ -> C-kb-app-
+set "KB_NAME=%~dp0"
+set "KB_NAME=%KB_NAME::=%"
+set "KB_NAME=%KB_NAME:\=-%"
+set "KB_NAME=%KB_NAME: =_%"
+set "KB_COPY=%TEMP%\wiki-%KB_NAME%.cmd"
+copy /y "%~f0" "%KB_COPY%" >nul || goto copied
+"%KB_COPY%" %*
 
 :copied
 setlocal

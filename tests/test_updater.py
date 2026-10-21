@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from kb.publish import updater
+from kb.publish import changelog, updater
 
 
 def git(cwd, *a):
@@ -111,18 +111,18 @@ def test_changelog_groups_by_version(repos):
     publish(dev, "feat(serve): two; 0.2.0", {"pyproject.toml": 'version = "0.2.0"\n'})
     publish(dev, "docs: three", {"README.md": "x\n"})
     updater.apply()
-    g = updater.changelog()
+    g = changelog.groups()
     assert [x["version"] for x in g] == ["0.2.0", "0.1.0"]
     assert [e["text"] for e in g[0]["entries"]] == ["three", "two; 0.2.0"]
     assert [e["text"] for e in g[1]["entries"]] == ["one", "first"]
     assert g[1]["entries"][0]["scope"] == "chat" and g[1]["entries"][0]["kind"] == "Fixes"
-    md = updater.changelog_markdown(g)
-    assert "## 0.2.0" in md and "three" not in md and "three" in updater.changelog_markdown(g, all_types=True)
+    md = changelog.markdown(g)
+    assert "## 0.2.0" in md and "three" not in md and "three" in changelog.markdown(g, all_types=True)
 
 
 def test_parse():
-    assert updater.parse("abc", "2026-10-21", "fix(setup)!: x: y")["text"] == "x: y"
-    assert updater.parse("abc", "2026-10-21", 'Revert "feat: x"')["kind"] == "Other"
+    assert changelog.parse("abc", "2026-10-21", "fix(setup)!: x: y")["text"] == "x: y"
+    assert changelog.parse("abc", "2026-10-21", 'Revert "feat: x"')["kind"] == "Other"
 
 
 def test_branding_pack_and_import(tmp_path, monkeypatch):
