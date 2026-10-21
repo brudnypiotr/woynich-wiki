@@ -246,7 +246,7 @@ else {
 $brandZip = Join-Path $Repo 'branding.zip'
 if (Test-Path $brandZip) {   # a colleague's branding pack put next to setup.cmd
   if ((Invoke-Native (Join-Path $Repo 'kb.cmd') @('branding', 'import', $brandZip)) -eq 0) { Step 'Branding' 'OK' 'branding.zip imported into branding\' }
-  else { Step 'Branding' 'WARN' 'could not import branding.zip; import it later in Settings, Branding' }
+  else { Step 'Branding' 'WARN' 'could not import branding.zip; import it later in Settings, Project branding' }
 }
 try {
   $sc = & (Join-Path $ScriptDir 'shortcut.ps1') -Repo $Repo

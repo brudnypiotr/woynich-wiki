@@ -326,14 +326,15 @@ def cmd_update(a) -> int:
 
 
 def cmd_branding(a) -> int:
-    """Company branding out of Git: pack branding.zip for a colleague, or import one (also refreshes the shortcut icon)."""
+    """Project branding out of Git: pack branding.zip for a colleague, or import one (also refreshes the shortcut icon)."""
     from kb.publish import branding
     try:
         if a.action == "pack":
-            print(f"created {branding.pack()}: send it; they import it in Settings → Branding (or kb branding import)")
+            print(f"created {branding.pack()}: send it; they drop it into the first step of the setup or Settings → Project branding (or kb branding import)")
         elif a.action == "import":
             r = branding.import_zip(Path(a.zip).read_bytes())
-            print(f"imported {', '.join(r['imported'])} into {r['folder']}; shortcut {r['shortcut']}")
+            print(f"imported {', '.join(r['imported']) or 'no images'} into {r['folder']}; shortcut {r['shortcut']}"
+                  + (f"; knowledge base title: {r['title']}" if r["title"] else ""))
         else:
             for k, v in branding.state()["files"].items():
                 print(f"{k:<11} {v or '-'}")
@@ -566,7 +567,7 @@ def main(argv=None) -> int:
     g.add_argument("--branches", action="store_true", help="admin mode: list the branches you can follow")
     g.add_argument("--admin", choices=["on", "off"], help="admin mode for this copy: every branch can be a channel")
     s.set_defaults(fn=cmd_update)
-    s = sub.add_parser("branding", help="company logo, background and icon (out of Git): show, pack branding.zip, import one")
+    s = sub.add_parser("branding", help="project logo, background, icon and title (out of Git): show, pack branding.zip, import one")
     s.add_argument("action", nargs="?", choices=["show", "pack", "import"], default="show"); s.add_argument("zip", nargs="?", default="branding.zip")
     s.set_defaults(fn=cmd_branding)
     s = sub.add_parser("changelog", help="what changed in each version, read from Git history")

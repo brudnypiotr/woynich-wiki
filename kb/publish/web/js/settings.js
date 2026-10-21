@@ -6,6 +6,7 @@ import {mountModel} from './parts/model.js';
 import {mountCopilot} from './parts/copilot.js';
 import {mountJira} from './parts/jira.js';
 import {mountRepos} from './parts/repos.js';
+import {mountBranding} from './parts/branding.js';
 import {secretRow, bindSecrets} from './parts/secret.js';
 
 export async function openSettings(){mark('settings');
@@ -23,9 +24,8 @@ export async function openSettings(){mark('settings');
     <div id="secs"></div>
     <div class="sec-row"><div class="nm"><b>Another key</b><small>Name: lowercase letters, digits, dashes.</small></div><input id="nk-name" placeholder="name, e.g. confluence-token"><div class="b"></div>
      <div></div><input id="nk-val" type="password" placeholder="value" autocomplete="off"><div class="b"><button class="ghost" id="nk-add">Add</button></div></div></section>
-   <section class="set"><h3>Branding</h3><p class="d">Company logo, header background and icon, kept out of Git. Got a <code>branding.zip</code>
-    from a colleague? Import it here; the desktop shortcut gets the icon too.</p><div class="kv" id="brand-files"></div>
-    <div class="btns"><label class="pri" for="brand-zip" style="cursor:pointer">Import branding.zip…</label><input type="file" id="brand-zip" accept=".zip" hidden><span id="bmsg"></span></div></section>
+   <section class="set"><h3>Project branding</h3><p class="d">Project logo, header background, icon and knowledge base title, kept out of Git.
+    Got a <code>branding.zip</code> from a colleague? Import it here; the desktop shortcut gets the icon too.</p><div id="p-brand"></div></section>
    <section class="set"><h3>Knowledge base</h3><p class="d">Name shown in the sidebar.</p>
     <div class="f"><label for="ptitle">Title</label><input id="ptitle" value="${esc(p.title)}"></div>
     <div class="btns"><button class="pri" id="psave">Save</button><a class="ghost" href="#setup">Run the first-run setup again</a><span id="pmsg"></span></div></section>`;
@@ -36,10 +36,6 @@ export async function openSettings(){mark('settings');
   secs(C.secrets);bindSecrets($('#secs'),st=>secs(st));
   $('#nk-add').onclick=async()=>{const n=$('#nk-name').value.trim(),v=$('#nk-val').value;if(!n||!v)return;
     try{secs(await post('/api/secrets/'+encodeURIComponent(n),{value:v}));$('#nk-name').value=$('#nk-val').value=''}catch(e){alert(e.message)}};
-  const brand=b=>{$('#brand-files').innerHTML=Object.entries(b.files).map(([k,v])=>`<span>${k}</span><b>${v?esc(v.split(/[\\/]/).slice(-3).join('/')):'none'}</b>`).join('')};
-  api('/api/branding').then(brand).catch(()=>{});
-  $('#brand-zip').onchange=async e=>{const f=e.target.files[0];if(!f)return;msg('bmsg','Importing…');
-    try{const r=await api('/api/branding',{method:'POST',body:f});brand(r);msg('bmsg',`Imported ${r.imported.join(', ')}. Reloading…`);setTimeout(()=>location.reload(),1200)}
-    catch(err){msg('bmsg',err.message,false)}finally{e.target.value=''}};
+  mountBranding($('#p-brand'),C);
   $('#psave').onclick=async()=>{try{const r=await post('/api/settings',{profile:{title:$('#ptitle').value}});
     document.querySelector('aside header h1').textContent=r.profile.title;msg('pmsg','Saved.')}catch(e){msg('pmsg',e.message,false)}}}

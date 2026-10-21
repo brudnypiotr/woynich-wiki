@@ -7,8 +7,11 @@ import {mountCopilot} from './parts/copilot.js';
 import {mountModel} from './parts/model.js';
 import {mountJira} from './parts/jira.js';
 import {mountRepos} from './parts/repos.js';
+import {mountBranding} from './parts/branding.js';
 
 const STEPS = [
+  {key: 'branding', title: 'Project branding', optional: true, text: 'Optional. Got a branding.zip from a colleague? Drop it here: the project logo, icon and knowledge base title are set for you. You can do it later in Settings.',
+    mount: (el, C) => mountBranding(el, C, {reload: () => {location.hash = 'setup/1'; location.reload()}})},
   {key: 'copilot', title: 'Sign in to GitHub Copilot', text: 'The assistant runs on your GitHub Copilot subscription. Sign in once in the browser; if that is not possible, store a GitHub token with Copilot access.', mount: mountCopilot},
   {key: 'model', title: 'Choose the model', text: 'The model that writes the wiki and answers questions. The recommended one is preselected when your Copilot account offers it; each source or question costs AI credits. You can change it later in Settings.', mount: (el, C) => mountModel(el, C, {setup: true})},
   {key: 'jira', title: 'Connect Jira', optional: true, text: 'Optional. With Jira the assistant can read tickets you paste into a question (read only). You can add it later in Settings.', mount: mountJira},

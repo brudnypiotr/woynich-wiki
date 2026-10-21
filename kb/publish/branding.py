@@ -1,11 +1,12 @@
 """Company branding (logo, header background, icon), kept out of Git: the copy's `branding/` folder, or the knowledge
-base's own `instance/branding/` (wins). Shared as a branding.zip: `kb branding pack` makes it, Settings → Branding
-(or `kb branding import`, or setup.cmd when branding.zip lies next to it) unpacks it, and on Windows the
-Wiki shortcut gets the new icon.
+base's own `instance/branding/` (wins). Shared as a branding.zip: `kb branding pack` makes it, with branding.json
+carrying the knowledge base title; the first-run setup, Settings → Project branding, `kb branding import` or setup.cmd (when
+branding.zip lies next to it) unpacks it, sets the title, and on Windows gives the Wiki shortcut the icon.
 """
 from __future__ import annotations
 
 import io
+import json
 import os
 import subprocess
 import zipfile
@@ -43,9 +44,15 @@ def import_zip(data: bytes) -> dict:
         z = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as e:
         raise ValueError("not a .zip file") from e
-    got = []
+    got, title = [], None
     folder().mkdir(exist_ok=True)
     for info in z.infolist():
+        if Path(info.filename).name.lower() == "branding.json" and info.file_size < 100_000:
+            try:
+                title = str(json.loads(z.read(info).decode("utf-8")).get("title") or "").strip() or None
+            except (ValueError, UnicodeDecodeError, AttributeError):
+                raise ValueError("branding.json in the zip is not valid JSON") from None
+            continue
         name = Path(info.filename).name.lower()  # basename only: no paths from the zip are trusted
         stem, ext = os.path.splitext(name)
         if info.is_dir() or stem not in STEMS or ext not in EXTS or info.file_size > MAX_ZIP:
@@ -55,21 +62,27 @@ def import_zip(data: bytes) -> dict:
                 old.unlink()
         (folder() / name).write_bytes(z.read(info))
         got.append(name)
-    if not got:
+    if not got and not title:
         raise ValueError("no branding files in the zip (expected logo, background or icon as .png, .svg, .jpg or .ico)")
-    return {"imported": sorted(got), "shortcut": refresh_shortcut(), **state()}
+    if title:  # the knowledge base title the colleague who packed it uses
+        from kb.publish import settings
+        settings.save({"profile": {"title": title}})
+    return {"imported": sorted(got), "title": title, "shortcut": refresh_shortcut() if got else "unchanged", **state()}
 
 
 def pack(out: Path | None = None) -> Path:
-    """branding/ (and instance/branding/ on top) as branding.zip to send to a colleague."""
+    """branding/ (and instance/branding/ on top) as branding.zip to send to a colleague, with the knowledge base title."""
     out = out or config.paths().root / "branding.zip"
     files = {p.name: p for d in reversed(dirs()) if d.exists() for p in d.iterdir()
              if p.suffix.lower() in EXTS and p.stem.lower() in STEMS}
     if not files:
         raise ValueError(f"no branding files in {folder()}")
+    title = (config.load("profile").get("instance") or {}).get("title")
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for name, p in sorted(files.items()):
             z.write(p, f"branding/{name}")
+        if title:  # settings that are the same for the whole team; personal ones (Jira e-mail, keys) never
+            z.writestr("branding/branding.json", json.dumps({"title": title}, ensure_ascii=False, indent=2))
     return out
 
 

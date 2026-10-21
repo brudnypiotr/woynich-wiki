@@ -133,13 +133,19 @@ def test_branding_pack_and_import(tmp_path, monkeypatch):
     src, dst = tmp_path / "src", tmp_path / "dst"
     (src / "branding").mkdir(parents=True); (dst / "branding").mkdir(parents=True)
     (src / "branding" / "icon.png").write_bytes(b"png"); (src / "branding" / "logo.svg").write_text("<svg/>")
-    monkeypatch.setenv("KB_INSTANCE", str(tmp_path / "inst"))
+    from kb.publish import settings
+    monkeypatch.setenv("KB_INSTANCE", str(tmp_path / "packer"))
     monkeypatch.setenv("KB_ROOT", str(src))
+    settings.save({"profile": {"title": "Orders Rules", "jira_base_url": "https://jira.example.com", "jira_email": "me@example.com"}})
     z = branding.pack()
+    names = zipfile.ZipFile(z).namelist()
+    assert "branding/branding.json" in names and b"me@example.com" not in z.read_bytes()   # the title, nothing personal
+    monkeypatch.setenv("KB_INSTANCE", str(tmp_path / "inst"))
     monkeypatch.setenv("KB_ROOT", str(dst))
     (dst / "branding" / "icon.svg").write_text("<svg/>")  # replaced by the imported icon.png
     r = branding.import_zip(z.read_bytes())
     assert r["imported"] == ["icon.png", "logo.svg"] and not (dst / "branding" / "icon.svg").exists()
+    assert r["title"] == "Orders Rules" and settings.state()["profile"]["title"] == "Orders Rules"
     assert branding.find("icon") == dst / "branding" / "icon.png"
     (tmp_path / "inst" / "branding").mkdir(parents=True); (tmp_path / "inst" / "branding" / "icon.png").write_bytes(b"own")
     assert branding.find("icon") == tmp_path / "inst" / "branding" / "icon.png"  # the knowledge base's own wins

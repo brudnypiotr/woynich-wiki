@@ -224,3 +224,5 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
 .wfwrap{flex:1;display:flex;position:relative;min-height:0}.wfload{position:absolute;inset:0;display:grid;place-items:center;background:var(--bg)}
 #updates.busy .note::before{content:"";display:inline-block;width:12px;height:12px;margin-right:8px;vertical-align:-2px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--vio);animation:kbspin .8s linear infinite}
 .f .req{color:var(--vio);font-weight:800}.f input.invalid{border-color:#c23b3b;box-shadow:0 0 0 3px rgba(194,59,59,.15)}
+.drop{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding:22px;border:2px dashed var(--line);border-radius:14px;color:var(--mute);font-size:14px}
+.drop b{color:var(--ink2)}.drop.over{border-color:var(--vio);background:var(--vio-soft)}
