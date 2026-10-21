@@ -2,7 +2,7 @@
 import {$, esc, topbar, note} from './ui.js';
 import {api} from './api.js';
 import {mark} from './shell.js';
-import {entry, notice, run} from './update.js';
+import {entry, newer, notice, run} from './update.js';
 
 export async function openAbout() {mark('about');
   $('#main').innerHTML = topbar('About') + `<div class="scroll"><div class="col wide" id="about"><p class="empty">Loading…</p></div></div>`;
@@ -40,7 +40,7 @@ async function updates(refresh) {const sec = $('#updates'), n = sec.querySelecto
   const say = (t, ok = true) => {n.className = (ok ? 'okmsg' : 'errmsg') + ' note'; n.textContent = t};
   const u = await notice(refresh);
   const st = !u ? 'not available' : u.error ? `cannot check: ${u.error}` : u.available
-    ? `version ${u.latest_version || u.latest} is available (${u.behind} change${u.behind > 1 ? 's' : ''})` : 'this is the newest version';
+    ? `${newer(u) ? 'version ' + newer(u).slice(1) : 'a newer version'} is available (${u.behind} change${u.behind > 1 ? 's' : ''})` : 'this is the newest version';
   $('#u-state').innerHTML = `<span>Status</span><b>${esc(st)}</b>` + (u && u.checked_at ? `<span>Checked</span><b>${new Date(u.checked_at * 1000).toLocaleString()}</b>` : '');
   $('#u-list').innerHTML = u && u.available ? u.incoming.map(entry).join('') : '';
   btn('update').hidden = !(u && u.available);

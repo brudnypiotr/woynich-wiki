@@ -138,7 +138,7 @@ def check(fetch: bool = True) -> dict:
             out.update(ahead=ahead, behind=behind, available=behind > 0, current=_git("rev-parse", "--short", "HEAD"),
                        latest=_git("rev-parse", "--short", up), incoming=_commits(f"HEAD..{up}", 200),
                        dirty=bool(_git("status", "--porcelain", "--untracked-files=no")),
-                       latest_version=_version_at(up))
+                       latest_version=_version_at(up), current_version=_version_at("HEAD"))
         except (UpdateError, subprocess.TimeoutExpired, ValueError) as e:
             out["error"] = str(e)[:400]
         _LAST = out

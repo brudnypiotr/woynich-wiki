@@ -2,12 +2,14 @@
 import {$, esc} from './ui.js';
 import {api, post} from './api.js';
 
-export const entry = e => `<li><span class="kind k-${esc(e.kind.toLowerCase())}">${esc(e.kind === 'Other' ? e.type : e.kind.slice(0, -1))}</span>${esc(e.text)}`
+export const entry = e => `<li><span class="kind k-${esc(e.kind.toLowerCase())}">${esc({Features: 'feature', Fixes: 'fix'}[e.kind] || e.type)}</span>${esc(e.text)}`
   + `<small>${e.scope ? esc(e.scope) + ' · ' : ''}${esc(e.date)} · ${esc(e.commit)}</small></li>`;
 
 // in the sidebar, above the version: shown only when a newer version is waiting
+// a newer version label only when it was bumped; otherwise just the number of changes (a quick fix)
+export const newer = u => u.latest_version && u.latest_version !== u.current_version ? 'v' + u.latest_version : '';
 export async function notice(refresh) {try {const u = await api('/api/update' + (refresh ? '?refresh=1' : ''));
-  const a = $('#upd'); a.hidden = !u.available; if (u.available) a.textContent = `Update available${u.latest_version ? ' · v' + u.latest_version : ''} · ${u.behind} change${u.behind > 1 ? 's' : ''}`;
+  const a = $('#upd'); a.hidden = !u.available; if (u.available) a.textContent = `Update available${newer(u) ? ' · ' + newer(u) : ''} · ${u.behind} change${u.behind > 1 ? 's' : ''}`;
   return u} catch (e) {return null}}
 
 // what: 'apply' or 'rollback'; say: shows progress next to the buttons
