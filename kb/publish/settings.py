@@ -162,11 +162,15 @@ def save(body: dict) -> dict:
                 data.setdefault("instance", {})["title"] = t
         if "jira_base_url" in b or "jira_email" in b:
             url = str(b.get("jira_base_url") or "").strip().rstrip("/")
-            if url and not re.fullmatch(r"https?://[^\s]+", url):
+            email = str(b.get("jira_email") or "").strip()
+            if not url or not email:  # both required (the e-mail signs in to Jira Cloud and names the user everywhere)
+                raise ValueError("Jira URL and Jira e-mail are required")
+            if not re.fullmatch(r"https?://[^\s]+", url):
                 raise ValueError("Jira URL must start with https://")
+            if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+                raise ValueError("Jira e-mail is not an e-mail address")
             j = data.setdefault("jira", {})
-            j["base_url"] = url or None
-            j["email"] = str(b.get("jira_email") or "").strip() or None
+            j["base_url"], j["email"] = url, email
         _write("profile", data)
     if "repos" in body:
         data = _read("profile")

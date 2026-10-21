@@ -14,13 +14,13 @@ const tokenPage = url => isCloud(url) ? 'https://id.atlassian.com/manage-profile
   : /^https?:\/\/\S+/.test(url || '') ? url.replace(/\/+$/, '') + '/secure/ViewProfile.jspa?selectedTab=com.atlassian.pats.pats-plugin:jira-user-personal-access-tokens' : '';
 const howTo = url => isCloud(url)
   ? `<b>Jira Cloud</b>: open the page below, click <i>Create API token</i>, give it a name (e.g. “knowledge base”), copy it and paste it into <i>Jira token</i>. The e-mail above is your Atlassian account.`
-  : `<b>Jira Data Center / Server</b>: open the page below (or your avatar → <i>Profile</i> → <i>Personal Access Tokens</i>), click <i>Create token</i>, copy it and paste it into <i>Jira token</i>. Leave the e-mail empty.`;
+  : `<b>Jira Data Center / Server</b>: open the page below (or your avatar → <i>Profile</i> → <i>Personal Access Tokens</i>), click <i>Create token</i>, copy it and paste it into <i>Jira token</i>.`;
 
 // C: settings state. Returns {save(), ok()}: save stores URL, e-mail and a pasted token, then tests (true when saved).
 export function mountJira(el, C) {
   let secrets = C.secrets; const p = C.profile;
-  el.innerHTML = `<div class="grid2"><div class="f"><label>Jira URL</label><input data-k="url" value="${esc(p.jira_base_url)}" placeholder="https://yourcompany.atlassian.net"></div>
-     <div class="f"><label>Jira e-mail</label><input data-k="email" value="${esc(p.jira_email)}" placeholder="Jira Cloud only"><small>Leave empty for Jira Data Center.</small></div></div>
+  el.innerHTML = `<div class="grid2"><div class="f"><label>Jira URL <span class="req" title="required">*</span></label><input data-k="url" type="url" required value="${esc(p.jira_base_url)}" placeholder="https://yourcompany.atlassian.net"></div>
+     <div class="f"><label>Jira e-mail <span class="req" title="required">*</span></label><input data-k="email" type="email" required value="${esc(p.jira_email)}" placeholder="you@company.com"><small>The e-mail of your Jira account.</small></div></div>
     <div class="tokhelp"><p class="howto d"></p><a class="bigbtn" target="_blank" rel="noopener"></a></div>
     <div class="tok"></div>
     <div class="btns jfoot"><button class="pri" data-a="save">Save and test</button><span class="note"></span><span class="jstat"></span></div>`;
@@ -35,10 +35,16 @@ export function mountJira(el, C) {
   $k('url').oninput = help;
   const off = onCheck(w => {if (!el.isConnected) return off(); if (w === 'jira') stat()});
   bindSecrets(el.querySelector('.tok'), st => {secrets = st; tok(); if ($k('url').value.trim()) runCheck('jira')});
-  const save = async () => {try {const r = await post('/api/settings', {profile: {jira_base_url: $k('url').value, jira_email: $k('email').value}});
+  // both fields required: say which one is missing next to it, before asking the server
+  const missing = () => {const bad = ['url', 'email'].filter(k => !$k(k).value.trim() || !$k(k).checkValidity());
+    ['url', 'email'].forEach(k => $k(k).classList.toggle('invalid', bad.includes(k)));
+    if (bad.length) {$k(bad[0]).focus(); note(n, bad.includes('url') && !$k('url').value.trim() || bad.includes('email') && !$k('email').value.trim()
+      ? 'Jira URL and Jira e-mail are required.' : bad.includes('url') ? 'Jira URL must start with https://' : 'Jira e-mail is not an e-mail address.', false)}
+    return bad.length > 0};
+  ['url', 'email'].forEach(k => $k(k).addEventListener('input', () => $k(k).classList.remove('invalid')));
+  const save = async () => {if (missing()) return false; try {const r = await post('/api/settings', {profile: {jira_base_url: $k('url').value, jira_email: $k('email').value}});
       const pasted = el.querySelector('.tok input').value.trim();
       if (pasted) {secrets = await post('/api/secrets/' + SECRET_NAME, {value: pasted}); tok()}
-      if (!r.profile.jira_base_url) {el.querySelector('.jstat').innerHTML = ''; note(n, 'Saved. Nothing to test yet: enter the Jira URL above.', false); return true}
       note(n, 'Saved. Testing the connection…'); runCheck('jira'); return true}
     catch (e) {note(n, e.message, false); return false}};
   el.querySelector('[data-a=save]').onclick = save;

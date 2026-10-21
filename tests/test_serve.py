@@ -163,10 +163,16 @@ def test_settings_models_profile_and_secrets(app, instance, monkeypatch):
     monkeypatch.delenv("COPILOT_GITHUB_TOKEN", raising=False)
     base, token = app
     s = call(base, token, "/api/settings", json.dumps({"model": {"override": "gpt-6-luna", "tiers": {"basic": "small-1"}, "timeout_s": 600},
-                                                       "profile": {"title": "Orders rules", "jira_base_url": "https://jira.example.com/"}}).encode())
+                                                       "profile": {"title": "Orders rules", "jira_base_url": "https://jira.example.com/",
+                                                                   "jira_email": "me@example.com"}}).encode())
     assert s["model"] == {**s["model"], "effective": "gpt-6-luna", "source": "override", "timeout_s": 600}
     assert s["model"]["tiers"]["basic"] == "small-1" and s["profile"]["jira_base_url"] == "https://jira.example.com"
     assert call(base, token, "/api/status")["model"] == "gpt-6-luna"
+    for bad in ({"jira_base_url": "https://jira.example.com", "jira_email": ""}, {"jira_base_url": "", "jira_email": "me@example.com"},
+                {"jira_base_url": "https://jira.example.com", "jira_email": "not-an-email"}):
+        with pytest.raises(urllib.error.HTTPError) as e:  # Jira URL and e-mail are required
+            call(base, token, "/api/settings", json.dumps({"profile": bad}).encode())
+        assert e.value.code == 400
     s = call(base, token, "/api/settings", json.dumps({"model": {"override": ""}}).encode())
     assert s["model"]["source"] == "tiers"
     with pytest.raises(urllib.error.HTTPError) as e:

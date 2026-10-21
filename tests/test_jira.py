@@ -106,6 +106,23 @@ def test_get_text_and_credentials(monkeypatch, fake, tmp_path):
     assert jira.Jira("https://jira.example.com").email is None  # Data Center: bearer token, no e-mail
 
 
+def test_data_center_uses_the_token_even_with_an_email(monkeypatch):
+    seen = []
+
+    class H:
+        def get_content_type(self): return "application/json"
+
+    class R:
+        headers = H()
+        def read(self): return b'{"displayName": "Me"}'
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+    monkeypatch.setattr(jira.urllib.request, "urlopen", lambda req, timeout=None: seen.append(req.get_header("Authorization")) or R())
+    jira.Jira("https://jira.example.com", email="me@example.com", token="pat").whoami()
+    jira.Jira("https://example.atlassian.net", email="me@example.com", token="api").whoami()
+    assert seen[0] == "Bearer pat" and seen[1].startswith("Basic ")
+
+
 def test_login_page_is_an_auth_error(monkeypatch):
     class R:
         headers = type("H", (), {"get_content_type": lambda self: "text/html"})()

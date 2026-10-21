@@ -79,7 +79,7 @@ class Jira(Connector):
     # ------------------------------------------------------------------ HTTP
     def _request(self, url: str, accept: str) -> tuple[bytes, str]:
         req = urllib.request.Request(url, headers={"Accept": accept, "User-Agent": "woynich-wiki"})
-        if self.email:
+        if self.cloud:  # Cloud: e-mail + API token; Data Center: personal access token (an e-mail, if known, is not used)
             req.add_header("Authorization", "Basic " + base64.b64encode(f"{self.email}:{self.token}".encode()).decode())
         else:
             req.add_header("Authorization", f"Bearer {self.token}")

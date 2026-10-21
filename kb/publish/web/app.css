@@ -218,3 +218,4 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
 .set details.ver{border-top:1px solid var(--line);padding:10px 0}.set details.ver summary{cursor:pointer;font-weight:700}.set details.ver summary small{color:var(--mute);font-weight:400;margin-left:8px}
 .restarting{position:fixed;inset:0;background:rgba(6,16,61,.55);display:grid;place-items:center;z-index:100}.restarting>div{background:var(--card);color:var(--ink);border-radius:18px;padding:24px 28px;max-width:420px;text-align:center}
 [hidden]{display:none!important}
+.f .req{color:var(--vio);font-weight:800}.f input.invalid{border-color:#c23b3b;box-shadow:0 0 0 3px rgba(194,59,59,.15)}
