@@ -44,8 +44,10 @@ async function updates(refresh) {const sec = $('#updates'), n = sec.querySelecto
   $('#u-state').innerHTML = `<span>Status</span><b>${esc(st)}</b>` + (u && u.checked_at ? `<span>Checked</span><b>${new Date(u.checked_at * 1000).toLocaleString()}</b>` : '');
   $('#u-list').innerHTML = u && u.available ? u.incoming.map(entry).join('') : '';
   btn('update').hidden = !(u && u.available);
+  if (u && u.blocked) say(u.blocked, false);
   btn('check').onclick = async () => {say('Checking…'); await updates(true); say('')};
-  const go = what => async () => {sec.querySelectorAll('button').forEach(b => b.disabled = true);
+  const go = what => async () => {const now = await notice(true); if (now && now.blocked) return say(now.blocked, false);  // ingest started meanwhile
+    sec.querySelectorAll('button').forEach(b => b.disabled = true);
     try {await run(what, say)} catch (e) {say(e.message, false)} finally {sec.querySelectorAll('button').forEach(b => b.disabled = false)}};
   btn('update').onclick = go('apply');
   btn('rollback').onclick = () => confirm('Go back to the version before the last update?') && go('rollback')()}

@@ -87,6 +87,17 @@ def test_update_state_and_changelog(app, monkeypatch):
     assert log and all({"version", "date", "entries"} <= set(g) for g in log)
 
 
+def test_update_waits_for_ingest(app, monkeypatch):
+    from kb.publish import updater
+    from kb.publish.server import ingest_api
+    monkeypatch.setattr(updater, "apply", lambda: pytest.fail("must not update during an ingest"))
+    monkeypatch.setattr(ingest_api, "QUEUE", ["job1", "job2"])
+    base, token = app
+    with pytest.raises(urllib.error.HTTPError) as e:
+        call(base, token, "/api/update/apply", b"{}")
+    assert e.value.code == 400 and "2 in the queue" in json.loads(e.value.read())["error"]
+
+
 def test_upload_steps_then_discussion(app):
     base, token = app
     job = call(base, token, "/api/upload", SAMPLE.read_bytes(), {"X-Filename": SAMPLE.name})

@@ -23,7 +23,7 @@ from pathlib import Path
 from kb.core import config
 
 RESTART_CODE = 3          # `kb serve` exit code that asks the launcher to start it again
-CHECK_EVERY_S = 6 * 3600  # background check while `kb serve` runs
+CHECK_EVERY_S = 3600      # background check while `kb serve` runs
 DEFAULT = {"remote": "https://github.com/brudnypiotr/woynich-wiki.git", "branch": "main"}
 
 _LOCK = threading.Lock()
