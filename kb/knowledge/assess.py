@@ -70,14 +70,20 @@ def _clean(a: dict) -> dict:
     return out
 
 
-def signals(rec: dict, slug: str, chars: int, created: list[str] | None, updated: list[str] | None) -> dict:
+def wiki_texts() -> dict[str, str]:
+    """Every wiki page's text by file stem: read once when many sources are measured."""
+    return {p.stem: p.read_text(encoding="utf-8") for p in pages.wiki().rglob("*.md")}
+
+
+def signals(rec: dict, slug: str, chars: int, created: list[str] | None, updated: list[str] | None,
+            texts: dict[str, str] | None = None) -> dict:
     """What the ingest produced, measured: no model involved."""
     cite = re.compile(r"\[\[" + re.escape(slug) + r"(?:\]\]|\|)")
     citations, citing = 0, 0
-    for p in pages.wiki().rglob("*.md"):
-        n = len(cite.findall(p.read_text(encoding="utf-8")))
+    for stem, text in (texts if texts is not None else wiki_texts()).items():
+        n = len(cite.findall(text))
         citations += n
-        if n and p.stem != slug:
+        if n and stem != slug:
             citing += 1
     info = {}
     f = catalog.instance() / "raw" / rec["id"] / "extract.json"
@@ -93,10 +99,10 @@ def signals(rec: dict, slug: str, chars: int, created: list[str] | None, updated
 
 
 def record(rec: dict, reply: str, slug: str, chars: int, created: list[str] | None, updated: list[str] | None,
-           model: str = "", mode: str = "ingest") -> dict:
+           model: str = "", mode: str = "ingest", texts: dict[str, str] | None = None) -> dict:
     a = {"source_id": rec["id"], "title": rec["title"], "kind": rec["kind"], "ref": rec["origin"].get("ref"), "mode": mode,
          "assessed": catalog.now(), "model": model, "model_assessment": parse(reply),
-         "prompt": prompt_version(mode) if reply else None, "signals": signals(rec, slug, chars, created, updated)}
+         "prompt": prompt_version(mode) if reply else None, "signals": signals(rec, slug, chars, created, updated, texts)}
     (catalog.instance() / "raw" / rec["id"] / "assessment.json").write_text(json.dumps(a, ensure_ascii=False, indent=1), encoding="utf-8")
     return a
 
@@ -122,6 +128,7 @@ def backfill(with_model: bool = False, ids: list[str] | None = None, force: bool
             todo.append(rec); olds[sid] = old
     out = []
     runner = runner or (agent.AgentRunner() if with_model and todo else None)
+    texts = wiki_texts() if todo else {}  # an assessment never writes pages, so one read serves the whole run
     for i, rec in enumerate(todo, 1):
         if cancelled():  # stop between sources; what is done so far is kept and committed
             say("cancelled", f"stopped after {len(out)} of {len(todo)}")
@@ -141,10 +148,10 @@ def backfill(with_model: bool = False, ids: list[str] | None = None, force: bool
             reply, model = res.reply, res.model
         old = olds[sid]
         if not with_model and old and not (old.get("model_assessment") or {}).get("missing"):
-            a = {**old, "signals": signals(rec, slug, chars, None, None), "signals_updated": catalog.now()}  # keep the judgement
+            a = {**old, "signals": signals(rec, slug, chars, None, None, texts), "signals_updated": catalog.now()}  # keep the judgement
             (inst / "raw" / sid / "assessment.json").write_text(json.dumps(a, ensure_ascii=False, indent=1), encoding="utf-8")
         else:
-            a = record(rec, reply, slug, chars, None, None, model=model, mode="backfill")
+            a = record(rec, reply, slug, chars, None, None, model=model, mode="backfill", texts=texts)
         say("assessed", f"{rec['title']}: {short(a)}")
         out.append(a)
     if out:
