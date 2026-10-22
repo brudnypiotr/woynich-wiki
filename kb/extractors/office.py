@@ -227,7 +227,7 @@ def _adf_text(node) -> str:
 
 
 class CodeExtractor(Extractor):
-    extensions = (".py", ".cs", ".java", ".js", ".ts", ".sql", ".xml", ".json", ".yaml", ".yml", ".ps1", ".sh", ".config")
+    extensions = (".py", ".cs", ".java", ".js", ".ts", ".sql", ".json", ".yaml", ".yml", ".ps1", ".sh", ".config")
 
     def extract(self, path: Path) -> dict:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()

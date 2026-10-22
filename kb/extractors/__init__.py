@@ -7,9 +7,10 @@ from kb.core import config, registry
 from kb.extractors.base import PlainText
 from kb.extractors.office import CodeExtractor, EmailExtractor, HtmlExtractor, JiraJsonExtractor, JiraXmlExtractor, TranscriptExtractor
 from kb.extractors.ooxml import DocxExtractor, XlsxExtractor
+from kb.extractors.xmlfile import XmlExtractor
 from kb.extractors.pdf import PdfExtractor
 
-BUILTIN = [JiraXmlExtractor, JiraJsonExtractor, PdfExtractor, DocxExtractor, XlsxExtractor, HtmlExtractor, EmailExtractor, TranscriptExtractor, PlainText, CodeExtractor]
+BUILTIN = [JiraXmlExtractor, JiraJsonExtractor, PdfExtractor, DocxExtractor, XlsxExtractor, HtmlExtractor, EmailExtractor, TranscriptExtractor, PlainText, XmlExtractor, CodeExtractor]
 
 
 def supported() -> list[str]:
