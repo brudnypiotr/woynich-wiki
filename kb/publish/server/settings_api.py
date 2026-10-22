@@ -81,6 +81,16 @@ def branding_import(h):
     return h.send(200, branding.import_zip(h.rfile.read(n)))
 
 
+@route("POST", r"/api/branding/contact")
+def branding_contact(h):
+    """The app's author's e-mail for feedback, in branding.json (empty removes it)."""
+    c = str(h.json_body().get("contact") or "").strip()
+    if c and ("@" not in c or " " in c):
+        raise ValueError("enter an e-mail address")
+    branding.save_settings({"contact": c or None})
+    return h.send(200, branding.state())
+
+
 @route("GET", r"/api/usage")
 def usage(h):
     if h.query("refresh") or not USAGE["data"] or time.time() - USAGE["at"] > 300:  # real reading from GitHub: every 5 min

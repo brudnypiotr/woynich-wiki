@@ -352,6 +352,3 @@ def meter(task: str, res: AgentResult | None, source_id: str | None = None, erro
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("a", encoding="utf-8") as f:
         f.write(json.dumps(ev, ensure_ascii=False) + "\n")
-    from kb.publish import inbox  # usage for the app's author, when the inbox is set up and the user shares usage
-    inbox.record("session", **{k: ev[k] for k in ("task", "model", "tokens_in", "tokens_out", "premium", "credits",
-                                                    "duration_s", "ok", "error", "tool_calls", "denied")})

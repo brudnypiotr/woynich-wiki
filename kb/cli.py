@@ -325,44 +325,6 @@ def cmd_update(a) -> int:
         return 1
 
 
-def cmd_inbox(a) -> int:
-    """The inbox (a shared OneDrive folder from the branding): where feedback and usage go; turn usage sharing on or off."""
-    from kb.publish import inbox
-    if a.folder or a.share_url or a.contact:
-        inbox.configure(a.folder, a.share_url, a.contact)
-    st = inbox.set_prefs(share_usage=a.usage == "on" if a.usage else None, user=a.user) if a.usage or a.user is not None \
-        else inbox.status()
-    if not st["configured"]:
-        print("inbox: not set up (branding.json has no \"inbox\": {\"folder\", \"share_url\", \"contact\"})")
-    else:
-        print(f"inbox: {st['folder'] or 'not on this computer (add ' + repr(st['name']) + ' to your OneDrive: ' + str(st['share_url']) + ')'}")
-    print(f"user: {st['user']}\nshare usage: {'on' if st['share_usage'] else 'off'}")
-    return 0
-
-
-def cmd_usage(a) -> int:
-    """For the app's author: everyone's usage from the inbox (questions, sessions, tokens, AI credits, errors)."""
-    from kb.publish import inbox
-    try:
-        r = inbox.report(Path(a.folder) if a.folder else None)
-    except ValueError as e:
-        print(f"usage: {e}")
-        return 1
-    if a.json:
-        print(json.dumps(r, ensure_ascii=False, indent=2))
-        return 0
-    print(f"{r['folder']}\n")
-    print(f"{'user':38} {'days':>4} {'starts':>6} {'questions':>9} {'sessions':>8} {'tokens':>9} {'credits':>8} {'errors':>6}  last / app")
-    for u in r["users"]:
-        print(f"{u['user'][:38]:38} {u['days']:>4} {u['starts']:>6} {u['questions']:>9} {u['sessions']:>8} {u['tokens']:>9} "
-              f"{u['credits']:>8} {u['errors']:>6}  {u['last'][:16]} / {u['app']}")
-    if r["recent_questions"]:
-        print("\nrecent questions:")
-        for q in r["recent_questions"][:15]:
-            print(f"  {q['at'][:16]}  {q['user']}: {str(q['question'] or '')[:100]}{'  (not found)' if q.get('not_found') else ''}")
-    return 0
-
-
 def cmd_branding(a) -> int:
     """Project branding out of Git: pack branding.zip for a colleague, or import one (also refreshes the shortcut icon)."""
     from kb.publish import branding
@@ -629,13 +591,6 @@ def main(argv=None) -> int:
     s = sub.add_parser("branding", help="project logo, background, icon and title (out of Git): show, pack branding.zip, import one")
     s.add_argument("action", nargs="?", choices=["show", "pack", "import"], default="show"); s.add_argument("zip", nargs="?", default="branding.zip")
     s.set_defaults(fn=cmd_branding)
-    s = sub.add_parser("inbox", help="where feedback and usage go (a shared OneDrive folder from the branding); --usage on|off")
-    s.add_argument("--usage", choices=["on", "off"]); s.add_argument("--user", help="your e-mail when the detected one is wrong")
-    s.add_argument("--folder", help="team: the shared OneDrive folder name"); s.add_argument("--share-url"); s.add_argument("--contact")
-    s.set_defaults(fn=cmd_inbox)
-    s = sub.add_parser("usage", help="for the app's author: everyone's usage from the inbox folder")
-    s.add_argument("folder", nargs="?", help="the inbox folder (default: the connected one)"); s.add_argument("--json", action="store_true")
-    s.set_defaults(fn=cmd_usage)
     s = sub.add_parser("pack", help="knowledge pack: export this knowledge base for the team, or import one (replaces wiki and sources)")
     s.add_argument("action", choices=["export", "import"]); s.add_argument("file", nargs="?")
     s.set_defaults(fn=cmd_pack)
