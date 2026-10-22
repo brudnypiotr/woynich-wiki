@@ -19,10 +19,10 @@ export async function run(what, say, body) {
   const r = await post('/api/update/' + what, body);
   if (r.updated === false) return say(r.message);
   const notes = (r.notes || []).join('; ');
-  if (!r.launcher) return say(`Done (version ${r.version}${notes ? '; ' + notes : ''}). Close the app window and start Wiki again.`);
-  document.body.insertAdjacentHTML('beforeend', `<div class="restarting"><div><b>Restarting Wiki…</b>
+  if (!r.launcher) return say(`Done (version ${r.version}${notes ? '; ' + notes : ''}). Close the app window and start the app again.`);
+  document.body.insertAdjacentHTML('beforeend', `<div class="restarting"><div><b>Restarting the app…</b>
     <p>${r.packages ? 'Installing updated packages, this can take a minute.' : 'This takes a few seconds.'}</p></div></div>`);
   const t0 = Date.now();
   await new Promise(ok => setTimeout(ok, 1500));
   while (Date.now() - t0 < 600000) {try {await api('/api/about'); return location.reload()} catch (e) {await new Promise(ok => setTimeout(ok, 1500))}}
-  document.querySelector('.restarting p').textContent = 'The app did not come back. Look at its window (Wiki) for a message.'}
+  document.querySelector('.restarting p').textContent = 'The app did not come back. Look at its window for a message.'}

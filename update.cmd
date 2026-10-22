@@ -10,6 +10,6 @@ if not exist "%~dp0kb.cmd" (
 call "%~dp0kb.cmd" update
 set RC=%ERRORLEVEL%
 echo.
-if "%RC%"=="0" (echo Done. Start Wiki again.) else (echo Update did not work. Run doctor.cmd and send doctor-report.json for help.)
+if "%RC%"=="0" (echo Done. Start the app again.) else (echo Update did not work. Run doctor.cmd and send doctor-report.json for help.)
 pause
 exit /b %RC%

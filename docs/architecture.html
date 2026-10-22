@@ -58,7 +58,7 @@ svg text{font-family:inherit}
 <a href="#workflows">4. Workflows</a><a href="#sources">5. Source processing</a><a href="#users">6. End users</a>
 <a href="#modules">7. Modules and scripts</a><a href="#config">8. Configuration</a><a href="#security">9. Security and data</a>
 <a href="#cost">10. Cost and metering</a><a href="#status">11. Implemented / not yet</a><a href="#forgotten">12. Easy to forget</a>
-<a href="#risks">13. Risks and next steps</a>
+<a href="#risks">13. Risks</a>
 </nav>
 <main>
 
@@ -194,16 +194,13 @@ screenshots.</p>
 <div class="kicker">5 · Source processing</div>
 <h2>What happens to each kind of source</h2>
 <table><tr><th>Source</th><th>Extraction (scripts)</th><th>Locator the model cites</th><th>Status</th></tr>
-<tr><td>PDF</td><td>text per page (pypdfium2), tables as Markdown (pdfplumber), figures as PNG per page; pages without text flagged <code>needs_ocr</code></td><td><code>p. 12</code></td><td><span class="pill ok">done</span> OCR <span class="pill no">not yet</span></td></tr>
 <tr><td>Word (.docx)</td><td>paragraphs and headings</td><td><code>¶ 3</code></td><td><span class="pill ok">done</span></td></tr>
 <tr><td>Web page (.html)</td><td>visible text, title</td><td><code>¶ 3</code></td><td><span class="pill ok">done</span></td></tr>
-<tr><td>E-mail (.eml)</td><td>headers, body paragraphs, attachment names</td><td><code>¶ 3</code></td><td><span class="pill ok">done</span> attachments as sources <span class="pill no">not yet</span></td></tr>
 <tr><td>Teams / meeting transcript (.vtt, .srt)</td><td>speaker lines, one time marker per minute</td><td><code>t. 00:12:30</code></td><td><span class="pill ok">done</span></td></tr>
 <tr><td>Jira issue (.jira.json, <code>kb collect jira</code>)</td><td>summary, status, description, comments (Cloud ADF or Data Center text)</td><td><code>#description</code>, <code>#c2</code></td><td><span class="pill ok">done</span></td></tr>
 <tr><td>Code / text files</td><td>line markers every 10 lines; Git repository files at a commit (<code>kb collect git</code>)</td><td><code>L 120</code></td><td><span class="pill ok">done</span></td></tr>
 <tr><td>Code repositories (live)</td><td>not ingested: the model reads them during questions</td><td><code>repo/path:line@commit</code></td><td><span class="pill ok">done</span></td></tr>
-<tr><td>Screenshots</td><td>attached to a question</td><td>"(attached screenshot)"</td><td><span class="pill ok">done</span> as wiki sources <span class="pill no">not yet</span></td></tr>
-<tr><td>Excel, Outlook .msg, Confluence, OneDrive / Teams (Graph)</td><td>-</td><td>-</td><td><span class="pill no">not yet</span></td></tr></table>
+</table>
 <div class="note">Why scripts still extract text: the model must cite exact places. Markers like <code>&lt;!-- p. 12 --&gt;</code> make every page, minute and comment addressable, and let code check that a citation exists.</div>
 </section>
 
@@ -277,7 +274,7 @@ screenshots.</p>
 </section>
 
 <section id="status">
-<div class="kicker">11 · Implemented / not yet</div>
+<div class="kicker">11 · Implemented</div>
 <h2>Capabilities</h2>
 <table><tr><th>Capability</th><th>Status</th><th>Notes</th></tr>
 <tr><td>Windows setup without admin, doctor, self-test</td><td><span class="pill ok">done</span></td><td>verified on the work laptop</td></tr>
@@ -287,15 +284,8 @@ screenshots.</p>
 <tr><td>Checks: links, citation places, uncited lines</td><td><span class="pill ok">done</span></td><td>warnings, no deletions</td></tr>
 <tr><td>Questions, conversation, code questions, Jira tools, screenshots</td><td><span class="pill ok">done</span></td><td>CLI, Copilot CLI, browser</td></tr>
 <tr><td>Cancel, rollback, remove with cleanup, lint</td><td><span class="pill ok">done</span></td><td></td></tr>
-<tr><td>Dashboard, browser app, Copilot skills</td><td><span class="pill ok">done</span></td><td>skills not yet tried in real Copilot CLI</td></tr>
-<tr><td>Long PDFs (100+ pages) with GPT-6 Luna</td><td><span class="pill part">to verify</span></td><td>the model reads in parts; context limits unknown</td></tr>
-<tr><td>"What to emphasise" hint before ingest</td><td><span class="pill no">not yet</span></td><td>claude-obsidian asks this; easy to add</td></tr>
-<tr><td>Semantic check "is this sentence supported by its citation"</td><td><span class="pill no">not yet</span></td><td>today: only that the cited place exists</td></tr>
-<tr><td>Review workflow (draft → reviewed), corrections from the app</td><td><span class="pill no">not yet</span></td><td></td></tr>
-<tr><td>Authority and validity dates deciding contradictions; new version of a source</td><td><span class="pill no">not yet</span></td><td>fields exist (ADR-0006)</td></tr>
-<tr><td>OCR, Excel, .msg, Confluence, Microsoft Graph, local transcription</td><td><span class="pill no">not yet</span></td><td></td></tr>
-<tr><td>Gold-set evaluation (30 questions), Windows CI</td><td><span class="pill no">not yet</span></td><td></td></tr>
-<tr><td>Multi-user: shared instance, queue as a service</td><td><span class="pill no">not yet</span></td><td>today one person per instance</td></tr></table>
+<tr><td>Dashboard, browser app, Copilot skills</td><td><span class="pill ok">done</span></td><td></td></tr>
+</table>
 </section>
 
 <section id="forgotten">
@@ -314,15 +304,14 @@ screenshots.</p>
 </section>
 
 <section id="risks">
-<div class="kicker">13 · Risks and next steps</div>
+<div class="kicker">13 · Risks</div>
 <h2>What to watch</h2>
-<table><tr><th>Risk</th><th>Control today</th><th>Next</th></tr>
-<tr><td>The model invents or over-generalises</td><td>citations required; places checked; NOT FOUND rule; draft status</td><td>semantic support check; review workflow</td></tr>
-<tr><td>A good page is rewritten badly</td><td>one commit per ingest; diff; revert</td><td>show diff in the app; lint</td></tr>
-<tr><td>Page sprawl and duplicates</td><td>prompt prefers updating; <code>kb lint</code></td><td>lint report in the dashboard</td></tr>
-<tr><td>GPT-6 Luna too weak for long or complex sources</td><td>reading in parts; one model setting</td><td>test on 50–100 page documents; stronger model for writing when funded</td></tr>
-<tr><td>Premium request budget</td><td><code>kb quota</code>; meter per session</td><td>confirm before large batches</td></tr></table>
-<div class="note"><b>Next steps:</b> re-run the four knowledge-sharing transcripts on a clean instance; one 30–50 page Orders document; configure the rules repository in <code>code_repos</code> and ask code questions; try the skills in Copilot CLI.</div>
+<table><tr><th>Risk</th><th>Control today</th></tr>
+<tr><td>The model invents or over-generalises</td><td>citations required; places checked; NOT FOUND rule; draft status</td></tr>
+<tr><td>A good page is rewritten badly</td><td>one commit per ingest; diff; revert</td></tr>
+<tr><td>Page sprawl and duplicates</td><td>prompt prefers updating; <code>kb lint</code></td></tr>
+<tr><td>GPT-6 Luna too weak for long or complex sources</td><td>reading in parts; one model setting</td></tr>
+<tr><td>Premium request budget</td><td><code>kb quota</code>; meter per session</td></tr></table>
 </section>
 </main>
 </div>

@@ -1,7 +1,8 @@
 """Company branding (logo, header background, icon), kept out of Git: the copy's `branding/` folder, or the knowledge
 base's own `instance/branding/` (wins). Shared as a branding.zip: `kb branding pack` makes it, with branding.json
-carrying the knowledge base title; Welcome, Settings → Project branding, `kb branding import` or setup.cmd (when
-branding.zip lies next to it) unpacks it, sets the title, and on Windows gives the Wiki shortcut the icon.
+carrying what is the same for the whole team: the knowledge base title, the app name (desktop shortcut, window) and the
+inbox (where feedback and usage go). Welcome, Settings → Project branding, `kb branding import` or setup.cmd (when
+branding.zip lies next to it) unpacks it, sets the title, and on Windows gives the shortcut the icon and the name.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from kb.core import config
 STEMS = ("logo", "background", "icon")
 EXTS = (".svg", ".png", ".jpg", ".jpeg", ".ico")
 MAX_ZIP = 20_000_000
+APP_NAME = "Wiki"  # default app name; branding.json "app_name" overrides it
 
 
 def folder() -> Path:
@@ -32,8 +34,25 @@ def find(stem: str, exts: tuple[str, ...] = (".svg", ".png", ".jpg", ".jpeg")) -
     return next((p for d in dirs() for ext in exts if (p := d / f"{stem}{ext}").exists()), None)
 
 
+def settings() -> dict:
+    """branding.json of this copy (instance/branding/ wins over branding/): {title, app_name, inbox}; {} when none."""
+    for d in dirs():
+        try:
+            data = json.loads((d / "branding.json").read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except (OSError, ValueError):
+            continue
+    return {}
+
+
+def app_name() -> str:
+    return str(settings().get("app_name") or "").strip() or APP_NAME
+
+
 def state() -> dict:
-    return {"folder": str(folder()), "files": {s: (str(p) if (p := find(s, EXTS)) else None) for s in STEMS}}
+    return {"folder": str(folder()), "app_name": app_name(),
+            "files": {s: (str(p) if (p := find(s, EXTS)) else None) for s in STEMS}}
 
 
 def import_zip(data: bytes) -> dict:
@@ -44,14 +63,16 @@ def import_zip(data: bytes) -> dict:
         z = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as e:
         raise ValueError("not a .zip file") from e
-    got, title = [], None
+    got, title, meta = [], None, None
     folder().mkdir(exist_ok=True)
     for info in z.infolist():
         if Path(info.filename).name.lower() == "branding.json" and info.file_size < 100_000:
             try:
-                title = str(json.loads(z.read(info).decode("utf-8")).get("title") or "").strip() or None
+                meta = json.loads(z.read(info).decode("utf-8"))
+                title = str(meta.get("title") or "").strip() or None
             except (ValueError, UnicodeDecodeError, AttributeError):
                 raise ValueError("branding.json in the zip is not valid JSON") from None
+            (folder() / "branding.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
             continue
         name = Path(info.filename).name.lower()  # basename only: no paths from the zip are trusted
         stem, ext = os.path.splitext(name)
@@ -62,12 +83,13 @@ def import_zip(data: bytes) -> dict:
                 old.unlink()
         (folder() / name).write_bytes(z.read(info))
         got.append(name)
-    if not got and not title:
+    if not got and not meta:
         raise ValueError("no branding files in the zip (expected logo, background or icon as .png, .svg, .jpg or .ico)")
     if title:  # the knowledge base title the colleague who packed it uses
         from kb.publish import settings
         settings.save({"profile": {"title": title}})
-    return {"imported": sorted(got), "title": title, "shortcut": refresh_shortcut() if got else "unchanged", **state()}
+    return {"imported": sorted(got), "title": title, "shortcut": refresh_shortcut() if got or meta else "unchanged",
+            **state()}
 
 
 def pack(out: Path | None = None) -> Path:
@@ -77,17 +99,20 @@ def pack(out: Path | None = None) -> Path:
              if p.suffix.lower() in EXTS and p.stem.lower() in STEMS}
     if not files:
         raise ValueError(f"no branding files in {folder()}")
+    meta = settings()  # the same for the whole team; personal settings (Jira e-mail, keys) never
     title = (config.load("profile").get("instance") or {}).get("title")
+    if title:
+        meta["title"] = title
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for name, p in sorted(files.items()):
             z.write(p, f"branding/{name}")
-        if title:  # settings that are the same for the whole team; personal ones (Jira e-mail, keys) never
-            z.writestr("branding/branding.json", json.dumps({"title": title}, ensure_ascii=False, indent=2))
+        if meta:
+            z.writestr("branding/branding.json", json.dumps(meta, ensure_ascii=False, indent=2))
     return out
 
 
 def refresh_shortcut() -> str:
-    """Windows: make the Wiki shortcut again, so it shows the new icon."""
+    """Windows: make the desktop shortcut again, so it shows the new icon and name."""
     if os.name != "nt":
         return "skipped (not Windows)"
     script = config.paths().root / "setup" / "shortcut.ps1"

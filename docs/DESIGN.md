@@ -1,6 +1,6 @@
 # Design: decisions so far
 
-Status: **M0 implemented** (2026-10-18). Decisions are now maintained as ADRs in [decisions/](decisions/README.md); the table below is the original summary. Changes: D4 → ADR-0004 (Copilot as engine via SDK), D10 → ADR-0007 (simplified queue), PDF → ADR-0009, store → ADR-0010, ids → ADR-0011, commits → ADR-0012. Pitch: [PITCH.md](PITCH.md). Risks: [CRITICAL-ANALYSIS.md](CRITICAL-ANALYSIS.md).
+Status: **M0 implemented** (2026-10-18). Decisions are now maintained as ADRs in [decisions/](decisions/README.md); the table below is the original summary. Changes: D4 → ADR-0004 (Copilot as engine via SDK), D10 → ADR-0007 (simplified queue), PDF → ADR-0009, store → ADR-0010, ids → ADR-0011, commits → ADR-0012.
 
 ## Decisions
 | # | Decision | Notes |
@@ -19,12 +19,10 @@ Status: **M0 implemented** (2026-10-18). Decisions are now maintained as ADRs in
 | D12 | **Audience split** (internal / client-shareable): designed, not enabled | future, for a client edition |
 | D13 | **Core vs client knowledge** with a promotion workflow | future |
 | D14 | **Local transcription (Whisper) is not part of setup**; optional personal module | most laptops have no suitable GPU |
-| D15 | **Rollout order:** Orders rules KB → Inventory System product Q&A → one client / one area → product | see [VISION.md](VISION.md) §1 |
 | D17 | **MVP connectors:** inbox folder, Git repo, Jira, exported files; mailbox/OneDrive/Teams via Microsoft Graph **later** (needs IT) | pluggable, see [ARCHITECTURE.md](ARCHITECTURE.md) |
 | D18 | **Secrets** in Windows Credential Manager (`keyring`), never in the repo | |
 | D19 | **Search:** SQLite FTS5 in MVP; embeddings (RAG) optional later | |
 | D20 | **Glossary** is a separate module; **token & cost meter** is a separate feature; **decision records (ADR)** are a page type | see below |
-| D21 | **Data processing approval:** assumed granted; internal adoption first, external sale not in scope now | |
 | D16 | **Images are sources:** figures and screenshots extracted from PDFs with page, caption and nearby text | enables "where do I click?" answers |
 
 ## Modules
@@ -68,7 +66,7 @@ woynich-wiki/
 ├── tools/                       # python modules above
 ├── skills/                      # tool-neutral task instructions (+ .github/ adapters for Copilot)
 ├── templates/                   # page and record templates
-├── docs/                        # pitch, design, analysis, user guide
+├── docs/                        # design, architecture, decisions
 └── instance/                    # created by `init`: raw/ catalog/ queue/ wiki/ site/  (never committed to the blueprint)
 ```
 
@@ -87,8 +85,7 @@ Built from three inputs: (1) acronym patterns found by scripts ("Flight Duty Per
 ## Token & cost meter
 A decorator on the LLM gateway records every call to `catalog/metering.jsonl`: `task, stage, source_id, model, tier, tokens_in, tokens_out, cost, duration`. Prices per model are kept in `config/models.yaml`. It feeds:
 - **budgets** (stop a run when a limit is reached),
-- **dashboard** (cost per source, per page, per question),
-- **business case** (real tokens per question replace the pitch assumptions).
+- **dashboard** (cost per source, per page, per question).
 
 ## Decision records (ADR)
 A decision is a first-class page type in `wiki/decisions/`, because "why is it like this?" is the most valuable question.

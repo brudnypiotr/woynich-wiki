@@ -120,12 +120,10 @@ Check with `kb repos`. Then:
 
 ## Documentation
 - [docs/architecture.html](docs/architecture.html): architecture (who decides what, workflows, source processing, modules, status) — open in a browser
-- [docs/STATUS.md](docs/STATUS.md): what works, what is next, retrospective · [docs/REAL-DATA-TEST.md](docs/REAL-DATA-TEST.md): checklist for the first real documents
-- [docs/PITCH.md](docs/PITCH.md): what it is and why (for managers) · [pitch/index.html](pitch/index.html): 8-slide deck
-- [docs/PRODUCT.md](docs/PRODUCT.md): personas, baseline, gold questions, success criteria
+- [docs/STATUS.md](docs/STATUS.md): what works, retrospective
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): patterns, plugins, secrets, search, connectors
 - [docs/decisions/](docs/decisions/README.md): architecture decision records (ADR)
-- [docs/DESIGN.md](docs/DESIGN.md), [docs/VISION.md](docs/VISION.md), [docs/CRITICAL-ANALYSIS.md](docs/CRITICAL-ANALYSIS.md)
+- [docs/DESIGN.md](docs/DESIGN.md)
 
 ## Development (macOS / Linux)
 ```
@@ -134,9 +132,7 @@ uv venv .venv -p 3.11 && VIRTUAL_ENV=.venv uv pip install -r requirements.txt
 .venv/bin/python -m kb llm-smoke
 ```
 
-Status: M0–M6 mini-flow works on macOS with the real Copilot model (4 samples: 22 verified facts, 47/47 citations, discrepancy found; answer in ~7 s). Windows: doctor passes, setup next.
-
-> `pitch/assets/` (Example logo and product imagery, for the internal pitch only) is company property and is git-ignored.
+Status: M0–M6 mini-flow works on macOS with the real Copilot model (4 samples: 22 verified facts, 47/47 citations, discrepancy found; answer in ~7 s). Windows: setup and the app verified on a standard work laptop.
 
 ## License
 MIT, see [LICENSE](LICENSE).

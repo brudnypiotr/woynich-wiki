@@ -1,13 +1,14 @@
 <#
 .SYNOPSIS
-  Creates the "Wiki" shortcuts (desktop and Start menu) for this copy, with an icon. No admin rights needed.
+  Creates the app's shortcuts (desktop and Start menu) for this copy, with an icon. No admin rights needed.
 .DESCRIPTION
   A .cmd file cannot have its own icon, so the shortcut carries it. The icon comes from the branding (icon.ico or icon.png
   in instance\branding\, else in branding\; both kept outside Git) and falls back to the neutral setup\app.ico.
-  Importing branding in Settings runs this again; so does setup.cmd.
+  The name is "app_name" from branding.json (same folders), else "Wiki"; a shortcut made earlier under another name is
+  removed. The shortcut always starts Wiki.cmd. Importing branding in Settings runs this again; so does setup.
 #>
 [CmdletBinding()]
-param([string]$Repo = (Split-Path -Parent $PSScriptRoot), [string]$Name = 'Wiki')
+param([string]$Repo = (Split-Path -Parent $PSScriptRoot), [string]$Name = '')
 
 $ErrorActionPreference = 'Stop'
 $Base = Join-Path $env:LOCALAPPDATA 'woynich-wiki'
@@ -55,18 +56,33 @@ try {
   Copy-Item (Join-Path $PSScriptRoot 'app.ico') $icon -Force; $source = 'neutral'
 }
 
-$launcher = Join-Path $Repo "$Name.cmd"
+if (-not $Name) {
+  foreach ($d in $brandingDirs) {
+    $f = Join-Path $d 'branding.json'
+    if (-not (Test-Path $f)) { continue }
+    try { $Name = [string](Get-Content $f -Raw -Encoding UTF8 | ConvertFrom-Json).app_name } catch { Write-Verbose "branding.json: $_" }
+    break
+  }
+}
+$Name = ($Name -replace '[\\/:*?"<>|]', '').Trim()
+if (-not $Name) { $Name = 'Wiki' }
+$nameFile = Join-Path $Base 'shortcut-name.txt'
+$oldName = if (Test-Path $nameFile) { (Get-Content $nameFile -Raw).Trim() } else { '' }
+
+$launcher = Join-Path $Repo 'Wiki.cmd'
 $shell = New-Object -ComObject WScript.Shell
 $made = @()
 foreach ($dir in @([Environment]::GetFolderPath('Desktop'), (Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs'))) {
   if (-not $dir -or -not (Test-Path $dir)) { continue }
+  if ($oldName -and $oldName -ne $Name) { Remove-Item (Join-Path $dir "$oldName.lnk") -ErrorAction SilentlyContinue }
   $lnk = $shell.CreateShortcut((Join-Path $dir "$Name.lnk"))
   $lnk.TargetPath = Join-Path $env:SystemRoot 'System32\cmd.exe'
   $lnk.Arguments = "/c `"`"$launcher`"`""
   $lnk.WorkingDirectory = $Repo
   $lnk.IconLocation = "$icon,0"
-  $lnk.Description = 'Wiki: project knowledge base'
+  $lnk.Description = "${Name}: project knowledge base"
   $lnk.Save()
   $made += $dir
 }
-[pscustomobject]@{ icon = $source; shortcuts = $made }
+Set-Content $nameFile $Name -Encoding UTF8
+[pscustomobject]@{ icon = $source; name = $Name; shortcuts = $made }

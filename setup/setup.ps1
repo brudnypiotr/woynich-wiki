@@ -8,7 +8,7 @@
   3. Finds Git or unpacks Portable Git (git-scm / git-for-windows) into %LOCALAPPDATA%.
   4. Downloads the Copilot runtime used by the Python SDK (no Node.js needed).
   5. Creates kb.cmd; connects a copy unpacked from a ZIP to the official repository (setup\sources.json, "update"), so
-     Update in the app works; creates the "Wiki" shortcuts with an icon (setup\shortcut.ps1).
+     Update in the app works; creates the app shortcuts with an icon (setup\shortcut.ps1).
   6. Runs a short self-test (5 smoke tests; -FullTest runs all). Writes setup.log.
   Downloads are checked against setup\sources.json (SHA-256). Replace URLs with company mirrors if needed.
 .EXAMPLE
@@ -250,7 +250,7 @@ if (Test-Path $brandZip) {   # a colleague's branding pack put next to setup.cmd
 }
 try {
   $sc = & (Join-Path $ScriptDir 'shortcut.ps1') -Repo $Repo
-  Step 'Shortcut' 'OK' ("Wiki on the desktop and in the Start menu ({0} icon)" -f $sc.icon)
+  Step 'Shortcut' 'OK' ("{0} on the desktop and in the Start menu ({1} icon)" -f $sc.name, $sc.icon)
 } catch { Step 'Shortcut' 'WARN' ("could not create the shortcut: $($_.Exception.Message); start Wiki.cmd instead") }
 
 $testArgs = if ($FullTest) { @() } else { @('-m', 'smoke') }
@@ -275,7 +275,7 @@ $warned = @($script:Steps | Where-Object { $_.status -eq 'WARN' }).Count
 if ($failed) { Write-Host 'Setup finished with errors.' -ForegroundColor Red }
 elseif ($warned) { Write-Host 'Setup finished with warnings.' -ForegroundColor Yellow }
 else { Write-Host 'Setup finished.' -ForegroundColor Green }
-Write-Host 'Next step: start Wiki from the desktop shortcut (or Wiki.cmd in this folder).'
+Write-Host 'Next step: start the app from the desktop shortcut (or Wiki.cmd in this folder).'
 Write-Host '  It opens the app in your browser; keep its window open. New versions: Update in the app (or update.cmd).'
 Write-Host '  The first start opens Welcome: a ready knowledge base, GitHub Copilot sign-in, the model, Jira (and optional steps).'
 Write-Host '  Another knowledge base: "Wiki.cmd" C:\kb\other-instance'

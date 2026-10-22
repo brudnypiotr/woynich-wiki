@@ -23,7 +23,7 @@ from kb.publish import applog, appgit, diagnostics
 MAX_ROUNDS = 2          # rounds of questions before Luna must write the report
 REPORT_FIELDS = ("title", "kind", "what_happened", "expected", "steps", "where", "impact")
 
-PROMPT = """You help a user of Wiki (a project knowledge base app: chat with citations, Add sources, Wiki,
+PROMPT = """You help a user of a project knowledge base app (chat with citations, Add sources, Wiki,
 Settings, Welcome, About/Updates) report a problem or an idea to its author. The user may not be technical.
 
 Talk to the user in the language they write in. Write the report in English (it is for the app's author).
