@@ -9,7 +9,10 @@ This repository is the **blueprint**: generic code, templates and instructions w
    OneDrive**, e.g. `C:\kb\woynich-wiki`. A ZIP copy is fine: setup connects it to this repository so updates work.
 2. Double-click **`Wiki.cmd`**. That is all a user needs. The first time it prepares the computer (private Python and
    packages, Git, the Copilot runtime, a desktop and Start menu shortcut; a few minutes, no admin rights), then starts
-   the app in the browser; keep its window open. Later, start the app from the shortcut; when a new version needs the
+   the app in the browser. No console window stays open: the app runs in the background with an **icon in the
+   notification area** (click: open the app; right-click: Restart, Show log, Quit; it turns red and offers *Update and
+   restart* when the app stops with an error). Logs: `local\logs\serve.log` and `tray.log`. Later, start the app from
+   the shortcut (a second start just opens the browser); when a new version needs the
    setup again (`setup\version.txt` changed), the shortcut runs it before the app. The first start of the app
    creates the knowledge base instance (`instance\`, its own git repository) and opens a short **Welcome**: a ready
    knowledge base (knowledge pack) and project branding (both optional), sign in to GitHub Copilot, choose the model
@@ -25,7 +28,7 @@ send `instance\reports\llm-smoke.json`), `kb init` and `kb serve`.
 |---|---|
 | `doctor.cmd` | read-only check of the machine (PowerShell, policies, proxy, Python, Git, Copilot); changes nothing |
 | `setup.cmd` | the setup on its own (Wiki.cmd runs it when needed): private Python and packages, Git, Copilot runtime, `kb.cmd`, shortcut, 5 smoke tests (`-FullTest`: all); safe to run again |
-| `Wiki.cmd [instance folder]` | **the one script for users** (the desktop shortcut runs it): runs the setup when it is not done for this version, starts the app in the browser, restarts it after an update, offers an update when the app fails to start |
+| `Wiki.cmd [instance folder]` | **the one script for users** (the desktop shortcut runs it): runs the setup when it is not done for this version, starts the app in the background with a tray icon (`kb tray`: restarts it after an update, offers an update when it fails); `Wiki.cmd --console` runs it in the console window instead, with its output |
 | `update.cmd` | downloads and installs the newest version (the same as Update in the app) |
 | `test.cmd [pytest options]` | runs every test (setup runs only the 5 smoke tests); e.g. `test.cmd -k update` |
 | `kb.cmd <command>` | the command line (created by setup); each copy of the repository runs its own code and instance |

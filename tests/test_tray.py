@@ -1,0 +1,66 @@
+"""kb tray: the supervisor restarts kb serve after an update, stops on Quit or an error; a second start finds the app."""
+import http.server
+import json
+import sys
+import threading
+
+import pytest
+
+from kb.publish import appgit, tray, updater
+
+
+@pytest.fixture
+def local(tmp_path, monkeypatch):
+    d = tmp_path / "local"; (d / "logs").mkdir(parents=True)
+    monkeypatch.setattr(appgit, "local", lambda: d)
+    monkeypatch.setattr(appgit, "root", lambda: tmp_path)
+    monkeypatch.delenv("KB_INSTANCE", raising=False)
+    return d
+
+
+def fake_serve(tmp_path, codes):
+    """A kb serve stand-in: prints the address like kb serve (the same one after a restart), exits with the next code."""
+    n = tmp_path / "runs"
+    script = (f"import pathlib, sys; f = pathlib.Path({str(n)!r}); i = int(f.read_text()) if f.exists() else 0; "
+              f"f.write_text(str(i + 1)); print('woynich-wiki is running at http://127.0.0.1:8765/?t=tok', flush=True); "
+              f"sys.exit({codes!r}[i])")
+    return [sys.executable, "-c", script], n
+
+
+def test_restarts_after_an_update_then_stops(tmp_path, local):
+    cmd, runs = fake_serve(tmp_path, [updater.RESTART_CODE, 0])  # the same address after the restart: running again
+    finish = [sys.executable, "-c", f"open({str(tmp_path / 'finished')!r}, 'w').write('1')"]
+    states = []
+    sup = tray.Supervisor(command=cmd, finish=finish, on_state=lambda s, d: states.append(s))
+    assert sup.run() == 0
+    assert runs.read_text() == "2" and (tmp_path / "finished").exists()
+    assert states == ["starting", "running", "updating", "starting", "running", "stopped"]
+    assert json.loads(tray.state_file().read_text())["url"].endswith("t=tok")
+    assert "kb serve exited with 3" in (local / "logs" / "tray.log").read_text()
+
+
+def test_an_error_stops_and_says_so(tmp_path, local):
+    cmd, runs = fake_serve(tmp_path, [1])
+    states = []
+    sup = tray.Supervisor(command=cmd, finish=["false"], on_state=lambda s, d: states.append((s, d)))
+    assert sup.run() == 1 and runs.read_text() == "1"
+    assert states[-1] == ("error", "the app stopped with an error (1)")
+
+
+def test_second_start_finds_the_running_app(tmp_path, local):
+    assert tray.running_url() is None
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), http.server.SimpleHTTPRequestHandler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{srv.server_address[1]}/?t=abc"
+        tray.state_file().write_text(json.dumps({"url": url}))
+        assert tray.running_url() == url
+    finally:
+        srv.shutdown()
+    assert tray.running_url() is None  # the app is gone: start a new one
+
+
+def test_child_runs_this_copy_with_the_launcher_flag(local):
+    cmd = tray.kb_command("serve")
+    assert cmd[-1] == "serve" and "from kb.cli import main" in cmd[2]
+    assert tray.Supervisor(command=["x"])._env()["KB_LAUNCHER"] == "1"

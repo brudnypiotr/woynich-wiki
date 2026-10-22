@@ -325,6 +325,12 @@ def cmd_update(a) -> int:
         return 1
 
 
+def cmd_tray(a) -> int:
+    """The app without a console window: an icon in the notification area runs kb serve (Wiki.cmd starts this)."""
+    from kb.publish import tray
+    return tray.run()
+
+
 def cmd_branding(a) -> int:
     """Project branding out of Git: pack branding.zip for a colleague, or import one (also refreshes the shortcut icon)."""
     from kb.publish import branding
@@ -588,6 +594,8 @@ def main(argv=None) -> int:
     g.add_argument("--branches", action="store_true", help="admin mode: list the branches you can follow")
     g.add_argument("--admin", choices=["on", "off"], help="admin mode for this copy: every branch can be a channel")
     s.set_defaults(fn=cmd_update)
+    s = sub.add_parser("tray", help="the app with a tray icon and no console window (Wiki.cmd starts it; --console there for the old way)")
+    s.set_defaults(fn=cmd_tray)
     s = sub.add_parser("branding", help="project logo, background, icon and title (out of Git): show, pack branding.zip, import one")
     s.add_argument("action", nargs="?", choices=["show", "pack", "import"], default="show"); s.add_argument("zip", nargs="?", default="branding.zip")
     s.set_defaults(fn=cmd_branding)
