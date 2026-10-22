@@ -14,7 +14,7 @@ from kb.core import config, singleton
 from kb.knowledge import catalog
 from kb.llm.gateway import Gateway
 from kb.publish import applog, updater
-from kb.publish.server import chat_api, feedback_api, ingest_api, pack_api, settings_api, update_api, web  # noqa: F401  (importing registers their routes)
+from kb.publish.server import assess_api, chat_api, feedback_api, ingest_api, pack_api, settings_api, update_api, web  # noqa: F401  (importing registers their routes)
 from kb.publish.server.http import Handler
 
 

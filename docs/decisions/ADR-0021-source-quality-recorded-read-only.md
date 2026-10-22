@@ -23,6 +23,10 @@ Status: accepted (2026-10-23)
    with `--model` one read-only session per source (`prompts/assess.md`) where novelty means *what the wiki would lose
    without this source*, since its knowledge is already in. Marked `"mode": "backfill"`, one commit. A judgement made
    at ingest is never replaced, except with `--model --force`; refreshing the measured signals keeps it.
+5. **The Sources view** in the app lists every source with its scores and signals (filter, sort, find, reasons on
+   click) and assesses the chosen ones again (multiselect, Shift for a range): with the model, or only measured. Each
+   judgement records the fingerprint of the prompt that made it; one made with an older prompt is marked. A knowledge
+   base may keep its own `instance/prompts/assess.md` (or any prompt), which replaces the blueprint's.
 
 ## Consequences
 - After a few folders we can see how verdicts relate to the measured yield and to what curators think, and only then

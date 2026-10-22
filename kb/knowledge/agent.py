@@ -30,8 +30,15 @@ PATH_KEYS = ("path", "paths", "file", "file_path", "filename", "file_name", "dir
 PROMPTS = Path(__file__).resolve().parents[2] / "prompts"
 
 
+def template(name: str) -> str:
+    """A prompt's text: the knowledge base's own copy (instance/prompts/<name>.md, versioned with the knowledge) when it
+    has one, else the blueprint's. Lets a curator tune e.g. the assessment criteria without changing the app."""
+    own = config.paths().instance / "prompts" / f"{name}.md"
+    return (own if own.exists() else PROMPTS / f"{name}.md").read_text(encoding="utf-8")
+
+
 def prompt(name: str, **values) -> str:
-    text = (PROMPTS / f"{name}.md").read_text(encoding="utf-8")
+    text = template(name)
     for k, v in values.items():
         text = text.replace("{{" + k + "}}", str(v))
     return text
