@@ -5,14 +5,14 @@ area and runs `kb serve` as a hidden child process:
 - after Update the child exits with RESTART_CODE: the tray runs `kb update --finish` and starts it again (the same
   address and token, so the open page comes back by itself); this is what the console loop in Wiki.cmd did;
 - when the app stops with an error the icon turns red and says so; the menu offers Update and restart and Show log;
-- a second double-click finds the running app (local/tray.json) and only opens the browser.
+- one per knowledge base: a second start (even a quick double double-click) only opens the running app in the
+  browser; kb serve itself also refuses a second copy (kb/core/singleton.py), whatever starts it.
 
 Logs: the child's output goes to local/logs/serve.log (applog), the tray's own events to local/logs/tray.log.
 `Wiki.cmd --console` keeps the old way: the app in a console window.
 """
 from __future__ import annotations
 
-import json
 import os
 import re
 import subprocess
@@ -23,8 +23,11 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+from kb.core import singleton
+from kb.knowledge import catalog
 from kb.publish import appgit, applog, branding, updater
 
+ALREADY_RUNNING = 4  # kb serve: another copy has this knowledge base open (kb.publish.server.app.ALREADY_RUNNING)
 URL = re.compile(r"running at (http://127\.0\.0\.1:\d+/\?t=[\w-]+)")
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW
 
@@ -34,11 +37,9 @@ def log(msg: str) -> None:
         f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
 
 
-def state_file() -> Path:
-    """One per copy and knowledge base (Wiki.cmd C:\\kb\\other-instance runs its own app next to the default one)."""
-    inst = os.environ.get("KB_INSTANCE", "")
-    tag = re.sub(r"[^\w-]+", "-", inst).strip("-")[-60:] if inst else ""
-    return appgit.local() / (f"tray-{tag}.json" if tag else "tray.json")
+def lock() -> singleton.Lock:
+    """The tray's own lock, one per knowledge base: a second tray never shows a second icon."""
+    return singleton.Lock(catalog.instance() / ".cache" / "tray.lock")
 
 
 def kb_command(*args: str) -> list[str]:
@@ -50,13 +51,16 @@ def kb_command(*args: str) -> list[str]:
     return [str(py), "-c", f"import sys; sys.path.insert(0, {root!r}); from kb.cli import main; sys.exit(main())", *args]
 
 
-def running_url() -> str | None:
-    """The address of an app this copy already runs (a second double-click), when it still answers."""
+def running_url(wait: float = 0) -> str | None:
+    """The address of the app that has this knowledge base open (written by kb serve), when it still answers."""
+    from kb.publish.server.app import running_url as written
+    url = written(wait)
+    if not url:
+        return None
     try:
-        url = json.loads(state_file().read_text(encoding="utf-8"))["url"]
         urllib.request.urlopen(url, timeout=2).close()
         return url
-    except (OSError, ValueError, KeyError):
+    except (OSError, ValueError, TypeError):
         return None
 
 
@@ -80,7 +84,6 @@ class Supervisor:
             m = URL.search(line)
             if m:  # every start, also a restart with the same address
                 self.url = m[1]
-                state_file().write_text(json.dumps({"url": self.url, "pid": os.getpid()}), encoding="utf-8")
                 self.on_state("running", self.url)
 
     def run(self) -> int:
@@ -102,7 +105,7 @@ class Supervisor:
                                    encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
                 log(f"update --finish: {r.returncode} {(r.stdout + r.stderr).strip()[-300:]}")
                 continue
-            if self.quitting or self.code == 0:
+            if self.quitting or self.code in (0, ALREADY_RUNNING):  # already running: kb serve opened that one
                 self.on_state("stopped", "")
                 return 0
             self.on_state("error", f"the app stopped with an error ({self.code})")
@@ -162,10 +165,13 @@ def icon_image(state: str):
 
 
 def run() -> int:
-    """`kb tray`: one per copy; a second start just opens the browser."""
-    url = running_url()
-    if url:
-        webbrowser.open(url)
+    """`kb tray`: one per knowledge base; a second start just opens the running app in the browser."""
+    me = lock()
+    if not me.acquire():
+        url = running_url(wait=60)  # the first one may still be starting (a quick double double-click)
+        log(f"already running: {url or 'still starting'}")
+        if url:
+            webbrowser.open(url)
         return 0
     import pystray
     name = branding.app_name()
@@ -228,9 +234,6 @@ def run() -> int:
     log("tray started")
     threading.Thread(target=start_supervisor, daemon=True).start()
     icon.run()
-    try:
-        state_file().unlink()
-    except OSError:
-        pass
+    me.release()
     log("tray stopped")
     return 0

@@ -42,6 +42,8 @@ if "%RC%"=="3" (
   goto start
 )
 if "%RC%"=="0" exit /b 0
+rem 4: this knowledge base is already open (the tray or another window has it); kb serve opened it in the browser
+if "%RC%"=="4" exit /b 0
 
 echo.
 echo Wiki stopped with an error (%RC%). See the messages above.

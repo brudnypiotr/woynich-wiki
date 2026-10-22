@@ -35,7 +35,6 @@ def test_restarts_after_an_update_then_stops(tmp_path, local):
     assert sup.run() == 0
     assert runs.read_text() == "2" and (tmp_path / "finished").exists()
     assert states == ["starting", "running", "updating", "starting", "running", "stopped"]
-    assert json.loads(tray.state_file().read_text())["url"].endswith("t=tok")
     assert "kb serve exited with 3" in (local / "logs" / "tray.log").read_text()
 
 
@@ -47,20 +46,52 @@ def test_an_error_stops_and_says_so(tmp_path, local):
     assert states[-1] == ("error", "the app stopped with an error (1)")
 
 
-def test_second_start_finds_the_running_app(tmp_path, local):
+def test_second_start_finds_the_running_app(tmp_path, local, instance):
     assert tray.running_url() is None
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), http.server.SimpleHTTPRequestHandler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         url = f"http://127.0.0.1:{srv.server_address[1]}/?t=abc"
-        tray.state_file().write_text(json.dumps({"url": url}))
+        (instance / ".cache").mkdir(parents=True, exist_ok=True)
+        (instance / ".cache" / "serve.json").write_text(json.dumps({"url": url}))  # as kb serve writes it
         assert tray.running_url() == url
     finally:
         srv.shutdown()
-    assert tray.running_url() is None  # the app is gone: start a new one
-
+    assert tray.running_url() is None  # written, but gone: start a new one
 
 def test_child_runs_this_copy_with_the_launcher_flag(local):
     cmd = tray.kb_command("serve")
     assert cmd[-1] == "serve" and "from kb.cli import main" in cmd[2]
     assert tray.Supervisor(command=["x"])._env()["KB_LAUNCHER"] == "1"
+
+
+def test_one_lock_per_resource(tmp_path):
+    from kb.core import singleton
+    a, b = singleton.Lock(tmp_path / "x.lock"), singleton.Lock(tmp_path / "x.lock")
+    assert a.acquire() and not b.acquire()   # a second holder is refused at once, no waiting
+    a.release()
+    assert b.acquire()
+    b.release()
+
+
+def test_double_start_gives_one_app(tmp_path, monkeypatch):
+    """Regression: two starts 0.3 s apart (a quick double double-click) ran two kb serve on one knowledge base."""
+    import time
+    monkeypatch.setenv("KB_INSTANCE", str(tmp_path / "kb"))
+    cmd = tray.kb_command("serve", "--no-browser", "--port", "0", "--adapter", "fake")
+    first, second = tray.Supervisor(command=cmd), tray.Supervisor(command=cmd)
+    t1 = threading.Thread(target=first.run, daemon=True); t1.start()
+    time.sleep(0.3)
+    t2 = threading.Thread(target=second.run, daemon=True); t2.start()
+    t2.join(60)   # without the lock the second kb serve would just run: fail, don't hang
+    if t2.is_alive():
+        second.quit(); first.quit()
+        pytest.fail("a second kb serve started on the same knowledge base")
+    assert second.code == tray.ALREADY_RUNNING   # refused: the first one has it
+    for _ in range(120):
+        if first.url:
+            break
+        time.sleep(0.5)
+    assert first.url and second.url is None
+    first.quit(); t1.join(30)
+    assert first.code == 0

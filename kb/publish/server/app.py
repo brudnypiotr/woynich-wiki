@@ -10,7 +10,7 @@ import threading
 import webbrowser
 from http.server import ThreadingHTTPServer
 
-from kb.core import config
+from kb.core import config, singleton
 from kb.knowledge import catalog
 from kb.llm.gateway import Gateway
 from kb.publish import applog, updater
@@ -75,14 +75,54 @@ def _warm_up() -> None:
             pass
 
 
+ALREADY_RUNNING = 4  # exit code: another kb serve already runs this knowledge base (its address was opened instead)
+
+
+def _running_file():
+    return catalog.instance() / ".cache" / "serve.json"
+
+
+def running_url(wait: float = 0) -> str | None:
+    """The address of the kb serve that holds this knowledge base, waiting up to `wait` s while it starts."""
+    end = time.time() + wait
+    while True:
+        try:
+            return json.loads(_running_file().read_text(encoding="utf-8"))["url"]
+        except (OSError, ValueError, KeyError):
+            if time.time() >= end:
+                return None
+            time.sleep(0.5)
+
+
 def serve(port: int = 8765, open_browser: bool = True, adapter: str | None = None) -> int:
-    """Runs until Ctrl+C (0) or an update asks for a restart (updater.RESTART_CODE, for the launcher)."""
+    """Runs until Ctrl+C (0) or an update asks for a restart (updater.RESTART_CODE, for the launcher). One per
+    knowledge base: a second start (a double double-click, Wiki.cmd --console next to the tray, kb serve in a terminal)
+    opens the running one and exits with ALREADY_RUNNING, so two servers never write the same wiki."""
+    lock = singleton.Lock(catalog.instance() / ".cache" / "serve.lock")
+    if not lock.acquire():
+        url = running_url(wait=60)
+        print(f"this knowledge base is already open: {url or 'the other copy is still starting'}", flush=True)
+        if url and open_browser:
+            webbrowser.open(url)
+        return ALREADY_RUNNING
+    try:
+        return _serve(port, open_browser, adapter)
+    finally:
+        try:
+            _running_file().unlink()
+        except OSError:
+            pass
+        lock.release()
+
+
+def _serve(port: int, open_browser: bool, adapter: str | None) -> int:
     log = applog.start()
     print(f"log: {log}", flush=True)
     resumed = _resumed()
     httpd = make_server(resumed["port"] if resumed else port, adapter=adapter, token=resumed and resumed["token"])
     port = httpd.server_address[1]
     url = f"http://127.0.0.1:{port}/?t={Handler.token}"
+    _running_file().write_text(json.dumps({"url": url, "pid": os.getpid()}), encoding="utf-8")
     print(f"woynich-wiki is running at {url}\nKeep this window open; press Ctrl+C to stop.", flush=True)
     if open_browser and not resumed:
         webbrowser.open(url)
