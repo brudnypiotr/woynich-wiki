@@ -49,3 +49,15 @@ def test_package_on_the_desktop(tmp_path, instance, monkeypatch):
               "instance/sessions/s1.json", "instance/sources.json", "instance/git-log.txt"):
         assert n in names, n
     assert "# Broken" in zipfile.ZipFile(r["path"]).read("feedback.md").decode()
+
+
+def test_package_names_the_author_from_the_branding(tmp_path, instance, monkeypatch):
+    from kb.publish import branding
+    catalog.init()
+    monkeypatch.setenv("KB_ROOT", str(tmp_path / "app")); (tmp_path / "app").mkdir()
+    monkeypatch.setattr(feedback, "desktop", lambda: tmp_path)
+    assert feedback.package("x", None, [], [])["contact"] is None
+    branding.save_settings({"contact": "author@example.com"})
+    assert feedback.package("x", None, [], [])["contact"] == "author@example.com"
+    branding.save_settings({"contact": None})
+    assert "contact" not in branding.settings()

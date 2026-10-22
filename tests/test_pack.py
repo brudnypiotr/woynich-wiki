@@ -83,16 +83,15 @@ def test_packs_are_never_committed_to_the_blueprint():
     assert subprocess.run(["git", "-C", str(root), "check-ignore", "-q", "orders-rules.kbpack.zip"]).returncode == 0
 
 
-def test_pack_carries_the_app_name_and_the_inbox(tmp_path, monkeypatch):
+def test_pack_carries_the_app_name_and_the_contact(tmp_path, monkeypatch):
     from kb.publish import branding
     monkeypatch.setenv("KB_ROOT", str(tmp_path / "author-app"))
     make_instance(tmp_path / "author", monkeypatch, "Orders Rules", "# Rest\n")
-    inbox = {"folder": "Wiki Inbox", "share_url": "https://example.sharepoint.com/x", "contact": "author@example.com"}
-    branding.save_settings({"app_name": "Orders Wiki", "inbox": inbox})
+    branding.save_settings({"app_name": "Orders Wiki", "contact": "author@example.com"})
     r = pack.export(tmp_path / "team.kbpack.zip")
-    assert pack.read_manifest(Path(r["path"]))["settings"]["inbox"] == inbox
+    assert pack.read_manifest(Path(r["path"]))["settings"]["contact"] == "author@example.com"
     monkeypatch.setenv("KB_ROOT", str(tmp_path / "colleague-app"))
     monkeypatch.setenv("KB_INSTANCE", str(tmp_path / "colleague"))
     catalog.init()
     pack.import_pack(Path(r["path"]))
-    assert branding.settings()["inbox"] == inbox and branding.app_name() == "Orders Wiki"
+    assert branding.settings()["contact"] == "author@example.com" and branding.app_name() == "Orders Wiki"

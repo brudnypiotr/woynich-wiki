@@ -13,8 +13,8 @@ from http.server import ThreadingHTTPServer
 from kb.core import config
 from kb.knowledge import catalog
 from kb.llm.gateway import Gateway
-from kb.publish import applog, inbox, updater
-from kb.publish.server import chat_api, feedback_api, inbox_api, ingest_api, pack_api, settings_api, update_api, web  # noqa: F401  (importing registers their routes)
+from kb.publish import applog, updater
+from kb.publish.server import chat_api, feedback_api, ingest_api, pack_api, settings_api, update_api, web  # noqa: F401  (importing registers their routes)
 from kb.publish.server.http import Handler
 
 
@@ -89,8 +89,6 @@ def serve(port: int = 8765, open_browser: bool = True, adapter: str | None = Non
     stop = threading.Event()
     threading.Thread(target=updater.background, args=(stop,), daemon=True, name="kb-update-check").start()
     threading.Thread(target=_warm_up, daemon=True, name="kb-warm-up").start()
-    if not resumed:  # a start, not a restart after an update
-        threading.Thread(target=inbox.record, args=("start",), daemon=True, name="kb-usage").start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

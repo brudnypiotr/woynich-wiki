@@ -135,9 +135,6 @@ def _finish(question, res, focus, attachments, t0, task: str) -> dict:
         f.write(json.dumps({"at": catalog.now(), "question": question, "focus": focus, "not_found": not_found,
                             "seconds": out["seconds"], "premium": res.premium, "credits": res.credits, "attachments": len(attachments), "task": task},
                            ensure_ascii=False) + "\n")
-    from kb.publish import inbox
-    inbox.record("question", question=question, focus=focus, not_found=not_found, seconds=out["seconds"],
-                 credits=res.credits, attachments=len(attachments), task=task)
     return out
 
 

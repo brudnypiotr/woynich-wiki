@@ -2,7 +2,7 @@
 
 `export()` writes <title>.kbpack.zip: the wiki, every source (raw/: originals, extracted text with locators, records;
 store/: the large originals), the project branding and the settings the whole team shares (title, Jira URL, and from
-branding.json the app name and the inbox, the OneDrive folder where feedback and usage go).
+branding.json the app name and the author's e-mail for feedback).
 Never anything personal: discussions, usage logs, Jira e-mail, keys, model choice, code repository paths.
 
 `import_pack()` replaces this knowledge base's wiki and sources with the pack's (no merging: the pack is the starting
@@ -51,7 +51,7 @@ def export(out: Path | None = None) -> dict:
     out = Path(out) if out else config.paths().root / f"{slug(title)}.kbpack.zip"
     team = branding.settings()
     shared = {"title": title, "jira_base_url": (prof.get("jira") or {}).get("base_url"),
-              **{k: team[k] for k in ("app_name", "inbox") if team.get(k)}}
+              **{k: team[k] for k in ("app_name", "contact") if team.get(k)}}
     pages = sum(1 for _ in (inst / "wiki").rglob("*.md")) if (inst / "wiki").exists() else 0
     manifest = {"format": FORMAT, "title": title, "created": catalog.now(), "app_version": __version__,
                 "sources": len(sources), "pages": pages, "settings": shared}
@@ -165,8 +165,8 @@ def import_pack(path: Path) -> dict:
         if f.exists():
             f.replace(f.with_name(f"{f.stem}-before-import-{stamp}{f.suffix}"))
     shared = m.get("settings") or {}
-    team = {k: shared[k] for k in ("app_name", "inbox") if shared.get(k)}
-    if team:  # the team's app name and inbox, as branding.zip would bring them
+    team = {k: shared[k] for k in ("app_name", "contact") if shared.get(k)}
+    if team:  # the team's app name and feedback contact, as branding.zip would bring them
         branding.save_settings(team)
     if shared.get("title"):
         settings.save({"profile": {"title": shared["title"]}})

@@ -1,7 +1,7 @@
 """Company branding (logo, header background, icon), kept out of Git: the copy's `branding/` folder, or the knowledge
 base's own `instance/branding/` (wins). Shared as a branding.zip: `kb branding pack` makes it, with branding.json
 carrying what is the same for the whole team: the knowledge base title, the app name (desktop shortcut, window) and the
-inbox (where feedback and usage go). Welcome, Settings → Project branding, `kb branding import` or setup.cmd (when
+author's e-mail (contact: where feedback goes). Welcome, Settings → Project branding, `kb branding import` or setup.cmd (when
 branding.zip lies next to it) unpacks it, sets the title, and on Windows gives the shortcut the icon and the name.
 """
 from __future__ import annotations
@@ -35,7 +35,7 @@ def find(stem: str, exts: tuple[str, ...] = (".svg", ".png", ".jpg", ".jpeg")) -
 
 
 def settings() -> dict:
-    """branding.json of this copy (instance/branding/ wins over branding/): {title, app_name, inbox}; {} when none."""
+    """branding.json of this copy (instance/branding/ wins over branding/): {title, app_name, contact}; {} when none."""
     for d in dirs():
         try:
             data = json.loads((d / "branding.json").read_text(encoding="utf-8"))
@@ -61,7 +61,7 @@ def app_name() -> str:
 
 
 def state() -> dict:
-    return {"folder": str(folder()), "app_name": app_name(),
+    return {"folder": str(folder()), "app_name": app_name(), "contact": settings().get("contact") or "",
             "files": {s: (str(p) if (p := find(s, EXTS)) else None) for s in STEMS}}
 
 
