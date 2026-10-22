@@ -15,6 +15,7 @@
   setup.cmd                 (double-click)
   setup.cmd -Offline        (install packages only from .\wheels)
   setup.cmd -FullTest       (run every test, not only the smoke tests)
+  Wiki.cmd runs it with -FromLauncher on the first start and whenever setup\version.txt changes, then starts the app.
 #>
 [CmdletBinding()]
 param(
@@ -22,7 +23,8 @@ param(
   [switch]$SkipGit,
   [switch]$SkipCopilot,
   [switch]$NoUserPath,
-  [switch]$FullTest
+  [switch]$FullTest,
+  [switch]$FromLauncher
 )
 
 $ErrorActionPreference = 'Stop'
@@ -275,12 +277,19 @@ $warned = @($script:Steps | Where-Object { $_.status -eq 'WARN' }).Count
 if ($failed) { Write-Host 'Setup finished with errors.' -ForegroundColor Red }
 elseif ($warned) { Write-Host 'Setup finished with warnings.' -ForegroundColor Yellow }
 else { Write-Host 'Setup finished.' -ForegroundColor Green }
-Write-Host 'Next step: start the app from the desktop shortcut (or Wiki.cmd in this folder).'
-Write-Host '  It opens the app in your browser; keep its window open. New versions: Update in the app (or update.cmd).'
-Write-Host '  The first start opens Welcome: a ready knowledge base, GitHub Copilot sign-in, the model, Jira (and optional steps).'
-Write-Host '  Another knowledge base: "Wiki.cmd" C:\kb\other-instance'
-Write-Host 'In a terminal instead: kb login (Copilot sign-in), kb llm-smoke (model check), kb serve.'
-Write-Host "Each copy of the repository runs its own code and its own instance\ through its own kb.cmd ($Repo)."
+if (-not $failed) {  # Wiki.cmd compares it with setup\version.txt; ASCII: cmd's set /p would keep a UTF-8 BOM
+  New-Item -ItemType Directory -Force -Path (Join-Path $Repo 'local') | Out-Null
+  (Get-Content (Join-Path $ScriptDir 'version.txt') -TotalCount 1).Trim() | Set-Content (Join-Path $Repo 'local\setup-version.txt') -Encoding ASCII
+}
+if ($FromLauncher) { if (-not $failed) { Write-Host 'Starting the app ...' } }
+else {
+  Write-Host 'Next step: start the app from the desktop shortcut (or Wiki.cmd in this folder).'
+  Write-Host '  It opens the app in your browser; keep its window open. New versions: Update in the app (or update.cmd).'
+  Write-Host '  The first start opens Welcome: a ready knowledge base, GitHub Copilot sign-in, the model, Jira (and optional steps).'
+  Write-Host '  Another knowledge base: "Wiki.cmd" C:\kb\other-instance'
+  Write-Host 'In a terminal instead: kb login (Copilot sign-in), kb llm-smoke (model check), kb serve.'
+  Write-Host "Each copy of the repository runs its own code and its own instance\ through its own kb.cmd ($Repo)."
+}
 $script:Steps | ConvertTo-Json | Set-Content (Join-Path $Base 'setup-result.json') -Encoding UTF8
 try { Stop-Transcript | Out-Null } catch { Write-Verbose 'no transcript' }
 if ($failed) { exit 2 } else { exit 0 }

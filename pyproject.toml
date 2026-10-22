@@ -1,6 +1,6 @@
 [project]
 name = "woynich-wiki"
-version = "0.6.1"
+version = "0.7.0"
 description = "Project knowledge base with a paper trail (LLM Wiki with strict provenance)"
 requires-python = ">=3.11"
 dependencies = ["pyyaml>=6", "jsonschema>=4"]

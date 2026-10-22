@@ -7,16 +7,16 @@ This repository is the **blueprint**: generic code, templates and instructions w
 ## Quick start on Windows (no admin rights)
 1. Download the repository (GitHub → Code → **Download ZIP**, or `git clone`) and unpack it into a **short path outside
    OneDrive**, e.g. `C:\kb\woynich-wiki`. A ZIP copy is fine: setup connects it to this repository so updates work.
-2. Double-click **`doctor.cmd`**. It is a read-only check of the machine that changes nothing. If it reports blockers, send `doctor-report.json`.
-3. Double-click **`setup.cmd`**. It installs a private Python and the packages, finds or unpacks Git, downloads the
-   Copilot runtime and puts a **Wiki** shortcut on the desktop and in the Start menu. Safe to run again.
-4. Start **Wiki** (the shortcut, or `Wiki.cmd` in the folder). It starts the app (`kb serve`)
-   in the browser; keep its window open. The first start
+2. Double-click **`Wiki.cmd`**. That is all a user needs. The first time it prepares the computer (private Python and
+   packages, Git, the Copilot runtime, a desktop and Start menu shortcut; a few minutes, no admin rights), then starts
+   the app in the browser; keep its window open. Later, start the app from the shortcut; when a new version needs the
+   setup again (`setup\version.txt` changed), the shortcut runs it before the app. The first start of the app
    creates the knowledge base instance (`instance\`, its own git repository) and opens a short **Welcome**: a ready
    knowledge base (knowledge pack) and project branding (both optional), sign in to GitHub Copilot, choose the model
    (gpt-6-luna preselected when your account offers it), Jira, code repositories (optional). Settings → "Open the
-   welcome steps again" opens it later. (`setup.cmd` only prepares the computer; Welcome sets up the app.)
+   welcome steps again" opens it later.
    Another knowledge base: `"Wiki.cmd" C:\kb\other-instance` (sets `KB_INSTANCE` for that window only).
+3. Something wrong with the machine? `doctor.cmd` is a read-only check that changes nothing; send `doctor-report.json`.
 
 In a terminal the same steps are `kb login` (Copilot sign-in), `kb llm-smoke` (checks that scripts can use the model;
 send `instance\reports\llm-smoke.json`), `kb init` and `kb serve`.
@@ -24,8 +24,8 @@ send `instance\reports\llm-smoke.json`), `kb init` and `kb serve`.
 | Script | What it does |
 |---|---|
 | `doctor.cmd` | read-only check of the machine (PowerShell, policies, proxy, Python, Git, Copilot); changes nothing |
-| `setup.cmd` | private Python and packages, Git, Copilot runtime, `kb.cmd`, shortcut, 5 smoke tests (`-FullTest`: all); safe to run again |
-| `Wiki.cmd [instance folder]` | starts the app in the browser; the first start opens Welcome; restarts it after an update; offers an update when the app fails to start |
+| `setup.cmd` | the setup on its own (Wiki.cmd runs it when needed): private Python and packages, Git, Copilot runtime, `kb.cmd`, shortcut, 5 smoke tests (`-FullTest`: all); safe to run again |
+| `Wiki.cmd [instance folder]` | **the one script for users** (the desktop shortcut runs it): runs the setup when it is not done for this version, starts the app in the browser, restarts it after an update, offers an update when the app fails to start |
 | `update.cmd` | downloads and installs the newest version (the same as Update in the app) |
 | `test.cmd [pytest options]` | runs every test (setup runs only the 5 smoke tests); e.g. `test.cmd -k update` |
 | `kb.cmd <command>` | the command line (created by setup); each copy of the repository runs its own code and instance |
