@@ -95,3 +95,20 @@ def test_double_start_gives_one_app(tmp_path, monkeypatch):
     assert first.url and second.url is None
     first.quit(); t1.join(30)
     assert first.code == 0
+
+
+def test_the_icon_is_named_after_the_knowledge_base(monkeypatch):
+    from kb.core import config
+    from kb.publish import branding
+    monkeypatch.setattr(branding, "app_name", lambda: "Wiki")
+    title = {"t": "Sales"}
+    monkeypatch.setattr(config, "load", lambda name: {"instance": {"title": title["t"]}})
+    url = "http://127.0.0.1:8766/?t=secret-token"
+    assert tray.tooltip("running", url) == "Wiki Sales · port 8766" and "secret" not in tray.tooltip("running", url)
+    assert tray.tooltip("starting", None) == "Wiki Sales: starting…"
+    title["t"] = "Wiki Orders"            # no "Wiki Wiki Orders"
+    assert tray.label() == "Wiki Orders"
+    title["t"] = ""
+    assert tray.label(url) == "Wiki · port 8766"
+    title["t"] = "A very long knowledge base title that goes on and on and on"
+    assert len(tray.tooltip("running", url)) <= 63
