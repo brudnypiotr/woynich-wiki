@@ -47,6 +47,9 @@ jobs:
         shell: cmd
         run: |
           call Wiki.cmd --ready || (echo setup done but Wiki.cmd wants to run it again & exit /b 1)
+          if not exist local\pythonw.txt (echo setup did not write local\pythonw.txt for the tray & exit /b 1)
+          set /p PYW=<local\pythonw.txt
+          "%PYW%" -c "import pystray, PIL; print('tray packages ok')" || exit /b 1
           copy /y local\setup-version.txt local\setup-version.bak >nul
           >local\setup-version.txt echo 0
           call Wiki.cmd --ready && (echo setup version changed but Wiki.cmd would not run it & exit /b 1)

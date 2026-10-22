@@ -1,8 +1,11 @@
 @echo off
 rem Wiki: double-click me (or the desktop shortcut) to start the app and open it in the browser. The only script a user
 rem needs: on the first start, or when a new version needs it (setup\version.txt changed), it runs the setup first.
-rem Another knowledge base: "Wiki.cmd" C:\kb\other-instance  (sets KB_INSTANCE for this window only)
-rem After Update in the app, kb serve exits with code 3 and this window starts it again.
+rem It starts the app without a console window: an icon in the notification area (kb tray) runs it, restarts it after
+rem an update and has Open, Show log, Restart and Quit. Logs: local\logs\serve.log and tray.log.
+rem   Wiki.cmd --console              the app in this window with its output (for debugging); after Update in the
+rem                                   app kb serve exits with code 3 and this window starts it again
+rem   Wiki.cmd C:\kb\other-instance   another knowledge base (sets KB_INSTANCE for this start only)
 rem An update may replace this file while it runs, and cmd reads a running script line by line from disk: so it runs
 rem from a copy in %TEMP% and finds the app through KB_REPO.
 if defined KB_REPO goto copied
@@ -21,6 +24,8 @@ setlocal
 title Wiki
 if not defined KB_REPO set "KB_REPO=%~dp0"
 if "%~1"=="--ready" goto ready_only
+set "KB_CONSOLE="
+if /i "%~1"=="--console" (set "KB_CONSOLE=1" & shift)
 if not "%~1"=="" set "KB_INSTANCE=%~f1"
 cd /d "%KB_REPO%"
 if defined KB_INSTANCE echo Knowledge base: %KB_INSTANCE%
@@ -28,6 +33,8 @@ set "KB_LAUNCHER=1"
 
 :start
 call :ready || call :setup || exit /b 1
+if not defined KB_CONSOLE goto tray
+:serve
 call "%KB_REPO%kb.cmd" serve
 set RC=%ERRORLEVEL%
 if "%RC%"=="3" (
@@ -53,6 +60,16 @@ rem Wiki.cmd --ready: exit code 0 when the setup is done for this version (CI ch
 :ready_only
 call :ready
 exit /b %ERRORLEVEL%
+
+rem The app in the background with a tray icon (pythonw: no console). Setup writes where pythonw.exe is.
+:tray
+set "PYW="
+if exist "%KB_REPO%local\pythonw.txt" set /p PYW=<"%KB_REPO%local\pythonw.txt"
+if not defined PYW goto serve
+if not exist "%PYW%" goto serve
+set "PYTHONUTF8=1"
+start "" "%PYW%" -c "import sys; sys.path.insert(0, r'%KB_REPO%.'); from kb.cli import main; sys.exit(main())" tray
+exit /b 0
 
 rem Setup is done for this version: kb.cmd exists and local\setup-version.txt matches setup\version.txt.
 :ready

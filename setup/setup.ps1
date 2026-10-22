@@ -234,6 +234,10 @@ set "PYTHONUTF8=1"
 exit /b %ERRORLEVEL%
 "@
 Set-Content -Path (Join-Path $Repo 'kb.cmd') -Value $shim -Encoding ASCII
+# Wiki.cmd starts the app with pythonw (no console window, an icon in the notification area): where it is.
+$pyw = Join-Path (Split-Path -Parent $venvPy) 'pythonw.exe'
+New-Item -ItemType Directory -Force -Path (Join-Path $Repo 'local') | Out-Null
+if (Test-Path $pyw) { $pyw | Set-Content (Join-Path $Repo 'local\pythonw.txt') -Encoding ASCII }
 Step 'Command' 'OK' 'kb.cmd created (run: kb --help)'
 
 # ------------------------------------------------------------------ 6. updates + shortcut

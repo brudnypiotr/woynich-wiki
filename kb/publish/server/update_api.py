@@ -58,3 +58,14 @@ def update_branches(h):
 @route("GET", r"/api/changelog")
 def changelog_groups(h):
     return h.send(200, changelog.groups())
+
+
+@route("POST", r"/api/app/(quit|restart)")
+def app_stop(h, what):
+    """For the tray (kb tray): quit stops kb serve cleanly (exit 0); restart exits with RESTART_CODE, the tray starts it again."""
+    if what == "restart":
+        if not updater.launched():
+            raise ValueError("restart needs the launcher (Wiki.cmd or kb tray)")
+        updater.RESTART.set()
+    threading.Timer(0.3, h.server.shutdown).start()
+    return h.send(200, {"ok": True, "what": what})

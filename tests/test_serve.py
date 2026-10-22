@@ -302,3 +302,14 @@ def test_dashboard_is_rebuilt_only_when_the_wiki_changes(instance, monkeypatch):
     assert len(calls) == 2                                   # a new page: built again
     site.build()
     assert len(calls) == 3                                   # kb site and Rebuild always build
+
+
+def test_tray_quit_and_restart(app, monkeypatch):
+    from kb.publish import updater
+    base, token = app
+    monkeypatch.delenv("KB_LAUNCHER", raising=False)
+    with pytest.raises(urllib.error.HTTPError):  # restart needs the launcher, else nothing would start the app again
+        call(base, token, "/api/app/restart", b"{}")
+    monkeypatch.setenv("KB_LAUNCHER", "1")
+    assert call(base, token, "/api/app/restart", b"{}")["what"] == "restart" and updater.RESTART.is_set()
+    updater.RESTART.clear()
