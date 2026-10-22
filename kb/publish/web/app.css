@@ -241,3 +241,20 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
 .fb-shot button{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:0;background:#c23b3b;color:#fff;font-size:12px;line-height:18px;padding:0}.fb-note{color:var(--mute);font-size:13px}
 /* narrow windows: the chat box reaches the right edge, so the bubble sits above it */
 @media (max-width:1240px){body:has(.composer) .fb-bubble{bottom:134px}body:has(.composer) .fb-panel,body:has(.composer) .fb-nudge{bottom:198px}}
+/* Add sources: a dropped folder (preview before upload, then a tree of its files with counts per folder) */
+.drop a{color:var(--vio);font-weight:600}
+.pv h3 small,.batch .nm small{color:var(--mute);font-weight:400;margin-left:6px}
+.batch{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:12px 14px;margin-bottom:12px}
+.batch>.hd{display:flex;align-items:center;gap:10px}.batch>.hd .nm{flex:1;display:flex;flex-direction:column}.batch>.hd .nm small{margin-left:0}
+.bar{height:6px;border-radius:3px;background:var(--line);margin:10px 0 6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--vio);transition:width .4s}
+.tree ul{list-style:none;margin:0;padding-left:16px}.tree>ul{padding-left:0}
+.tree summary{display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 0;list-style:none}.tree summary::-webkit-details-marker{display:none}
+.tree summary::before{content:'▸';color:var(--mute);width:10px;font-size:11px}.tree details[open]>summary::before{content:'▾'}
+.tree summary small{color:var(--mute);margin-left:4px}.tree summary small.bad{color:var(--bad)}.tree summary small.live{color:var(--vio)}
+.tree .i{width:16px;height:16px;flex:none;color:var(--mute)}
+.tree li.file>.row,.tree li.file{display:flex;align-items:center;gap:6px;padding:3px 0 3px 16px;flex-wrap:wrap}
+.tree li.file>.row{padding-left:0;cursor:pointer;width:100%}.tree li.file>.row:hover span{color:var(--vio)}
+.tree li.file small{color:var(--mute)}.tree .det1{flex:1 1 200px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tree li.file .badge{font-size:11px;padding:1px 8px}.tree li.file>.job{width:100%;margin:6px 0 10px}
+.skipped{margin:8px 0;color:var(--mute)}.skipped ul{margin:6px 0 0;padding-left:18px;max-height:180px;overflow:auto;font-size:13px}
+.batch .hd .fi{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--vio-soft);color:var(--vio)}

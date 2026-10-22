@@ -1,4 +1,7 @@
-"""Add sources: uploads become jobs, ingested one at a time in upload order (single writer), with visible steps."""
+"""Add sources: uploads become jobs, ingested one at a time in upload order (single writer), with visible steps.
+A dropped folder arrives as one upload per file with its path inside the folder (X-Path) and a batch id (X-Batch):
+the path is kept as the source's origin, shown as a tree, and told to the model (the folders often name the client,
+the area or the date)."""
 from __future__ import annotations
 
 import json
@@ -66,7 +69,7 @@ def _ingest_job(job: dict, path: Path, gw: Gateway) -> None:
     try:
         with WRITE_LOCK:
             _job_step(job, "saved", path.name)
-            rec, created = catalog.add_file(path, connector="upload", ref=job["filename"], title=Path(job["filename"]).stem,
+            rec, created = catalog.add_file(path, connector="upload", ref=job.get("path") or job["filename"], title=Path(job["filename"]).stem,
                                             found_via=["upload"])
             job["source_id"] = rec["id"]
             info = json.loads((catalog.instance() / "raw" / rec["id"] / "extract.json").read_text(encoding="utf-8"))
@@ -117,9 +120,24 @@ def _job_view(job: dict) -> dict:
     return {**job, "ahead": ahead}
 
 
+def clean_path(raw: str) -> str:
+    """A path inside a dropped folder, safe to keep: forward slashes, no empty, '.' or '..' parts, no drive."""
+    parts = [p for p in unquote(raw or "").replace("\\", "/").split("/") if p not in ("", ".", "..")]
+    parts = [p.replace(":", "_") for p in parts]
+    return "/".join(parts)[:400]
+
+
+@route("GET", r"/api/upload/types")
+def upload_types(h):
+    from kb import extractors
+    return h.send(200, {"extensions": extractors.supported()})
+
+
 @route("POST", r"/api/upload")
 def upload(h):
-    name = Path(unquote(h.headers.get("X-Filename") or "upload.bin")).name
+    rel = clean_path(h.headers.get("X-Path") or "")
+    name = Path(unquote(h.headers.get("X-Filename") or "")).name or (rel.rsplit("/", 1)[-1] if rel else "upload.bin")
+    rel = rel or name
     n = int(h.headers.get("Content-Length") or 0)
     if not n or n > MAX_UPLOAD:
         return h.send(400, {"error": f"file size must be between 1 byte and {MAX_UPLOAD // 1_000_000} MB"})
@@ -131,7 +149,8 @@ def upload(h):
             if not chunk:
                 break
             f.write(chunk); left -= len(chunk)
-    job = {"id": uuid.uuid4().hex[:12], "filename": name, "bytes": n, "state": "queued", "step": "queued",
+    job = {"id": uuid.uuid4().hex[:12], "filename": name, "path": rel, "batch": (h.headers.get("X-Batch") or "")[:40] or None,
+           "bytes": n, "state": "queued", "step": "queued",
            "started": catalog.now(), "seq": len(JOBS), "log": [], "steps": STEPS}
     JOBS[job["id"]] = job
     with QCOND:
@@ -141,10 +160,16 @@ def upload(h):
 
 
 @route("GET", r"/api/jobs")
-def jobs(h):  # everything waiting or running, plus the 30 most recent finished
+def jobs(h):
+    """Everything waiting or running, every file of a folder that is still in this list, and the 30 most recent other
+    finished ones (a folder of 200 files stays complete while its tree is on screen)."""
     js = sorted(JOBS.values(), key=lambda j: j["seq"], reverse=True)
     live = [j for j in js if j["state"] in ("queued", "running")]
-    return h.send(200, [_job_view(j) for j in live + [j for j in js if j not in live][:30]])
+    singles = [j for j in js if j not in live and not j.get("batch")][:30]
+    batches = {j["batch"] for j in live + js[:30] if j.get("batch")}
+    rest = [j for j in js if j not in live and j.get("batch") in batches]
+    keep = {j["id"] for j in live + singles + rest}
+    return h.send(200, [_job_view(j) for j in js if j["id"] in keep][:1000])
 
 
 @route("GET", r"/api/jobs/([^/]+)")
