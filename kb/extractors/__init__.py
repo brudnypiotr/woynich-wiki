@@ -5,11 +5,11 @@ from pathlib import Path
 
 from kb.core import config, registry
 from kb.extractors.base import PlainText
-from kb.extractors.office import (CodeExtractor, DocxExtractor, EmailExtractor, HtmlExtractor, JiraJsonExtractor, JiraXmlExtractor,
-                                  TranscriptExtractor)
+from kb.extractors.office import CodeExtractor, EmailExtractor, HtmlExtractor, JiraJsonExtractor, JiraXmlExtractor, TranscriptExtractor
+from kb.extractors.ooxml import DocxExtractor, XlsxExtractor
 from kb.extractors.pdf import PdfExtractor
 
-BUILTIN = [JiraXmlExtractor, JiraJsonExtractor, PdfExtractor, DocxExtractor, HtmlExtractor, EmailExtractor, TranscriptExtractor, PlainText, CodeExtractor]
+BUILTIN = [JiraXmlExtractor, JiraJsonExtractor, PdfExtractor, DocxExtractor, XlsxExtractor, HtmlExtractor, EmailExtractor, TranscriptExtractor, PlainText, CodeExtractor]
 
 
 def supported() -> list[str]:

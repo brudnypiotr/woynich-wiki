@@ -11,6 +11,7 @@ Instance layout (its own git repository, separate from the blueprint):
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import shutil
 import subprocess
@@ -133,7 +134,7 @@ def extract(rec: dict, original: Path, d: Path) -> dict:
         info["note"] = "no extractor for this file type; registered as metadata only"
     else:
         try:
-            out = ex.extract(original, out_dir=d) if type(ex).__name__ == "PdfExtractor" else ex.extract(original)
+            out = ex.extract(original, out_dir=d) if "out_dir" in inspect.signature(ex.extract).parameters else ex.extract(original)
             (d / "text.md").write_text(out["text"], encoding="utf-8")
             info.update({"extractor": type(ex).__name__, "chars": len(out["text"]), **out.get("meta", {})})
             if out.get("meta", {}).get("title") and (rec["kind"] == "ticket" or rec["title"] in (original.stem, rec["origin"]["ref"], Path(rec["origin"]["ref"]).stem)):
