@@ -145,7 +145,13 @@ def package(text: str, report: dict | None, messages: list[dict], screenshots: l
         log = subprocess.run(["git", "-C", str(inst), "log", "-30", "--format=%h %cs %s"], capture_output=True,
                              text=True, encoding="utf-8", errors="replace").stdout
         z.writestr("instance/git-log.txt", log)
-    return {"path": str(out), "folder": str(out.parent), "bytes": out.stat().st_size, "sources": len(srcs)}
+    from kb.publish import inbox
+    try:
+        sent = inbox.deliver_feedback(out)
+    except OSError:
+        sent = None  # the copy on the Desktop is still there to send by hand
+    return {"path": str(out), "folder": str(out.parent), "bytes": out.stat().st_size, "sources": len(srcs),
+            "sent": str(sent) if sent else None, "inbox": inbox.status()}
 
 
 def reveal(path: str) -> None:

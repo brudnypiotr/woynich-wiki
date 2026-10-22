@@ -3,6 +3,7 @@ import {$, esc, topbar, note, loader} from './ui.js';
 import {api} from './api.js';
 import {mark} from './shell.js';
 import {entry, newer, notice, run} from './update.js';
+import {mountInbox} from './parts/inbox.js';
 
 export async function openAbout() {mark('about');
   $('#main').innerHTML = topbar('About') + `<div class="scroll"><div class="col wide" id="about">${loader()}</div></div>`;
@@ -18,6 +19,7 @@ export async function openAbout() {mark('about');
       <div class="kv" id="u-state"><span>Status</span><b>checking…</b></div><ul class="chg" id="u-list"></ul><div id="u-chan"></div>
       <div class="btns"><button class="pri" data-a="update" hidden>Update now</button><button class="ghost" data-a="check">Check now</button>
         <button class="ghost" data-a="rollback">Roll back to previous</button><span class="note"></span></div></section>
+    <section class="set"><h3>Feedback and usage</h3><div id="a-inbox"></div></section>
     <section class="set"><h3>Diagnostics</h3>
       <p class="d">Versions, paths, the model, counts, which keys are set (never their values), a GitHub Copilot and Jira check
       (no AI credits) and the last errors. No content of sources or pages. Send it when something does not work.</p>
@@ -26,6 +28,7 @@ export async function openAbout() {mark('about');
     <section class="set"><h3>Changelog</h3><p class="d">What changed in each version, from the history of this copy.</p>
       <label class="d"><input type="checkbox" id="chg-all"> Show all changes (also documentation, tests and internal work)</label>
       <div id="chg">${loader('Reading the history…')}</div></section>`;
+  mountInbox($('#a-inbox'));
   const root = $('#about'), pre = root.querySelector('pre'), n = root.querySelector('.note'), btn = a => root.querySelector(`[data-a=${a}]`);
   let text = '';
   btn('run').onclick = async () => {btn('run').disabled = true; note(n, 'Collecting… (checks GitHub Copilot and Jira, a few seconds)');

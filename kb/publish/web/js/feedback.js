@@ -1,8 +1,10 @@
 // Feedback: a bubble in the bottom right corner. The user writes what happened (screenshots with Ctrl+V), Luna asks a
-// few short questions (at most two rounds) and writes a report, then a zip goes to the Desktop for the user to send.
+// few short questions (at most two rounds) and writes a report, then a zip goes to the Desktop and, when the inbox is
+// connected (a OneDrive folder the author shares, see parts/inbox.js), to the author by itself.
 // After a few days of use a small note above the bubble invites feedback (again two weeks later, or never).
 import {esc} from './ui.js';
 import {post} from './api.js';
+import {contactLinks, connectShare} from './parts/inbox.js';
 
 const DAY = 864e5, LS = 'kb.feedback';
 const store = {get() {try {return JSON.parse(localStorage.getItem(LS)) || {}} catch (e) {return {}}},
@@ -35,9 +37,16 @@ function toggle(open) {const p = document.querySelector('.fb-panel'); p.hidden =
   document.querySelector('.fb-nudge').hidden = true; if (!p.hidden) draw()}
 
 function draw() {const b = document.querySelector('.fb-body');
-  if (S.result) {b.innerHTML = `<p><b>Saved on your Desktop:</b><br><code>${esc(S.result.path.split(/[\\/]/).pop())}</code></p>
-      <p class="d">Send this file to the app's author in Teams (or e-mail). It holds your discussions and the wiki: company content, keep it inside the company.</p>
-      <div class="btns"><button class="pri" data-f="reveal">Show in folder</button><button class="ghost" data-f="copy">Copy message for Teams</button><button class="ghost" data-f="new">New feedback</button></div><p class="fb-note"></p>`;
+  if (S.result) {const r = S.result, ib = r.inbox || {}, file = r.path.split(/[\\/]/).pop();
+    if (r.sent) b.innerHTML = `<p><b>Sent. Thank you!</b></p><p class="d">The author gets it through the shared OneDrive folder. A copy is on your Desktop: <code>${esc(file)}</code></p>
+      <div class="btns"><button class="ghost" data-f="reveal">Show in folder</button><button class="ghost" data-f="new">New feedback</button></div><p class="fb-note"></p>`;
+    else {const text = `Feedback: ${(S.report && S.report.title) || S.text.slice(0, 80)}. File attached: ${file}`;
+      b.innerHTML = `<p><b>Saved on your Desktop:</b><br><code>${esc(file)}</code></p>
+      <p class="d">Send this file to the app's author${ib.contact ? '' : ' in Teams or by e-mail'}: open the message, then attach the file (Show in folder, drag it in). It holds your discussions and the wiki: company content, keep it inside the company.</p>
+      ${ib.configured && !ib.connected && ib.share_url ? `<p class="d">Next time it can go by itself: add the author's shared folder to your OneDrive once.</p>` : ''}
+      <div class="btns"><button class="pri" data-f="reveal">Show in folder</button>${contactLinks(ib.contact, text)}
+        ${ib.contact ? '' : '<button class="ghost" data-f="copy">Copy message</button>'}${ib.configured && !ib.connected && ib.share_url ? '<button class="ghost" data-f="share">Open the shared folder</button>' : ''}
+        <button class="ghost" data-f="new">New feedback</button></div><p class="fb-note"></p>`}
     return bind(b)}
   const chat = S.messages.map(m => `<div class="fb-msg ${m.role}">${esc(m.text)}</div>`).join('');
   const shots = S.shots.map((u, i) => `<span class="fb-shot"><img src="${u}" alt=""><button data-del="${i}" title="Remove">×</button></span>`).join('');
@@ -79,7 +88,8 @@ function bind(b) {
         store.set({next: Date.now() + 30 * DAY})}
       catch (err) {S.error = err.message} finally {S.busy = false; draw()}}
     if (a.f === 'reveal') {try {await post('/api/feedback/reveal', {path: S.result.path})} catch (err) {note(err.message)}}
-    if (a.f === 'copy') {const t = `Feedback for Wiki: ${(S.report && S.report.title) || S.text.slice(0, 80)}. File attached: ${S.result.path.split(/[\\/]/).pop()}`;
+    if (a.f === 'share') connectShare(t => note(t));
+    if (a.f === 'copy') {const t = `Feedback: ${(S.report && S.report.title) || S.text.slice(0, 80)}. File attached: ${S.result.path.split(/[\\/]/).pop()}`;
       try {await navigator.clipboard.writeText(t); note('Copied: paste it in Teams and attach the file.')} catch (err) {note(t)}}};
   // Enter sends, Shift+Enter is a new line (as in the chat)
   b.onkeydown = e => {if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.target.tagName === 'TEXTAREA') {e.preventDefault(); ask(false)}};
