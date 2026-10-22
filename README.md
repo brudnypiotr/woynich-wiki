@@ -12,7 +12,7 @@ This repository is the **blueprint**: generic code, templates and instructions w
    the app in the browser. No console window stays open: the app runs in the background with an **icon in the
    notification area** (click: open the app; right-click: Restart, Show log, Quit; it turns red and offers *Update and
    restart* when the app stops with an error). Logs: `local\logs\serve.log` and `tray.log`. Later, start the app from
-   the shortcut (a second start just opens the browser); when a new version needs the
+   the shortcut. One app per knowledge base: a second start (also a quick double double-click, or `Wiki.cmd --console` next to the tray) only opens the running one in the browser; when a new version needs the
    setup again (`setup\version.txt` changed), the shortcut runs it before the app. The first start of the app
    creates the knowledge base instance (`instance\`, its own git repository) and opens a short **Welcome**: a ready
    knowledge base (knowledge pack) and project branding (both optional), sign in to GitHub Copilot, choose the model
