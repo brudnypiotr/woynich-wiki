@@ -197,7 +197,7 @@ def test_stop_an_answer_in_progress(instance):
     out = {}
     t = threading.Thread(target=lambda: out.update(conv.ask("anything")))
     t.start()
-    for _ in range(100):
+    for _ in range(1000):  # up to 10 s: a slow Windows runner may need more than one second to start the thread
         if conv.lock.locked() and conv.live:
             break
         import time; time.sleep(0.01)

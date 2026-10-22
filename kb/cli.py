@@ -452,6 +452,14 @@ def cmd_assess(a) -> int:
     """Read-only: how the model judged each source after its ingest, next to what the ingest measurably produced."""
     import csv
     from kb.knowledge import assess
+    if a.backfill or a.model:
+        if a.model:
+            print("The model reads each source again in its own read-only session: AI credits per source.")
+        done = assess.backfill(with_model=a.model, ids=a.ids or None, force=a.force,
+                               progress=lambda st, d: print(f"  {d}", flush=True))
+        print(f"assessed {len(done)} source(s)" if done else "nothing to assess: every ingested source has an assessment"
+              + ("" if a.model else " (--model adds the model's judgement, --force redoes them)"))
+        return 0
     rows = [assess.row(x) for x in assess.load_all()]
     if a.verdict:
         rows = [r for r in rows if r["verdict"] == a.verdict]
@@ -468,9 +476,9 @@ def cmd_assess(a) -> int:
     print(f"{'verdict':<9} " + " ".join(assess.ABBR[c] for c in assess.CRITERIA) + "  cit/10k pages  title")
     for r in rows:
         print(f"{r['verdict']:<9} " + " ".join(f"{str(r[k]):>3}" for k in assess.CRITERIA)
-              + f"  {r['citations_per_10k_chars']:>7} {r['pages_created'] + r['pages_updated'] if r['pages_created'] != '' else '':>5}  {r['title'][:60]}")
+              + f"  {r['citations_per_10k_chars']:>7} {r['pages_citing']:>5}  {r['title'][:60]}")
     print("\nrel relevance · nov novelty · spe specificity · rlb reliability · txt text quality (1–5, the model's judgement);"
-          "\ncit/10k citations of the source per 10,000 characters, pages created + updated (measured). Reasons: --json")
+          "\ncit/10k citations of the source per 10,000 characters, pages citing it (measured). Reasons: --json")
     return 0
 
 
@@ -604,6 +612,10 @@ def main(argv=None) -> int:
     s = sub.add_parser("check-answer", help="check the citations of an answer (text, --file, or stdin with -) before showing it")
     s.add_argument("text", nargs="*"); s.add_argument("--file"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_check_answer)
     s = sub.add_parser("assess", help="quality of each ingested source: the model's scores and what the ingest produced (read-only)")
+    s.add_argument("ids", nargs="*", help="only these source ids (with --backfill)")
+    s.add_argument("--backfill", action="store_true", help="assess sources ingested earlier: measured signals, no AI credits")
+    s.add_argument("--model", action="store_true", help="with the model's judgement too (one read-only session per source)")
+    s.add_argument("--force", action="store_true", help="assess again even when an assessment exists")
     s.add_argument("--verdict", choices=["core", "useful", "marginal", "noise"]); s.add_argument("--json", action="store_true")
     s.add_argument("--csv", action="store_true"); s.set_defaults(fn=cmd_assess)
     s = sub.add_parser("verify", help="check links and citations on wiki pages (warnings only)"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_verify)
