@@ -71,3 +71,42 @@ def test_catalog_reads_word_and_excel(instance):
         rec, _ = catalog.add_file(FIX / name)
         assert rec["status"] == "extracted" and rec["kind"] == kind and rec["title"] == "sample"
     assert (instance / "raw" / catalog.add_file(FIX / "sample.docx")[0]["id"] / "figures" / "img-001.png").exists()
+
+
+def test_xsd_outline_with_lines_docs_and_values():
+    from kb.extractors.xmlfile import XmlExtractor
+    t = XmlExtractor().extract(FIX / "rules.xsd")["text"]
+    assert '- element Rules (L 3): "All rules of one client."' in t
+    assert "  - element Rule: RuleType [0..unbounded] (L 7)" in t
+    assert '- complexType RuleType (L 11): "One rule: a name, a severity and parameters."' in t
+    assert "  - attribute id: ID (required) (L 17)" in t
+    assert "- simpleType Severity (L 20); allowed values: ERROR, WARNING, INFO" in t
+    segs = dict(segments(t))
+    assert '<xs:element name="Rules">' in segs["L1"] and "enumeration" in segs["L21"]   # cited by line, as code
+    assert "top" in segs and "Schema outline" in segs["top"]   # the outline is a map, not a citable segment
+
+
+def test_xml_in_utf16_with_polish_text_and_its_shape():
+    from kb.extractors.xmlfile import XmlExtractor
+    r = XmlExtractor().extract(FIX / "rules-utf16.xml")
+    assert "żółw" in r["text"] and "Odpoczynek minimalny 11 h" in r["text"] and "\x00" not in r["text"]
+    assert "root <Rules>, 37 elements; most common: <Param> ×24, <Rule> ×12" in r["text"]
+    assert r["meta"]["lines"] == 15
+
+
+def test_xml_encoding_from_the_declaration_and_broken_xml(tmp_path):
+    from kb.extractors.xmlfile import XmlExtractor
+    f = tmp_path / "cfg.xml"
+    f.write_bytes('<?xml version="1.0" encoding="windows-1250"?>\n<a>Łódź</a>\n'.encode("cp1250"))
+    assert "Łódź" in XmlExtractor().extract(f)["text"]
+    f.write_text("<a><b></a>\n", encoding="utf-8")
+    r = XmlExtractor().extract(f)
+    assert "Not well-formed XML" in r["text"] and "<a><b></a>" in r["text"] and r["meta"]["xml_error"]
+
+
+def test_xml_and_xsd_go_to_the_xml_reader_jira_xml_stays():
+    from pathlib import Path
+    from kb import extractors
+    assert type(extractors.for_path(Path("a.xsd"))).__name__ == "XmlExtractor"
+    assert type(extractors.for_path(Path("a.xml"))).__name__ == "XmlExtractor"
+    assert type(extractors.for_path(Path("PROJ-1.jira.xml"))).__name__ == "JiraXmlExtractor"
