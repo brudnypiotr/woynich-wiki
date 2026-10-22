@@ -76,6 +76,8 @@ def _ingest_job(job: dict, path: Path, gw: Gateway) -> None:
             detail = f"{info.get('extractor') or 'no extractor'}, {info.get('chars', 0):,} characters"
             if info.get("pages"):
                 detail += f", {info['pages']} pages"
+            if info.get("slides"):
+                detail += f", {info['slides']} slides"
             ocr = [q["page"] for q in info.get("quality", []) if q.get("needs_ocr")]
             if ocr:
                 detail += f"; pages without text layer (scan?): {', '.join(map(str, ocr[:10]))}"

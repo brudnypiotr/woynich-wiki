@@ -64,10 +64,27 @@ def test_xlsx_large_sheet_is_cut_with_a_note(monkeypatch):
     assert "(The sheet has 3 rows; only the first 1 are included here.)" in r["text"] and r["meta"]["cut_sheets"] == ["Rates"]
 
 
-def test_catalog_reads_word_and_excel(instance):
+def test_pptx_slides_in_order_with_bullets_tables_groups_notes_and_pictures(tmp_path):
+    from kb.extractors.ooxml import PptxExtractor
+    r = PptxExtractor().extract(FIX / "sample.pptx", out_dir=tmp_path)
+    t = r["text"]
+    segs = dict(segments(t))
+    assert [loc for loc in segs] == ["p. 1", "p. 2", "p. 3", "p. 4", "p. 5"]      # one marker per slide, cited as p. N
+    assert segs["p. 1"] == "## Slide 1: Onboarding a new client\n\nImplementation kick-off"   # a subtitle is not a bullet
+    assert "- Minimum rest is 12 hours\n  - After a night duty: 14 hours\n- Standby counts as duty" in segs["p. 2"]
+    assert "Speaker notes: Ask the client about split duty." in segs["p. 2"]
+    assert "| Client | Rest |\n|---|---|\n| Example Air | 12 h |" in segs["p. 3"] and "10 h \\| short" in segs["p. 3"]
+    assert "Inside a group" in segs["p. 3"]                     # text inside a grouped shape
+    assert segs["p. 4"].startswith("## Slide 4: Draft ideas (hidden)")
+    assert "(no text on this slide)" in segs["p. 5"]
+    assert r["meta"]["slides"] == 5 and r["meta"]["hidden_slides"] == [4] and r["meta"]["slides_without_text"] == [5]
+    assert r["meta"]["tables"] == 1 and (tmp_path / "figures" / "p0003-01.png").exists()   # named by slide, like PDF pages
+
+
+def test_catalog_reads_word_excel_and_powerpoint(instance):
     from kb.knowledge import catalog
     catalog.init()
-    for name, kind in (("sample.docx", "document"), ("sample.xlsx", "spreadsheet")):
+    for name, kind in (("sample.docx", "document"), ("sample.xlsx", "spreadsheet"), ("sample.pptx", "document")):
         rec, _ = catalog.add_file(FIX / name)
         assert rec["status"] == "extracted" and rec["kind"] == kind and rec["title"] == "sample"
     assert (instance / "raw" / catalog.add_file(FIX / "sample.docx")[0]["id"] / "figures" / "img-001.png").exists()
@@ -110,3 +127,4 @@ def test_xml_and_xsd_go_to_the_xml_reader_jira_xml_stays():
     assert type(extractors.for_path(Path("a.xsd"))).__name__ == "XmlExtractor"
     assert type(extractors.for_path(Path("a.xml"))).__name__ == "XmlExtractor"
     assert type(extractors.for_path(Path("PROJ-1.jira.xml"))).__name__ == "JiraXmlExtractor"
+    assert type(extractors.for_path(Path("Deck.PPTX"))).__name__ == "PptxExtractor" and ".pptx" in extractors.supported()

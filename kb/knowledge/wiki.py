@@ -74,8 +74,12 @@ def _extra(rec: dict, d: Path, chars: int) -> str:
         lines.append(f"- Figures extracted from the document: `raw/{rec['id']}/figures/` ({len(figs)} images, "
                      + ("the issue's attached screenshots" if rec["kind"] == "ticket"
                         else "in the order they appear in the document, img-001.png first" if figs[0].name.startswith("img-")
+                        else "named by slide, e.g. p0012-01.png is on slide 12" if _is_deck(rec)
                         else "named by page, e.g. p0012-01.png")
                      + "). Look at them where the text refers to a screen or diagram.")
+    if _is_deck(rec):
+        lines.append("- This is a slide deck: `<!-- p. N -->` marks slide N (cite it as `p. N`). Slides are often terse; "
+                     "the speaker notes say what the slide means. A slide marked (hidden) was not shown.")
     if chars > LARGE_SOURCE_CHARS:
         lines.append(f"- This source is long. Work through it section by section (e.g. 30–50 pages at a time), updating the "
                      "source page and the knowledge pages as you go, until you reach the end.")
@@ -83,6 +87,10 @@ def _extra(rec: dict, d: Path, chars: int) -> str:
         lines.append("- This is a recorded conversation. Turn what people explain into knowledge; keep names only for "
                      "decisions, ownership and open doubts. Ignore small talk.")
     return "\n".join(lines)
+
+
+def _is_deck(rec: dict) -> bool:
+    return str(rec["origin"].get("ref") or "").lower().endswith(".pptx")
 
 
 def ingest_source(sid: str, runner=None, progress=None, cancelled=lambda: False) -> dict:
@@ -115,8 +123,13 @@ def ingest_source(sid: str, runner=None, progress=None, cancelled=lambda: False)
         src_page = pages.wiki() / "sources" / f"{slug}.md"
         if not src_page.exists():
             raise RuntimeError(f"the model did not write the source page wiki/sources/{slug}.md. Reply: {res.reply[:300]}")
-        from kb.knowledge import verify
+        from kb.knowledge import assess, verify
         report = verify.verify_all()
+        try:  # read-only: a broken assessment never stops an ingest
+            quality = assess.record(rec, res.reply, slug, len(text), created, updated, model=res.model)
+        except Exception as e:
+            quality = {"error": f"{type(e).__name__}: {e}"[:200]}
+        step("checking", "assessment: " + (assess.short(quality) if "error" not in quality else quality["error"]))
         rec["status"] = "ingested"
         catalog.save(rec)
         summary = f"{len(created)} pages created, {len(updated)} updated"
@@ -124,10 +137,11 @@ def ingest_source(sid: str, runner=None, progress=None, cancelled=lambda: False)
             "ingest", f"{rec['title']} — {summary}", scope=sid,
             body=f"model: {res.model}\nAI credits: {res.credits}\ntokens in/out: {res.tokens_in}/{res.tokens_out}\n"
                  f"tool calls: {len(res.tools)} (denied: {sum(1 for t in res.tools if not t['ok'])})\n"
-                 f"created: {', '.join(created) or '-'}\nupdated: {', '.join(updated) or '-'}"))
+                 f"created: {', '.join(created) or '-'}\nupdated: {', '.join(updated) or '-'}\n"
+                 f"assessment: {assess.short(quality) if 'error' not in quality else quality['error']}"))
         catalog.ingest_finished()
         return {"id": sid, "created": created, "updated": updated, "reply": res.reply, "premium": res.premium, "credits": res.credits,
-                "seconds": res.seconds, "warnings": len(report["problems"])}
+                "seconds": res.seconds, "warnings": len(report["problems"]), "assessment": quality}
     except BaseException:
         catalog.rollback()
         raise

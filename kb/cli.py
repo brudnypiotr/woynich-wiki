@@ -448,6 +448,32 @@ def cmd_status(a) -> int:
     return 0
 
 
+def cmd_assess(a) -> int:
+    """Read-only: how the model judged each source after its ingest, next to what the ingest measurably produced."""
+    import csv
+    from kb.knowledge import assess
+    rows = [assess.row(x) for x in assess.load_all()]
+    if a.verdict:
+        rows = [r for r in rows if r["verdict"] == a.verdict]
+    if a.csv:
+        w = csv.DictWriter(sys.stdout, fieldnames=list(rows[0]) if rows else ["source_id"])
+        w.writeheader(); w.writerows(rows)
+        return 0
+    if a.json:
+        print(json.dumps(rows, ensure_ascii=False, indent=1))
+        return 0
+    if not rows:
+        print("no assessments yet: they are written by every ingest from version 0.14")
+        return 0
+    print(f"{'verdict':<9} " + " ".join(assess.ABBR[c] for c in assess.CRITERIA) + "  cit/10k pages  title")
+    for r in rows:
+        print(f"{r['verdict']:<9} " + " ".join(f"{str(r[k]):>3}" for k in assess.CRITERIA)
+              + f"  {r['citations_per_10k_chars']:>7} {r['pages_created'] + r['pages_updated'] if r['pages_created'] != '' else '':>5}  {r['title'][:60]}")
+    print("\nrel relevance · nov novelty · spe specificity · rlb reliability · txt text quality (1–5, the model's judgement);"
+          "\ncit/10k citations of the source per 10,000 characters, pages created + updated (measured). Reasons: --json")
+    return 0
+
+
 def cmd_plugins(a) -> int:
     plugins = config.load("plugins")
     for kind, items in plugins.items():
@@ -577,6 +603,9 @@ def main(argv=None) -> int:
     s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_search)
     s = sub.add_parser("check-answer", help="check the citations of an answer (text, --file, or stdin with -) before showing it")
     s.add_argument("text", nargs="*"); s.add_argument("--file"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_check_answer)
+    s = sub.add_parser("assess", help="quality of each ingested source: the model's scores and what the ingest produced (read-only)")
+    s.add_argument("--verdict", choices=["core", "useful", "marginal", "noise"]); s.add_argument("--json", action="store_true")
+    s.add_argument("--csv", action="store_true"); s.set_defaults(fn=cmd_assess)
     s = sub.add_parser("verify", help="check links and citations on wiki pages (warnings only)"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_verify)
     s = sub.add_parser("site", help="build the dashboard (instance/site/index.html)"); s.add_argument("--open", action="store_true"); s.set_defaults(fn=cmd_site)
     s = sub.add_parser("quota", help="AI credits used and left, when they reset (days, working days), what kb used this month")

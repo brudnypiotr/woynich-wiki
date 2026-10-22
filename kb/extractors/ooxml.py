@@ -1,4 +1,4 @@
-"""Word (.docx) and Excel (.xlsx, .xlsm), read with the standard library (both are zip files of XML).
+"""Word (.docx), Excel (.xlsx, .xlsm) and PowerPoint (.pptx), read with the standard library (all are zip files of XML).
 
 Word: the body in document order, paragraphs and tables (a table becomes one Markdown table), headings with their
 level (from the style's name or outline level, so localised styles like "Nagłówek 1" work too), list items, tabs and
@@ -8,6 +8,10 @@ changes is left out. One ¶ marker per paragraph or table.
 Excel: every sheet, every row as one ¶: `Sheet "Rates", row 12: Client = A | Rest = 12 h`, with the column names from
 the sheet's first row when it is a header row; dates as dates (Excel stores them as numbers), formulas as their last
 computed value. Very large sheets are cut, with a note saying so.
+
+PowerPoint: one `<!-- p. N -->` marker per slide (slide N, as in a PDF export of the deck), the slide's title as a
+heading, its text boxes with bullet levels, tables as Markdown, text in groups, then the speaker notes; hidden slides
+are marked. Pictures are saved to figures/ named by slide (p0003-01.png). Charts and SmartArt are only named.
 """
 from __future__ import annotations
 
@@ -19,11 +23,13 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from kb.core.ports import Extractor
-from kb.extractors.base import paragraphs_to_md
+from kb.extractors.base import marker, paragraphs_to_md
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 S = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+P = "{http://schemas.openxmlformats.org/presentationml/2006/main}"
+A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")
 
 
@@ -257,6 +263,151 @@ class XlsxExtractor(Extractor):
             if vals:
                 out.append((int(row.get("r") or len(out) + 1), vals))
         return out
+
+
+# ------------------------------------------------------------------------------------------------------- PowerPoint
+
+def _rels(z: zipfile.ZipFile, part: str) -> dict[str, str]:
+    """Relationship id → target part (resolved against the part's folder) for one part of the package."""
+    folder, name = posixpath.split(part)
+    out = {}
+    for r in _kids(_xml(z, f"{folder}/_rels/{name}.rels")):
+        t = r.get("Target") or ""
+        if r.get("TargetMode") != "External":
+            out[r.get("Id")] = t.lstrip("/") if t.startswith("/") else posixpath.normpath(posixpath.join(folder, t))
+    return out
+
+
+class PptxExtractor(Extractor):
+    extensions = (".pptx",)
+    max_images = 200
+
+    def extract(self, path: Path, out_dir: Path | None = None) -> dict:
+        self.tables = 0
+        with zipfile.ZipFile(path) as z:
+            pres = _xml(z, "ppt/presentation.xml")
+            if pres is None:
+                raise ValueError("not a PowerPoint presentation (ppt/presentation.xml is missing)")
+            rels = _rels(z, "ppt/presentation.xml")
+            order = [rels.get(s.get(f"{R}id")) for s in pres.iter(f"{P}sldId")]
+            out, hidden, empty, figures = [], [], [], []
+            for n, part in enumerate((p for p in order if p), 1):
+                slide = _xml(z, part)
+                if slide is None:
+                    continue
+                srels = _rels(z, part)
+                title, body = self._slide(slide)
+                notes = self._notes(z, srels)
+                if slide.get("show") == "0":
+                    hidden.append(n)
+                head = f"## Slide {n}" + (f": {title}" if title else "") + (" (hidden)" if n in hidden else "")
+                lines = [marker("p.", n), head] + body + ([f"Speaker notes: {notes}"] if notes else [])
+                if not title and not body and not notes:
+                    empty.append(n)
+                    lines.append("(no text on this slide)")
+                out.append("\n\n".join(lines))
+                if out_dir is not None and len(figures) < self.max_images:
+                    figures += self._images(z, slide, srels, n, out_dir, self.max_images - len(figures))
+        return {"text": "\n\n".join(out) + "\n",
+                "meta": {"slides": len(out), "hidden_slides": hidden, "slides_without_text": empty, "tables": self.tables,
+                         "figures": figures}}
+
+    @staticmethod
+    def _para(p) -> str:
+        out = []
+        for node in p.iter():
+            if node.tag == f"{A}t":
+                out.append(node.text or "")
+            elif node.tag == f"{A}br":
+                out.append("\n")
+        return "".join(out).strip()
+
+    def _frame(self, tx, bullets: bool) -> list[str]:
+        """Paragraphs of a text body; indented by level as bullets when the shape is a content placeholder or a list."""
+        out = []
+        for p in tx.findall(f"{A}p"):
+            t = self._para(p)
+            if not t:
+                continue
+            ppr = p.find(f"{A}pPr")
+            lvl = int(ppr.get("lvl", "0")) if ppr is not None else 0
+            listed = bullets or lvl or (ppr is not None and (ppr.find(f"{A}buChar") is not None or ppr.find(f"{A}buAutoNum") is not None))
+            out.append("  " * lvl + "- " + t if listed else t)
+        return out
+
+    def _slide(self, slide) -> tuple[str, list[str]]:
+        title, body = "", []
+        tree = slide.find(f"{P}cSld/{P}spTree")
+
+        def walk(container):
+            nonlocal title
+            for el in _kids(container):
+                if el.tag == f"{P}grpSp":
+                    walk(el)
+                elif el.tag == f"{P}sp":
+                    ph = el.find(f"{P}nvSpPr/{P}nvPr/{P}ph")
+                    kind = ph.get("type", "body") if ph is not None else None
+                    tx = el.find(f"{P}txBody")
+                    if tx is None or kind in ("sldNum", "dt", "ftr"):
+                        continue
+                    if kind in ("title", "ctrTitle") and not title:
+                        title = " ".join(self._para(p) for p in tx.findall(f"{A}p") if self._para(p)).replace("\n", " ")
+                        continue
+                    lines = self._frame(tx, bullets=kind in ("body", "obj"))  # content placeholders are lists; text boxes only when bulleted
+                    if lines:
+                        body.append("\n".join(lines))
+                elif el.tag == f"{P}graphicFrame":
+                    tbl = el.find(f".//{A}tbl")
+                    gd = el.find(f".//{A}graphicData")
+                    uri = gd.get("uri", "") if gd is not None else ""
+                    if tbl is not None:
+                        rows = [[" ".join(self._para(p) for p in tc.iter(f"{A}p") if self._para(p)).replace("|", "\\|")
+                                 for tc in tr.findall(f"{A}tc")] for tr in tbl.findall(f"{A}tr")]
+                        rows = [r for r in rows if any(c.strip() for c in r)]
+                        if rows:
+                            self.tables += 1
+                            width = max(len(r) for r in rows)
+                            rows = [r + [""] * (width - len(r)) for r in rows]
+                            body.append("\n".join(["| " + " | ".join(rows[0]) + " |", "|" + "---|" * width]
+                                                  + ["| " + " | ".join(r) + " |" for r in rows[1:]]))
+                    elif uri.endswith("/chart"):
+                        body.append("[chart]")
+                    elif uri.endswith("/diagram"):
+                        body.append("[diagram (SmartArt)]")
+
+        walk(tree)
+        return title, body
+
+    def _notes(self, z, srels: dict) -> str:
+        part = next((t for t in srels.values() if "/notesSlides/" in t), None)
+        notes = _xml(z, part) if part else None
+        if notes is None:
+            return ""
+        out = []
+        for sp in notes.iter(f"{P}sp"):
+            ph = sp.find(f"{P}nvSpPr/{P}nvPr/{P}ph")
+            tx = sp.find(f"{P}txBody")
+            if ph is not None and ph.get("type") == "body" and tx is not None:
+                out += [self._para(p) for p in tx.findall(f"{A}p") if self._para(p)]
+        return " ".join(out)
+
+    @staticmethod
+    def _images(z, slide, srels: dict, n: int, out_dir: Path, limit: int) -> list[dict]:
+        figs = []
+        for k, blip in enumerate(slide.iter(f"{A}blip"), 1):
+            target = srels.get(blip.get(f"{R}embed"))
+            if not target or not target.lower().endswith(IMAGE_EXT) or len(figs) >= limit:
+                continue
+            try:
+                data = z.read(target)
+            except KeyError:
+                continue
+            d = Path(out_dir) / "figures"
+            d.mkdir(parents=True, exist_ok=True)
+            name = f"p{n:04d}-{k:02d}{Path(target).suffix.lower()}"
+            (d / name).write_bytes(data)
+            figs.append({"file": f"figures/{name}", "page": n, "from": target})
+        return figs
 
 
 def _letters(i: int) -> str:
