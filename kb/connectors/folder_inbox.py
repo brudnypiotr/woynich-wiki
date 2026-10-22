@@ -8,7 +8,7 @@ from pathlib import Path
 from kb.core.ports import Connector, FetchedItem
 
 KIND_BY_EXT = {
-    ".pdf": "document", ".docx": "document", ".doc": "document", ".md": "document", ".txt": "document", ".html": "web",
+    ".pdf": "document", ".docx": "document", ".doc": "document", ".pptx": "document", ".md": "document", ".txt": "document", ".html": "web",
     ".htm": "web", ".xlsx": "spreadsheet", ".xlsm": "spreadsheet", ".csv": "spreadsheet", ".eml": "email", ".msg": "email",
     ".vtt": "transcript", ".srt": "transcript", ".png": "image", ".jpg": "image", ".jpeg": "image",
     ".py": "code", ".cs": "code", ".java": "code", ".js": "code", ".ts": "code", ".sql": "code", ".ps1": "code", ".xml": "code", ".xsd": "code",

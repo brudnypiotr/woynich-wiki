@@ -32,6 +32,22 @@ then write the wiki: create and update pages, connect them, keep them true to th
    add an entry at the **top** of `wiki/log.md`, and rewrite `wiki/hot.md` (about 300 words: the most recent and
    most important context).
 8. Finish with a short reply: `CREATED:` and `UPDATED:` lists of page paths and one sentence on what is new.
+9. End the reply with your **assessment of the source** (it is recorded for the people curating the knowledge base
+   and changes nothing; write the wiki as above whatever you think of the source). Score 1–5, honestly, with one
+   short reason each that points to the text (e.g. "p. 4–9 list the rest limits per client"):
+   - `relevance`: 5 = the core subject of this wiki (see `wiki/index.md`, `wiki/hot.md`); 1 = unrelated to it.
+   - `novelty`: 5 = mostly knowledge the wiki did not have; 1 = everything was already there (a duplicate or older copy).
+   - `specificity`: 5 = concrete rules, values, decisions, steps; 1 = generic text, marketing, boilerplate, templates.
+   - `reliability`: 5 = official, approved or signed (specification, contract, code, resolved ticket); 3 = internal
+     documentation or a working document; 1 = informal, speculative, a draft or clearly outdated.
+   - `text_quality`: 5 = clean, complete text; 1 = garbled, cut off, mostly empty or a scan without text.
+   - `verdict`: `core` (a source this wiki is built on) · `useful` (adds real knowledge) · `marginal` (little that
+     matters) · `noise` (nothing for this wiki: wrong project, empty, duplicate, junk).
+   ```json
+   {"assessment": {"relevance": {"score": 4, "why": "..."}, "novelty": {"score": 3, "why": "..."},
+     "specificity": {"score": 5, "why": "..."}, "reliability": {"score": 3, "why": "..."},
+     "text_quality": {"score": 5, "why": "..."}, "verdict": "useful", "summary": "one sentence for a curator"}}
+   ```
 
 # Writing rules
 - Write **knowledge, not reported speech.** "The rule engine reads the minimum rest from `MIN_REST_HOME_BASE_HOURS`"

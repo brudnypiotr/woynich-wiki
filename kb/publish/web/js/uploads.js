@@ -20,7 +20,7 @@ export function openAdd() {mark('add');
    <p>Each file is kept unchanged. The model reads it, writes or updates the wiki pages, then every citation and link is checked and the change is committed.</p></div>
    <div class="drop" id="drop"><div class="up">${ic(I.up)}</div><b>Drop files or a whole folder here</b>
      <span>or <a href="#" data-pick="file">choose files</a> · <a href="#" data-pick="dir">choose a folder</a> (subfolders included)</span>
-     <div class="types"><em>PDF</em><em>Word</em><em>Excel</em><em>E-mail .eml</em><em>Teams .vtt</em><em>Jira .jira.json</em><em>XML / XSD</em><em>Text &amp; code</em></div>
+     <div class="types"><em>PDF</em><em>Word</em><em>Excel</em><em>PowerPoint</em><em>E-mail .eml</em><em>Teams .vtt</em><em>Jira .jira.json</em><em>XML / XSD</em><em>Text &amp; code</em></div>
      <input type="file" id="file" multiple hidden><input type="file" id="dir" webkitdirectory multiple hidden></div>
    <div id="preview"></div>
    <div class="how"><div><b><i>1</i>Saved</b>Original stored as-is, text extracted.</div><div><b><i>2</i>Written</b>The model updates topic, entity and source pages.</div><div><b><i>3</i>Checked</b>Citations verified, everything committed. Cancel any time.</div></div>
@@ -150,11 +150,23 @@ function treeHTML(node, opts, prefix = '') {
       return `<li class="dir"><details${CLOSED.has(key) ? '' : ' open'} data-dir="${esc(key)}"><summary>${ic(FOLDER)}<b>${esc(name)}</b><small class="${st}">${sum}</small></summary>
         ${treeHTML(sub, opts, prefix + name + '/')}</details></li>`}).join('')}
     ${files.map(f => opts.preview ? `<li class="file">${ic(I.file)}<span>${esc(f.name)}</span><small>${mb(f.bytes)}</small></li>`
-      : `<li class="file"><div class="row" data-open="${f.job.id}">${ic(I.file)}<span>${esc(f.name)}</span>${badge(f.job)}<small class="det1">${esc(line(f.job))}</small></div>
+      : `<li class="file"><div class="row" data-open="${f.job.id}">${ic(I.file)}<span>${esc(f.name)}</span>${badge(f.job)}${verdict(f.job)}<small class="det1">${esc(line(f.job))}</small></div>
          ${OPEN.has(f.job.id) ? card(f.job) : ''}</li>`).join('')}</ul>`}
 
 const mb = n => n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
 const badge = j => `<span class="badge ${j.state}">${j.state === 'queued' ? (j.ahead ? `Queued · ${j.ahead} ahead` : 'Starting…') : ({running: 'Working…', done: 'Done', error: 'Failed', cancelled: 'Cancelled'}[j.state] || esc(j.state))}</span>`;
+// the source's quality after its ingest (read-only): the model's verdict and scores, and what the ingest produced
+const CRIT = [['relevance', 'Relevance'], ['novelty', 'Novelty'], ['specificity', 'Specificity'], ['reliability', 'Reliability'], ['text_quality', 'Text quality']];
+const qa = j => ((j.result || {}).assessment || {});
+const verdict = j => {const m = qa(j).model_assessment || {}; return m.verdict ? `<span class="vd ${m.verdict}" title="${esc(m.summary || '')}">${m.verdict}</span>` : ''};
+function quality(j) {const a = qa(j), m = a.model_assessment, s = a.signals;
+  if (!m || !s) return '';
+  const scores = m.missing ? '<p class="det">The model gave no assessment for this source.</p>'
+    : `<div class="scores">${CRIT.map(([k, label]) => {const c = m[k] || {}; return `<span title="${esc(c.why || '')}"><b>${c.score ?? '?'}</b>${label}</span>`}).join('')}</div>`;
+  return `<div class="qa"><div class="qh"><b>Source quality</b>${verdict(j)}<small>the model's judgement, recorded only; it changes nothing</small></div>
+    ${m.summary ? `<p class="det">${esc(m.summary)}</p>` : ''}${scores}
+    <p class="det">Measured: ${s.citations} citations (${s.citations_per_10k_chars} per 10,000 characters) on ${s.pages_citing} pages; ${s.pages_created} pages created, ${s.pages_updated} updated.</p></div>`}
+
 const line = j => j.error || (j.state === 'queued' ? '' : ((j.log || []).slice(-1)[0] || {}).detail || '');
 
 function card(j) {if (j.steps) STEPS = j.steps; const at = STEPS.indexOf(j.step), bad = j.state === 'error' || j.state === 'cancelled';
@@ -164,6 +176,7 @@ function card(j) {if (j.steps) STEPS = j.steps; const at = STEPS.indexOf(j.step)
     ${badge(j)}</div>
    <ol class="stepper">${STEPS.map((s, i) => `<li class="${bad && i === Math.max(at, 0) ? 'err' : (i < at || j.state === 'done' ? 'done' : (i === at ? 'now' : ''))}">${STEP_LABEL[s] || s}</li>`).join('')}</ol>
    ${j.error ? `<p class="det err">${esc(j.error)}</p>` : (j.state === 'queued' ? `<p class="det">Waiting: files are ingested one by one (the model reads each one and updates the wiki).${j.ahead ? ` ${j.ahead} before this one.` : ''}</p>` : (last ? `<p class="det">${esc(last.detail)}</p>` : ''))}
+   ${j.state === 'done' ? quality(j) : ''}
    <div class="acts">${j.state === 'queued' ? btn('Remove from queue', 'cancel', 'data-rm="0"') : j.state === 'running' ? btn('Cancel', 'cancel', 'data-rm="0"') + btn('Cancel and remove file', 'cancel', 'data-rm="1"') :
      (j.source_id && !j.removed ? btn('Remove from knowledge base', 'remove', `data-src="${j.source_id}"`) : (j.removed ? '<span class="empty">removed</span>' : ''))}</div>
    ${(j.log || []).length ? `<details${OPEN.has('log/' + j.id) ? ' open' : ''} data-log="${j.id}"><summary>Details</summary><pre data-job="${j.id}">${(j.log || []).map(l => `${l.at} ${l.step}: ${esc(l.detail)}`).join('\n')}</pre></details>` : ''}</div>`}

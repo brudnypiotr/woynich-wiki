@@ -89,5 +89,9 @@ class ScriptedAgent:
         (w / "index.md").write_text("# Index\n\n" + "\n".join(f"- [[{p.stem}]]" for p in sorted(w.rglob("*.md")) if p.parent != w) + "\n", encoding="utf-8")
         (w / "log.md").write_text(f"# Log\n\n## ingest | {title}\n\n" + (w / "log.md").read_text(encoding="utf-8").split("\n\n", 1)[-1], encoding="utf-8")
         (w / "hot.md").write_text(f"# Recent context\n\nLatest: [[{slug}]].\n", encoding="utf-8")
-        return AgentResult(f"CREATED: wiki/sources/{slug}.md\nUPDATED: wiki/concepts/minimum-rest.md", 0.2, model, 1000, 100, 1.0,
+        verdict = "noise" if "lunch" in title.lower() else "useful"
+        assessment = ('```json\n{"assessment": {"relevance": {"score": 4, "why": "rest rules"}, "novelty": {"score": 3, "why": "x"}, '
+                      '"specificity": {"score": 5, "why": "values"}, "reliability": {"score": 3, "why": "internal"}, '
+                      f'"text_quality": {{"score": 5, "why": "clean"}}, "verdict": "{verdict}", "summary": "Rest limits."}}}}\n```')
+        return AgentResult(f"CREATED: wiki/sources/{slug}.md\nUPDATED: wiki/concepts/minimum-rest.md\n\n{assessment}", 0.2, model, 1000, 100, 1.0,
                            [{"tool": "create", "ok": True, "why": "write", "paths": [f"wiki/sources/{slug}.md"]}])

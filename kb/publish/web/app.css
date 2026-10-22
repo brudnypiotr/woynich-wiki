@@ -157,6 +157,13 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
 .stepper li.now{color:var(--vio)}.stepper li.now::before{background:var(--vio);box-shadow:0 0 0 4px var(--vio-soft);animation:pulse 1.2s infinite}
 .stepper li.err{color:var(--bad)}.stepper li.err::before{background:var(--bad)}
 .job .det{font-size:13px;color:var(--mute);margin:4px 0 0}
+.vd{font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;margin-left:6px;background:var(--soft);color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+.vd.core{background:var(--ok-soft);color:var(--ok)}.vd.useful{background:var(--vio-soft);color:var(--vio)}.vd.noise{background:var(--bad-soft);color:var(--bad)}
+.qa{margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--soft)}
+.qa .qh{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:13px}.qa .qh small{color:var(--mute);margin-left:8px}
+.qa .scores{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.qa .scores span{display:inline-flex;align-items:baseline;gap:5px;font-size:12px;color:var(--mute);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:3px 8px;cursor:help}
+.qa .scores b{font-size:14px;color:var(--ink)}
 .job .acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
 .job details{margin-top:8px;font-size:13px}.job summary{cursor:pointer;color:var(--mute)}
 .job pre{font:12px/1.5 ui-monospace,Consolas,monospace;color:var(--mute);white-space:pre-wrap;max-height:200px;overflow:auto;background:var(--soft);border-radius:10px;padding:10px;margin:6px 0 0}
