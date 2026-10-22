@@ -4,13 +4,15 @@ from __future__ import annotations
 import threading
 
 from kb.publish import changelog, updater
-from kb.publish.server import WRITE_LOCK, chat_api, ingest_api
+from kb.publish.server import WRITE_LOCK, assess_api, chat_api, ingest_api
 from kb.publish.server.http import route
 
 
 def update_blocker() -> str | None:
     """Why an update must wait: a restart would cut an ingest (queued sources included) or an answer being written."""
     n = len(ingest_api.QUEUE)
+    if assess_api.RUN.get("state") in ("queued", "running"):
+        return "Sources are being assessed. Update when it is done (or cancel it in Sources)."
     if n or WRITE_LOCK.locked():
         return f"Sources are being added to the wiki{f' ({n} in the queue)' if n else ''}. Update when Add sources is done."
     if any(c.lock.locked() for c in list(chat_api.LIVE.values())):

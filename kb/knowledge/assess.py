@@ -16,6 +16,7 @@ the wiki would lose without the source, since its knowledge is already in). Thes
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 
@@ -25,6 +26,14 @@ CRITERIA = ("relevance", "novelty", "specificity", "reliability", "text_quality"
 VERDICTS = ("core", "useful", "marginal", "noise")
 ABBR = {"relevance": "rel", "novelty": "nov", "specificity": "spe", "reliability": "rlb", "text_quality": "txt"}
 FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.S)
+
+
+def prompt_version(mode: str) -> str:
+    """Short fingerprint of the prompt that judges in this mode (ingest.md at ingest, assess.md afterwards), so
+    assessments made before a change of criteria can be told apart and run again."""
+    from kb.knowledge import agent
+    text = agent.template("ingest" if mode == "ingest" else "assess")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
 
 
 def parse(reply: str) -> dict:
@@ -61,14 +70,20 @@ def _clean(a: dict) -> dict:
     return out
 
 
-def signals(rec: dict, slug: str, chars: int, created: list[str] | None, updated: list[str] | None) -> dict:
+def wiki_texts() -> dict[str, str]:
+    """Every wiki page's text by file stem: read once when many sources are measured."""
+    return {p.stem: p.read_text(encoding="utf-8") for p in pages.wiki().rglob("*.md")}
+
+
+def signals(rec: dict, slug: str, chars: int, created: list[str] | None, updated: list[str] | None,
+            texts: dict[str, str] | None = None) -> dict:
     """What the ingest produced, measured: no model involved."""
     cite = re.compile(r"\[\[" + re.escape(slug) + r"(?:\]\]|\|)")
     citations, citing = 0, 0
-    for p in pages.wiki().rglob("*.md"):
-        n = len(cite.findall(p.read_text(encoding="utf-8")))
+    for stem, text in (texts if texts is not None else wiki_texts()).items():
+        n = len(cite.findall(text))
         citations += n
-        if n and p.stem != slug:
+        if n and stem != slug:
             citing += 1
     info = {}
     f = catalog.instance() / "raw" / rec["id"] / "extract.json"
@@ -84,16 +99,16 @@ def signals(rec: dict, slug: str, chars: int, created: list[str] | None, updated
 
 
 def record(rec: dict, reply: str, slug: str, chars: int, created: list[str] | None, updated: list[str] | None,
-           model: str = "", mode: str = "ingest") -> dict:
+           model: str = "", mode: str = "ingest", texts: dict[str, str] | None = None) -> dict:
     a = {"source_id": rec["id"], "title": rec["title"], "kind": rec["kind"], "ref": rec["origin"].get("ref"), "mode": mode,
          "assessed": catalog.now(), "model": model, "model_assessment": parse(reply),
-         "signals": signals(rec, slug, chars, created, updated)}
+         "prompt": prompt_version(mode) if reply else None, "signals": signals(rec, slug, chars, created, updated, texts)}
     (catalog.instance() / "raw" / rec["id"] / "assessment.json").write_text(json.dumps(a, ensure_ascii=False, indent=1), encoding="utf-8")
     return a
 
 
 def backfill(with_model: bool = False, ids: list[str] | None = None, force: bool = False, runner=None,
-             progress=None) -> list[dict]:
+             progress=None, cancelled=lambda: False) -> list[dict]:
     """Assess sources ingested before assessments existed (or again with force). Without the model: measured signals
     only, no AI credits. With it: one read-only session per source that has no model assessment yet. One commit."""
     from kb.core import gitops
@@ -113,7 +128,11 @@ def backfill(with_model: bool = False, ids: list[str] | None = None, force: bool
             todo.append(rec); olds[sid] = old
     out = []
     runner = runner or (agent.AgentRunner() if with_model and todo else None)
+    texts = wiki_texts() if todo else {}  # an assessment never writes pages, so one read serves the whole run
     for i, rec in enumerate(todo, 1):
+        if cancelled():  # stop between sources; what is done so far is kept and committed
+            say("cancelled", f"stopped after {len(out)} of {len(todo)}")
+            break
         sid, slug = rec["id"], slugs[rec["id"]]
         text = inst / "raw" / sid / "text.md"
         chars = len(text.read_text(encoding="utf-8")) if text.exists() else 0
@@ -129,10 +148,10 @@ def backfill(with_model: bool = False, ids: list[str] | None = None, force: bool
             reply, model = res.reply, res.model
         old = olds[sid]
         if not with_model and old and not (old.get("model_assessment") or {}).get("missing"):
-            a = {**old, "signals": signals(rec, slug, chars, None, None), "signals_updated": catalog.now()}  # keep the judgement
+            a = {**old, "signals": signals(rec, slug, chars, None, None, texts), "signals_updated": catalog.now()}  # keep the judgement
             (inst / "raw" / sid / "assessment.json").write_text(json.dumps(a, ensure_ascii=False, indent=1), encoding="utf-8")
         else:
-            a = record(rec, reply, slug, chars, None, None, model=model, mode="backfill")
+            a = record(rec, reply, slug, chars, None, None, model=model, mode="backfill", texts=texts)
         say("assessed", f"{rec['title']}: {short(a)}")
         out.append(a)
     if out:
@@ -140,6 +159,26 @@ def backfill(with_model: bool = False, ids: list[str] | None = None, force: bool
             "catalog", f"assess {len(out)} source(s) afterwards" + (" with the model" if with_model else " (measured only)"),
             body="\n".join(f"{a['source_id']} {a['title']}: {short(a)}" for a in out)[:4000]))
     return out
+
+
+def overview() -> dict:
+    """Every ingested source with its assessment (or none), for the Sources view, and the current prompt versions."""
+    from kb.knowledge import wiki
+    inst = catalog.instance()
+    slugs = {sid: slug for slug, sid in wiki.source_pages().items()}
+    rows = []
+    for rec in catalog.all_sources():
+        if rec["status"] != "ingested" or rec["id"] not in slugs:
+            continue
+        f = inst / "raw" / rec["id"] / "assessment.json"
+        try:
+            a = json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+        except ValueError:
+            a = None
+        rows.append({"id": rec["id"], "title": rec["title"], "kind": rec["kind"], "ref": rec["origin"].get("ref") or "",
+                     "slug": slugs[rec["id"]], "assessment": a})
+    return {"sources": rows, "prompts": {"ingest": prompt_version("ingest"), "backfill": prompt_version("backfill")},
+            "criteria": list(CRITERIA)}
 
 
 def load_all() -> list[dict]:

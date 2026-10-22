@@ -334,3 +334,42 @@ def test_folder_upload_keeps_the_path(app, instance):
     assert rec["origin"]["ref"] == "Client A/Specs/2024/rest.txt" and rec["title"] == "rest"
     assert "Found in the folder: `Client A/Specs/2024/`" in wiki._extra(rec, instance / "raw" / rec["id"], 10)
     assert any(j["id"] == job["id"] for j in call(base, token, "/api/jobs"))
+
+
+def test_sources_view_lists_quality_and_assesses_chosen_sources_again(app, instance):
+    from kb.knowledge import catalog, wiki
+    from scripted_agent import ScriptedAgent
+    base, token = app
+    for f in sorted(SAMPLE.parent.iterdir())[:2]:
+        catalog.add_file(f)
+    wiki.ingest_pending(runner=ScriptedAgent())
+    q = call(base, token, "/api/sources/quality")
+    assert len(q["sources"]) == 2 and q["run"] is None and set(q["prompts"]) == {"ingest", "backfill"}
+    s = q["sources"][0]
+    assert s["assessment"]["model_assessment"]["verdict"] == "useful" and s["assessment"]["prompt"] == q["prompts"]["ingest"]
+    with pytest.raises(urllib.error.HTTPError) as e:
+        call(base, token, "/api/sources/assess", json.dumps({"ids": []}).encode())
+    assert e.value.code == 400
+
+    def run(model):
+        call(base, token, "/api/sources/assess", json.dumps({"ids": [s["id"]], "model": model}).encode())
+        for _ in range(100):
+            r = call(base, token, "/api/sources/quality")
+            if r["run"]["state"] in ("done", "error", "cancelled"):
+                return r
+            time.sleep(0.1)
+    r = run(False)                                          # measure again: the judgement made at ingest stays
+    assert r["run"]["state"] == "done" and r["run"]["done"] == 1
+    a = next(x for x in r["sources"] if x["id"] == s["id"])["assessment"]
+    assert a["mode"] == "ingest" and a["model_assessment"]["verdict"] == "useful" and a.get("signals_updated")
+    r = run(True)                                           # with the model: judged again with the current prompt
+    a = next(x for x in r["sources"] if x["id"] == s["id"])["assessment"]
+    assert a["mode"] == "backfill" and a["model_assessment"]["verdict"] == "core" and a["prompt"] == r["prompts"]["backfill"]
+
+
+def test_an_assessment_prompt_of_the_knowledge_base_replaces_the_blueprints(instance):
+    from kb.knowledge import agent, assess
+    before = assess.prompt_version("backfill")
+    (instance / "prompts").mkdir(parents=True, exist_ok=True)
+    (instance / "prompts" / "assess.md").write_text("Own criteria for {{title}}.", encoding="utf-8")
+    assert agent.prompt("assess", title="X") == "Own criteria for X." and assess.prompt_version("backfill") != before
