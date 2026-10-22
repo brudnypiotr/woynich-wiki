@@ -1,4 +1,4 @@
-"""Standard-library extractors (no extra dependencies): DOCX, HTML, email, transcripts, Jira JSON, code."""
+"""Standard-library extractors (no extra dependencies): HTML, email, transcripts, Jira JSON/XML, code (Word and Excel: ooxml.py)."""
 from __future__ import annotations
 
 import email
@@ -12,26 +12,6 @@ from pathlib import Path
 
 from kb.core.ports import Extractor
 from kb.extractors.base import marker, paragraphs_to_md
-
-W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-
-
-class DocxExtractor(Extractor):
-    extensions = (".docx",)
-
-    def extract(self, path: Path) -> dict:
-        import xml.etree.ElementTree as ET
-        with zipfile.ZipFile(path) as z:
-            root = ET.fromstring(z.read("word/document.xml"))
-        paras = []
-        for p in root.iter(f"{W}p"):
-            style = p.find(f"{W}pPr/{W}pStyle")
-            txt = "".join(t.text or "" for t in p.iter(f"{W}t"))
-            if style is not None and style.get(f"{W}val", "").lower().startswith("heading") and txt.strip():
-                txt = "## " + txt
-            paras.append(txt)
-        return {"text": paragraphs_to_md(paras), "meta": {}}
-
 
 class _Text(HTMLParser):
     BLOCK = {"p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "br", "section", "article", "pre", "td"}

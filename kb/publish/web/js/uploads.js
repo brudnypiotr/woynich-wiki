@@ -20,7 +20,7 @@ export function openAdd() {mark('add');
    <p>Each file is kept unchanged. The model reads it, writes or updates the wiki pages, then every citation and link is checked and the change is committed.</p></div>
    <div class="drop" id="drop"><div class="up">${ic(I.up)}</div><b>Drop files or a whole folder here</b>
      <span>or <a href="#" data-pick="file">choose files</a> · <a href="#" data-pick="dir">choose a folder</a> (subfolders included)</span>
-     <div class="types"><em>PDF</em><em>Word</em><em>E-mail .eml</em><em>Teams .vtt</em><em>Jira .jira.json</em><em>Text &amp; code</em></div>
+     <div class="types"><em>PDF</em><em>Word</em><em>Excel</em><em>E-mail .eml</em><em>Teams .vtt</em><em>Jira .jira.json</em><em>Text &amp; code</em></div>
      <input type="file" id="file" multiple hidden><input type="file" id="dir" webkitdirectory multiple hidden></div>
    <div id="preview"></div>
    <div class="how"><div><b><i>1</i>Saved</b>Original stored as-is, text extracted.</div><div><b><i>2</i>Written</b>The model updates topic, entity and source pages.</div><div><b><i>3</i>Checked</b>Citations verified, everything committed. Cancel any time.</div></div>

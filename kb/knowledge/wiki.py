@@ -72,7 +72,9 @@ def _extra(rec: dict, d: Path, chars: int) -> str:
         if (d / "figures").exists() else []
     if figs:
         lines.append(f"- Figures extracted from the document: `raw/{rec['id']}/figures/` ({len(figs)} images, "
-                     + ("the issue's attached screenshots" if rec["kind"] == "ticket" else "named by page, e.g. p0012-01.png")
+                     + ("the issue's attached screenshots" if rec["kind"] == "ticket"
+                        else "in the order they appear in the document, img-001.png first" if figs[0].name.startswith("img-")
+                        else "named by page, e.g. p0012-01.png")
                      + "). Look at them where the text refers to a screen or diagram.")
     if chars > LARGE_SOURCE_CHARS:
         lines.append(f"- This source is long. Work through it section by section (e.g. 30–50 pages at a time), updating the "
