@@ -19,6 +19,10 @@ Status: accepted (2026-10-23)
 3. **Read-only.** Saved as `raw/<id>/assessment.json`, committed with the ingest, one line in the commit body, shown
    on the file's card in Add sources (verdict also in the folder tree) and listed by `kb assess` (`--json`, `--csv`,
    `--verdict`). Nothing is skipped, filtered or ranked by it. A missing or malformed assessment never fails an ingest.
+4. **Sources ingested earlier are assessed afterwards** with `kb assess --backfill`: the measured signals for free;
+   with `--model` one read-only session per source (`prompts/assess.md`) where novelty means *what the wiki would lose
+   without this source*, since its knowledge is already in. Marked `"mode": "backfill"`, one commit. A judgement made
+   at ingest is never replaced, except with `--model --force`; refreshing the measured signals keeps it.
 
 ## Consequences
 - After a few folders we can see how verdicts relate to the measured yield and to what curators think, and only then

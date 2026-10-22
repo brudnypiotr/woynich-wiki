@@ -49,3 +49,36 @@ def test_a_reply_without_assessment_still_ingests(instance, monkeypatch):
     agent.run = no_assessment
     res = wiki.ingest_pending(runner=agent)[0]
     assert res["assessment"]["model_assessment"] == {"missing": True} and res["created"]
+
+
+def test_backfill_for_sources_ingested_before_assessments(instance):
+    for f in sorted(SAMPLES.iterdir())[:2]:
+        catalog.add_file(f)
+    wiki.ingest_pending(runner=ScriptedAgent())
+    for f in (instance / "raw").glob("*/assessment.json"):   # as if ingested by an older version
+        f.unlink()
+    subprocess.run(["git", "-C", str(instance), "commit", "-qam", "catalog: drop"], check=True)
+    agent = ScriptedAgent()
+    measured = assess.backfill(runner=agent)                    # free: no model session
+    assert len(measured) == 2 and not agent.prompts
+    a = measured[0]
+    assert a["mode"] == "backfill" and a["model_assessment"] == {"missing": True}
+    assert a["signals"]["pages_created"] is None and a["signals"]["citations"] >= 2
+    assert assess.backfill(runner=agent) == []                  # nothing left to do
+    judged = assess.backfill(with_model=True, runner=agent)     # only where the model's judgement is missing
+    assert len(judged) == 2 and len(agent.prompts) == 2 and "novelty`: what the wiki would lose" in agent.prompts[0]
+    assert judged[0]["model_assessment"]["verdict"] == "core"
+    assert assess.backfill(with_model=True, runner=agent) == []
+    assert len(assess.backfill(with_model=True, force=True, ids=[a["source_id"]], runner=agent)) == 1
+    git = lambda *x: subprocess.run(["git", "-C", str(instance), *x], capture_output=True, text=True).stdout
+    assert not git("status", "--porcelain").strip() and git("log", "-1", "--format=%s").startswith("catalog")
+    assert assess.row(judged[0])["pages_created"] == ""
+
+
+def test_backfill_never_replaces_an_assessment_made_at_ingest(instance):
+    catalog.add_file(SAMPLES / sorted(p.name for p in SAMPLES.iterdir())[0])
+    wiki.ingest_pending(runner=ScriptedAgent())
+    agent = ScriptedAgent()
+    assert assess.backfill(with_model=True, runner=agent) == [] and not agent.prompts
+    again = assess.backfill(force=True, runner=agent)[0]         # measured again; the model's judgement is kept
+    assert again["mode"] == "ingest" and again["model_assessment"]["verdict"] == "useful" and not agent.prompts

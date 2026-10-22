@@ -62,6 +62,12 @@ class ScriptedAgent:
                 if f"[[{slug}]]" in t:
                     p.write_text("\n".join(l for l in t.splitlines() if f"[[{slug}]]" not in l) + "\n", encoding="utf-8")
             return AgentResult("UPDATED: pages", 0.1, model, 50, 5, 1.0, tools)
+        if "You review one source" in task:
+            assert write_dirs == ()  # read-only
+            return AgentResult('```json\n{"assessment": {"relevance": {"score": 5, "why": "core"}, "novelty": {"score": 2, "why": "also elsewhere"}, '
+                               '"specificity": {"score": 4, "why": "values"}, "reliability": {"score": 4, "why": "official"}, '
+                               '"text_quality": {"score": 5, "why": "clean"}, "verdict": "core", "summary": "Base rules."}}\n```',
+                               0.1, model, 300, 40, 1.0, tools)
         if "keep a project knowledge base healthy" in task:
             (w / "meta").mkdir(exist_ok=True); (w / "meta" / "lint.md").write_text("# Lint\nAll good.\n", encoding="utf-8")
             return AgentResult("Lint done.", 0.1, model, 50, 5, 1.0, tools)
