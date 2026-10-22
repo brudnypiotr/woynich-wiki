@@ -43,6 +43,14 @@ jobs:
         run: |
           call kb.cmd --version || exit /b 1
           call kb.cmd changelog || exit /b 1
+      - name: Wiki.cmd runs the setup only when needed
+        shell: cmd
+        run: |
+          call Wiki.cmd --ready || (echo setup done but Wiki.cmd wants to run it again & exit /b 1)
+          copy /y local\setup-version.txt local\setup-version.bak >nul
+          >local\setup-version.txt echo 0
+          call Wiki.cmd --ready && (echo setup version changed but Wiki.cmd would not run it & exit /b 1)
+          copy /y local\setup-version.bak local\setup-version.txt >nul
       - name: all tests on Windows
         shell: cmd
         run: .venv\Scripts\python.exe -m pytest -q -p no:cacheprovider

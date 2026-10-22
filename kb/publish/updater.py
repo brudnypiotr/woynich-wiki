@@ -21,6 +21,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 from kb.publish import appgit, changelog
 
@@ -238,7 +239,12 @@ def rollback() -> dict:
 
 
 def finish(python: str | None = None) -> dict:
-    """After an update: install packages when requirements.txt changed (in a fresh process, before the app starts)."""
+    """After an update: install packages when requirements.txt changed (in a fresh process, before the app starts).
+    On Windows also makes the desktop shortcut when this machine has none from the current shortcut.ps1 yet (a copy
+    updated from a version whose launcher had another name), so the shortcut keeps working."""
+    if os.name == "nt" and not (Path(os.environ.get("LOCALAPPDATA", "")) / "woynich-wiki" / "shortcut-name.txt").exists():
+        from kb.publish import branding
+        branding.refresh_shortcut()
     marker = appgit.local() / "update-deps"
     if not marker.exists():
         return {"packages": False}
