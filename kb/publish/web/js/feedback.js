@@ -53,9 +53,10 @@ function draw() {const b = document.querySelector('.fb-body');
     + (S.error ? `<p class="errmsg">${esc(S.error)} You can still create the file with your own words.</p>` : '')
     + (shots ? `<div class="fb-shots">${shots}</div>` : '') + input + pack + '<p class="fb-note"></p>';
   bind(b); const t = b.querySelector('textarea'); if (t) {t.value = S.draft || ''; t.oninput = () => S.draft = t.value; t.focus()}
-  const c = b.querySelector('.fb-chat'); c.scrollTop = c.scrollHeight}
+  b.scrollTop = b.scrollHeight}
 
-async function ask(finish) {const t = document.querySelector('.fb-body textarea'), v = (t && t.value.trim()) || '';
+async function ask(finish) {if (S.busy) return;
+  const t = document.querySelector('.fb-body textarea'), v = (t && t.value.trim()) || '';
   if (!v && !finish) return t && t.focus();
   if (v) {S.messages.push({role: 'user', text: v}); if (!S.text) S.text = v}
   if (finish) S.messages.push({role: 'user', text: "That's all I can tell."});
@@ -80,7 +81,8 @@ function bind(b) {
     if (a.f === 'reveal') {try {await post('/api/feedback/reveal', {path: S.result.path})} catch (err) {note(err.message)}}
     if (a.f === 'copy') {const t = `Feedback for Wiki: ${(S.report && S.report.title) || S.text.slice(0, 80)}. File attached: ${S.result.path.split(/[\\/]/).pop()}`;
       try {await navigator.clipboard.writeText(t); note('Copied: paste it in Teams and attach the file.')} catch (err) {note(t)}}};
-  b.onkeydown = e => {if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.target.tagName === 'TEXTAREA') {e.preventDefault(); ask(false)}};
+  // Enter sends, Shift+Enter is a new line (as in the chat)
+  b.onkeydown = e => {if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.target.tagName === 'TEXTAREA') {e.preventDefault(); ask(false)}};
   b.onpaste = e => {const items = [...(e.clipboardData || {}).items || []].filter(i => i.type.startsWith('image/'));
     if (!items.length) return; e.preventDefault();
     items.forEach(i => {const r = new FileReader(); r.onload = () => {if (S.shots.length < 6) {S.shots.push(r.result); S.draft = (b.querySelector('textarea') || {}).value || S.draft; draw()}}; r.readAsDataURL(i.getAsFile())})}}
