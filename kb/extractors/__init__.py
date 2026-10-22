@@ -12,6 +12,12 @@ from kb.extractors.pdf import PdfExtractor
 BUILTIN = [JiraXmlExtractor, JiraJsonExtractor, PdfExtractor, DocxExtractor, HtmlExtractor, EmailExtractor, TranscriptExtractor, PlainText, CodeExtractor]
 
 
+def supported() -> list[str]:
+    """Every file ending that has an extractor (built in or a plugin), e.g. ".pdf", ".jira.json"."""
+    extra = [registry.resolve(s) for s in (config.load("plugins").get("extractors") or {}).values()]
+    return sorted({ext for cls in extra + BUILTIN for ext in cls.extensions})
+
+
 def for_path(path: Path):
     name = path.name.lower()
     extra = [registry.resolve(s) for s in (config.load("plugins").get("extractors") or {}).values()]

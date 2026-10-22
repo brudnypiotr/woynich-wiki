@@ -62,6 +62,12 @@ pack in `local\backups\` (complete, large originals too) and also stays in the i
 discussions stay; the usage and question logs (about the previous knowledge base) are archived. No AI credits are used. The pack is company content: share it only through
 Teams or SharePoint, never GitHub (`*.kbpack.zip` is git-ignored here).
 
+**Add sources: files or whole folders.** Drop files, or a folder (subfolders included), on *Add sources*, or use
+*choose a folder*. Before anything is sent the app shows what goes in, as a tree with counts per folder, and what it
+skips (types without a reader, hidden and temporary files); every file costs a model session. The files are ingested
+one by one in the order of the tree; the folder shows as a tree with progress per folder, each file opens to its steps.
+The path inside the folder is kept as the source's origin and the model gets the folder names as context.
+
 **Feedback.** The bubble in the bottom right corner: the user writes what happened (screenshots with Ctrl+V), Luna asks
 at most two short rounds of questions (in the user's language) and writes a report (in English; 1 AI credit per message), then *Create feedback
 file* saves `wiki-feedback-<date>.zip` on the Desktop; the user sends it with *Message in Teams* / *E-mail* (to the

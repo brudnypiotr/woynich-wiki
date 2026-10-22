@@ -64,6 +64,10 @@ def _extra(rec: dict, d: Path, chars: int) -> str:
         lines.append(f"- Version / commit: {rec['version']}")
     if rec["origin"].get("url"):
         lines.append(f"- URL: {rec['origin']['url']}")
+    ref = str(rec["origin"].get("ref") or "")
+    if rec["origin"].get("connector") == "upload" and "/" in ref:  # part of a dropped folder
+        lines.append(f"- Found in the folder: `{ref.rsplit('/', 1)[0]}/` (as the user organised the files; folder names often "
+                     "say the client, the area, the version or the date: use them as context, but cite the text)")
     figs = sorted(f for f in (d / "figures").iterdir() if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".webp")) \
         if (d / "figures").exists() else []
     if figs:

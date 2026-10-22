@@ -313,3 +313,24 @@ def test_tray_quit_and_restart(app, monkeypatch):
     monkeypatch.setenv("KB_LAUNCHER", "1")
     assert call(base, token, "/api/app/restart", b"{}")["what"] == "restart" and updater.RESTART.is_set()
     updater.RESTART.clear()
+
+
+def test_folder_upload_keeps_the_path(app, instance):
+    """A file from a dropped folder: its path in the folder is the source's origin and the model is told the folder."""
+    from kb.knowledge import catalog, wiki
+    from kb.publish.server.ingest_api import clean_path
+    base, token = app
+    assert clean_path("..%2F..%2Fx%2Fb.docx") == "x/b.docx" and clean_path("C:\\Users\\a.pdf") == "C_/Users/a.pdf"
+    assert "pdf" in " ".join(call(base, token, "/api/upload/types")["extensions"])
+    job = call(base, token, "/api/upload", b"Minimum rest is 12 hours.\n",
+               {"X-Filename": "rest.txt", "X-Path": "Client%20A%2FSpecs%2F2024%2Frest.txt", "X-Batch": "b1"})
+    assert job["path"] == "Client A/Specs/2024/rest.txt" and job["batch"] == "b1"
+    for _ in range(1200):
+        job = call(base, token, f"/api/jobs/{job['id']}")
+        if job["state"] not in ("queued", "running"):
+            break
+        time.sleep(0.1)
+    rec = catalog.load(job["source_id"])
+    assert rec["origin"]["ref"] == "Client A/Specs/2024/rest.txt" and rec["title"] == "rest"
+    assert "Found in the folder: `Client A/Specs/2024/`" in wiki._extra(rec, instance / "raw" / rec["id"], 10)
+    assert any(j["id"] == job["id"] for j in call(base, token, "/api/jobs"))
