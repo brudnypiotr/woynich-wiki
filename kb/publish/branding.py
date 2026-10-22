@@ -46,6 +46,16 @@ def settings() -> dict:
     return {}
 
 
+def save_settings(patch: dict) -> dict:
+    """Merge team-wide settings into branding.json (the one this copy reads; else branding/). None removes a key."""
+    target = next((d / "branding.json" for d in dirs() if (d / "branding.json").exists()), folder() / "branding.json")
+    data = {**settings(), **patch}
+    data = {k: v for k, v in data.items() if v not in (None, "", {})}
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return data
+
+
 def app_name() -> str:
     return str(settings().get("app_name") or "").strip() or APP_NAME
 

@@ -81,3 +81,18 @@ def test_import_refuses_other_zips_and_skips_unsafe_paths(tmp_path, monkeypatch)
 def test_packs_are_never_committed_to_the_blueprint():
     root = Path(__file__).resolve().parents[1]
     assert subprocess.run(["git", "-C", str(root), "check-ignore", "-q", "orders-rules.kbpack.zip"]).returncode == 0
+
+
+def test_pack_carries_the_app_name_and_the_inbox(tmp_path, monkeypatch):
+    from kb.publish import branding
+    monkeypatch.setenv("KB_ROOT", str(tmp_path / "author-app"))
+    make_instance(tmp_path / "author", monkeypatch, "Orders Rules", "# Rest\n")
+    inbox = {"folder": "Wiki Inbox", "share_url": "https://example.sharepoint.com/x", "contact": "author@example.com"}
+    branding.save_settings({"app_name": "Orders Wiki", "inbox": inbox})
+    r = pack.export(tmp_path / "team.kbpack.zip")
+    assert pack.read_manifest(Path(r["path"]))["settings"]["inbox"] == inbox
+    monkeypatch.setenv("KB_ROOT", str(tmp_path / "colleague-app"))
+    monkeypatch.setenv("KB_INSTANCE", str(tmp_path / "colleague"))
+    catalog.init()
+    pack.import_pack(Path(r["path"]))
+    assert branding.settings()["inbox"] == inbox and branding.app_name() == "Orders Wiki"

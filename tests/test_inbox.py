@@ -18,7 +18,7 @@ def onedrive(tmp_path, monkeypatch):
                                                                  "share_url": "https://example.sharepoint.com/x"}})
     local = tmp_path / "local"; local.mkdir()
     monkeypatch.setattr(appgit, "local", lambda: local)
-    inbox.user.cache_clear()
+    inbox.detected_user.cache_clear()
     monkeypatch.setattr(inbox, "user", lambda: "me@example.com")
     return od / "Wiki Inbox"
 
@@ -76,3 +76,20 @@ def test_no_inbox_in_the_branding(monkeypatch, tmp_path):
     assert not inbox.status()["configured"] and inbox.folder() is None
     inbox.record("start")  # nothing to do, no error
     assert not (tmp_path / "usage-pending.jsonl").exists()
+
+
+def test_configure_in_the_app_writes_branding_and_own_email(onedrive, tmp_path, monkeypatch):
+    saved = {}
+    monkeypatch.setattr(branding, "save_settings", lambda patch: saved.update(patch) or saved)
+    inbox.configure("Team Inbox", "https://example.sharepoint.com/y", "lead@example.com")
+    assert saved["inbox"] == {"folder": "Team Inbox", "share_url": "https://example.sharepoint.com/y", "contact": "lead@example.com"}
+    with pytest.raises(ValueError):
+        inbox.configure(share_url="http://not-https")
+    onedrive.parent.mkdir(parents=True); (onedrive.parent / "Team Inbox").mkdir()
+    assert "Team Inbox" in inbox.status()["found"]
+    monkeypatch.undo()  # the real user(): an e-mail set by the user wins over the detected one
+    monkeypatch.setattr(appgit, "local", lambda: tmp_path / "local")
+    monkeypatch.setattr(inbox, "detected_user", lambda: "detected@example.com")
+    assert inbox.user() == "detected@example.com"
+    inbox.set_prefs(user="Me@Example.com")
+    assert inbox.user() == "me@example.com"

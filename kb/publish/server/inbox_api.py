@@ -14,8 +14,15 @@ def state(h):
 
 @route("POST", r"/api/inbox")
 def save(h):
+    """{share_usage, user}: this user's choices; {inbox: {folder, share_url, contact}}: the team's inbox (branding)."""
     b = h.json_body()
-    return h.send(200, inbox.set_prefs(share_usage=bool(b.get("share_usage", True))))
+    if isinstance(b.get("inbox"), dict):
+        i = b["inbox"]
+        inbox.configure(i.get("folder"), i.get("share_url"), i.get("contact"))
+    if "share_usage" in b or "user" in b:
+        inbox.set_prefs(share_usage=bool(b["share_usage"]) if "share_usage" in b else None,
+                        user=str(b["user"]).strip() if "user" in b else None)
+    return h.send(200, inbox.status())
 
 
 @route("POST", r"/api/inbox/open-share")

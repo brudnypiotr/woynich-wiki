@@ -1,7 +1,8 @@
 """Knowledge pack: a ready knowledge base in one file, so a team starts from a finished ingest instead of an empty one.
 
 `export()` writes <title>.kbpack.zip: the wiki, every source (raw/: originals, extracted text with locators, records;
-store/: the large originals), the project branding and the settings the whole team shares (title, Jira URL).
+store/: the large originals), the project branding and the settings the whole team shares (title, Jira URL, and from
+branding.json the app name and the inbox, the OneDrive folder where feedback and usage go).
 Never anything personal: discussions, usage logs, Jira e-mail, keys, model choice, code repository paths.
 
 `import_pack()` replaces this knowledge base's wiki and sources with the pack's (no merging: the pack is the starting
@@ -48,7 +49,9 @@ def export(out: Path | None = None) -> dict:
     if not sources:
         raise ValueError("this knowledge base has no sources yet: add and ingest them first")
     out = Path(out) if out else config.paths().root / f"{slug(title)}.kbpack.zip"
-    shared = {"title": title, "jira_base_url": (prof.get("jira") or {}).get("base_url")}
+    team = branding.settings()
+    shared = {"title": title, "jira_base_url": (prof.get("jira") or {}).get("base_url"),
+              **{k: team[k] for k in ("app_name", "inbox") if team.get(k)}}
     pages = sum(1 for _ in (inst / "wiki").rglob("*.md")) if (inst / "wiki").exists() else 0
     manifest = {"format": FORMAT, "title": title, "created": catalog.now(), "app_version": __version__,
                 "sources": len(sources), "pages": pages, "settings": shared}
@@ -162,6 +165,9 @@ def import_pack(path: Path) -> dict:
         if f.exists():
             f.replace(f.with_name(f"{f.stem}-before-import-{stamp}{f.suffix}"))
     shared = m.get("settings") or {}
+    team = {k: shared[k] for k in ("app_name", "inbox") if shared.get(k)}
+    if team:  # the team's app name and inbox, as branding.zip would bring them
+        branding.save_settings(team)
     if shared.get("title"):
         settings.save({"profile": {"title": shared["title"]}})
     if shared.get("jira_base_url") and not (_profile().get("jira") or {}).get("base_url"):
@@ -176,7 +182,7 @@ def import_pack(path: Path) -> dict:
     step("search index")
     site.build()
     step("dashboard")
-    shortcut = branding.refresh_shortcut() if imported_branding else "unchanged"
+    shortcut = branding.refresh_shortcut() if imported_branding or team.get("app_name") else "unchanged"
     step("shortcut")
     print("knowledge pack imported in " + ", ".join(f"{k} {v} s" for k, v in took.items()), flush=True)
     return {"backup": backup, "took": took, "shortcut": shortcut, "title": m.get("title"), "sources": len(catalog.all_sources()), "pages": m.get("pages"),

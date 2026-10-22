@@ -69,14 +69,16 @@ after two weeks, or never). The app log is `local\logs\serve.log` (everything th
 server errors; rotates at 1 MB).
 
 **Inbox: feedback and usage without sending anything.** The app's author creates a folder in OneDrive for Business
-(e.g. `Wiki Inbox`), shares it with the team (*can edit*) and adds it to `branding\branding.json`, then runs
-`kb branding pack`:
+(e.g. `Wiki Inbox`), shares it with the team (*can edit*) and sets it in **Settings → Feedback and usage** (folder,
+share link, author's e-mail; or `kb inbox --folder … --share-url … --contact …`). It is saved in `branding.json`, so
+`branding.zip` (`kb branding pack`) and knowledge packs carry it to everyone:
 ```json
 {"title": "…", "app_name": "…", "inbox": {"folder": "Wiki Inbox", "share_url": "https://…", "contact": "author@…"}}
 ```
 Each user adds the shared folder to their OneDrive once (*Add shortcut to My files*; Settings → Feedback and usage
 opens the link). The app then writes `feedback/<user>/*.zip` and `usage/<user>/<YYYY-MM>.jsonl` into
-`%OneDriveCommercial%\<folder>` and OneDrive uploads them; `<user>` is the work e-mail (`whoami /upn`, no admin).
+`%OneDriveCommercial%\<folder>` and OneDrive uploads them; `<user>` is the work e-mail (`whoami /upn`, no admin; the
+user can correct it in Settings).
 Usage = app starts, questions (with their text), model sessions (model, tokens, AI credits, time, errors) and the app
 version; never answers, sources or pages. Users see this in Settings and About and can turn it off (`kb inbox --usage off`).
 Offline records wait in `local\usage-pending.jsonl`. The author reads everyone's usage with `kb usage [folder]`.
