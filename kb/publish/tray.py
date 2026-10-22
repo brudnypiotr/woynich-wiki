@@ -148,6 +148,25 @@ COLORS = {"starting": (150, 150, 158), "updating": (240, 160, 30), "running": (4
           "stopped": (150, 150, 158)}
 
 
+STATE_TEXT = {"starting": "starting…", "updating": "restarting…", "error": "stopped with an error", "stopped": "stopped"}
+
+
+def label(url: str | None = None) -> str:
+    """What the icon is called: the app and the knowledge base, e.g. "Wiki Sales" (from Settings → title), not an address."""
+    from kb.core import config
+    app = branding.app_name()
+    title = str((config.load("profile").get("instance") or {}).get("title") or "").strip()
+    name = title if title.lower().startswith(app.lower()) else f"{app} {title}".strip()
+    port = re.search(r":(\d+)/", url or "")
+    return f"{name} · port {port[1]}" if port else name
+
+
+def tooltip(state: str, url: str | None) -> str:
+    """Windows shows at most 63 characters."""
+    text = label(url) if state == "running" else f"{label()}: {STATE_TEXT.get(state, state)}"
+    return text if len(text) <= 63 else text[:62] + "…"
+
+
 def icon_image(state: str):
     """The app's icon (branding, else the neutral one) with a small status dot in the corner."""
     from PIL import Image, ImageDraw
@@ -174,7 +193,7 @@ def run() -> int:
             webbrowser.open(url)
         return 0
     import pystray
-    name = branding.app_name()
+    name = label()
     sup: Supervisor
     icon: pystray.Icon
 
@@ -182,9 +201,9 @@ def run() -> int:
         log(f"state {state} {detail[:80] if state != 'running' else ''}")
         try:
             icon.icon = icon_image(state)
-            icon.title = f"{name}: {detail or state}"[:120]
+            icon.title = tooltip(state, sup.url)
             if state == "error":
-                icon.notify(f"{detail}. Right-click the icon: Show log, or Update and restart.", name)
+                icon.notify(f"{detail}. Right-click the icon: Show log, or Update and restart.", label())
             icon.update_menu()
         except Exception:  # noqa: BLE001  the icon may not be up yet
             pass
@@ -222,7 +241,7 @@ def run() -> int:
 
     error = lambda _item: sup.code not in (None, 0, updater.RESTART_CODE) and (not sup.proc or sup.proc.poll() is not None)
     menu = pystray.Menu(
-        pystray.MenuItem(f"Open {name}", open_app, default=True),
+        pystray.MenuItem(lambda _item: f"Open {label(sup.url)}", open_app, default=True),
         pystray.MenuItem("Update and restart", update_restart, visible=error),
         pystray.MenuItem("Restart", restart),
         pystray.MenuItem("Show log", show_log),

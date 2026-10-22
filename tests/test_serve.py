@@ -215,7 +215,7 @@ def test_settings_code_repos_roles_and_architecture(app, instance, tmp_path):
     assert s["profile"]["architecture"].startswith("Angular frontend")
     ctx = chat._context(None, None, [], "wiki")
     assert "SYSTEM ARCHITECTURE" in ctx and "- inv-server (backend server):" in ctx and "Java rules engine" in ctx
-    for bad in ([{"name": "cm server", "path": "x"}], [{"name": "a", "path": "x"}, {"name": "A", "path": "y"}], [{"name": "a", "path": ""}]):
+    for bad in ([{"name": "inv server", "path": "x"}], [{"name": "a", "path": "x"}, {"name": "A", "path": "y"}], [{"name": "a", "path": ""}]):
         with pytest.raises(urllib.error.HTTPError) as e:
             call(base, token, "/api/settings", json.dumps({"repos": {"list": bad}}).encode())
         assert e.value.code == 400
