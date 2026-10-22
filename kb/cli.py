@@ -328,7 +328,10 @@ def cmd_update(a) -> int:
 def cmd_inbox(a) -> int:
     """The inbox (a shared OneDrive folder from the branding): where feedback and usage go; turn usage sharing on or off."""
     from kb.publish import inbox
-    st = inbox.set_prefs(share_usage=a.usage == "on") if a.usage else inbox.status()
+    if a.folder or a.share_url or a.contact:
+        inbox.configure(a.folder, a.share_url, a.contact)
+    st = inbox.set_prefs(share_usage=a.usage == "on" if a.usage else None, user=a.user) if a.usage or a.user is not None \
+        else inbox.status()
     if not st["configured"]:
         print("inbox: not set up (branding.json has no \"inbox\": {\"folder\", \"share_url\", \"contact\"})")
     else:
@@ -627,7 +630,9 @@ def main(argv=None) -> int:
     s.add_argument("action", nargs="?", choices=["show", "pack", "import"], default="show"); s.add_argument("zip", nargs="?", default="branding.zip")
     s.set_defaults(fn=cmd_branding)
     s = sub.add_parser("inbox", help="where feedback and usage go (a shared OneDrive folder from the branding); --usage on|off")
-    s.add_argument("--usage", choices=["on", "off"]); s.set_defaults(fn=cmd_inbox)
+    s.add_argument("--usage", choices=["on", "off"]); s.add_argument("--user", help="your e-mail when the detected one is wrong")
+    s.add_argument("--folder", help="team: the shared OneDrive folder name"); s.add_argument("--share-url"); s.add_argument("--contact")
+    s.set_defaults(fn=cmd_inbox)
     s = sub.add_parser("usage", help="for the app's author: everyone's usage from the inbox folder")
     s.add_argument("folder", nargs="?", help="the inbox folder (default: the connected one)"); s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_usage)

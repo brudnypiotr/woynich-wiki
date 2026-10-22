@@ -52,8 +52,13 @@ def folder() -> Path | None:
     return next((p for r in roots() if (p := r / name).is_dir()), None)
 
 
-@lru_cache(maxsize=1)
 def user() -> str:
+    """The e-mail the user set in Settings, else the detected one."""
+    return _safe(str(prefs().get("user") or "").strip().lower()) if prefs().get("user") else detected_user()
+
+
+@lru_cache(maxsize=1)
+def detected_user() -> str:
     """The user's work e-mail (`whoami /upn` needs no admin rights), else the Git e-mail, else the login name."""
     for cmd in (["whoami", "/upn"] if os.name == "nt" else None, ["git", "config", "--global", "user.email"]):
         if not cmd:
@@ -81,21 +86,47 @@ def prefs() -> dict:
         p = json.loads(_prefs_file().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         p = {}
-    return {"share_usage": p.get("share_usage", True)}
+    return {"share_usage": p.get("share_usage", True), "user": p.get("user") or ""}
 
 
 def set_prefs(**kw) -> dict:
-    p = {**prefs(), **{k: v for k, v in kw.items() if k in ("share_usage",)}}
+    """This user's own choices (local/inbox.json): share usage or not, their e-mail when detection is wrong."""
+    p = {**prefs(), **{k: v for k, v in kw.items() if k in ("share_usage", "user") and v is not None}}
     _prefs_file().parent.mkdir(parents=True, exist_ok=True)
     _prefs_file().write_text(json.dumps(p, indent=2), encoding="utf-8")
     return status()
 
 
+def found() -> list[str]:
+    """Folder names in this machine's OneDrive, to pick the shared one from."""
+    names = set()
+    for r in roots():
+        try:
+            names |= {p.name for p in r.iterdir() if p.is_dir() and not p.name.startswith(".")}
+        except OSError:
+            continue
+    return sorted(names, key=str.lower)
+
+
+def configure(folder_name: str | None = None, share_url: str | None = None, contact: str | None = None) -> dict:
+    """Set the team's inbox in branding.json, so `kb branding pack` and knowledge packs carry it to everyone."""
+    if share_url and not str(share_url).startswith("https://"):
+        raise ValueError("the share link must start with https://")
+    if contact and "@" not in str(contact):
+        raise ValueError("the contact must be an e-mail address")
+    cur = config()
+    new = {**cur, **{k: str(v).strip() for k, v in (("folder", folder_name), ("share_url", share_url),
+                                                    ("contact", contact)) if v is not None}}
+    branding.save_settings({"inbox": {k: v for k, v in new.items() if v} or None})
+    return status()
+
+
 def status() -> dict:
-    c, f = config(), folder()
+    c, f, p = config(), folder(), prefs()
     return {"configured": bool(c.get("folder")), "connected": f is not None, "folder": str(f) if f else None,
             "name": c.get("folder"), "share_url": c.get("share_url"), "contact": c.get("contact"), "user": user(),
-            **prefs()}
+            "user_detected": detected_user(), "user_set": p["user"], "share_usage": p["share_usage"],
+            "onedrive": [str(r) for r in roots()], "found": found()}
 
 
 def deliver_feedback(zip_path: Path) -> Path | None:
