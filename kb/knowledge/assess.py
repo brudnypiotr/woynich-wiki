@@ -26,6 +26,7 @@ CRITERIA = ("relevance", "novelty", "specificity", "reliability", "text_quality"
 VERDICTS = ("core", "useful", "marginal", "noise")
 ABBR = {"relevance": "rel", "novelty": "nov", "specificity": "spe", "reliability": "rlb", "text_quality": "txt"}
 FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.S)
+BARE = re.compile(r'\{\s*"(?:assessment|verdict|relevance)"')  # an assessment without the ```json fence
 
 
 def prompt_version(mode: str) -> str:
@@ -37,10 +38,19 @@ def prompt_version(mode: str) -> str:
 
 
 def parse(reply: str) -> dict:
-    """The model's assessment from the end of its reply; {"missing": True} or {"invalid": reason} when unusable."""
-    for block in reversed(FENCE.findall(reply or "")):
+    """The model's assessment from the end of its reply; {"missing": True} or {"invalid": reason} when unusable.
+    Fenced ```json blocks first; then bare JSON, which a model asked for "the JSON only" often replies with."""
+    reply = reply or ""
+    blocks = list(reversed(FENCE.findall(reply)))
+    dec = json.JSONDecoder()
+    for m in reversed(list(BARE.finditer(reply))):
         try:
-            data = json.loads(block)
+            blocks.append(dec.raw_decode(reply, m.start())[0])
+        except ValueError:
+            continue
+    for block in blocks:
+        try:
+            data = json.loads(block) if isinstance(block, str) else block
         except ValueError:
             continue
         a = data.get("assessment", data) if isinstance(data, dict) else None
@@ -100,9 +110,12 @@ def signals(rec: dict, slug: str, chars: int, created: list[str] | None, updated
 
 def record(rec: dict, reply: str, slug: str, chars: int, created: list[str] | None, updated: list[str] | None,
            model: str = "", mode: str = "ingest", texts: dict[str, str] | None = None) -> dict:
+    m = parse(reply)
     a = {"source_id": rec["id"], "title": rec["title"], "kind": rec["kind"], "ref": rec["origin"].get("ref"), "mode": mode,
-         "assessed": catalog.now(), "model": model, "model_assessment": parse(reply),
+         "assessed": catalog.now(), "model": model, "model_assessment": m,
          "prompt": prompt_version(mode) if reply else None, "signals": signals(rec, slug, chars, created, updated, texts)}
+    if (m.get("missing") or m.get("invalid")) and (reply or model):  # the model answered: keep its end, to see why
+        a["reply_end"] = reply[-600:] if reply.strip() else "(empty reply)"
     (catalog.instance() / "raw" / rec["id"] / "assessment.json").write_text(json.dumps(a, ensure_ascii=False, indent=1), encoding="utf-8")
     return a
 
@@ -206,7 +219,9 @@ def short(a: dict) -> str:
     """One line for the commit message and the log."""
     m = a.get("model_assessment") or {}
     if m.get("missing"):
-        return f"no model assessment; {a['signals']['citations_per_10k_chars']} citations per 10k characters"
+        why = "the model's reply was empty" if a.get("reply_end") == "(empty reply)" else \
+            "no assessment in the model's reply" if a.get("reply_end") else "no model assessment"
+        return f"{why}; {a['signals']['citations_per_10k_chars']} citations per 10k characters"
     scores = " ".join(f"{ABBR[c]}={(m.get(c) or {}).get('score', '?')}" for c in CRITERIA)
     return f"{m.get('verdict', '?')} ({scores}); {a['signals']['citations_per_10k_chars']} citations per 10k characters"
 

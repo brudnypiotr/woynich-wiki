@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from kb.knowledge import assess, catalog, wiki
+from kb.knowledge.agent import AgentResult
 from scripted_agent import ScriptedAgent
 
 SAMPLES = Path(__file__).resolve().parents[1] / "samples" / "sources"
@@ -21,6 +22,16 @@ def test_parse_takes_the_last_json_block_and_checks_it():
     bad = assess.parse('```json\n{"assessment": {"relevance": {"score": 9}, "verdict": "great"}}\n```')
     assert "relevance" in bad["invalid"] and "verdict" in bad["invalid"] and "relevance" not in bad
 
+
+
+def test_parse_reads_bare_json_too():
+    """Asked for "the JSON only", a model often drops the ```json fence."""
+    bare = ('{"assessment": {"relevance": {"score": 4, "why": "rules {A}"}, "novelty": {"score": 3, "why": ""}, '
+            '"specificity": {"score": 5, "why": ""}, "reliability": {"score": 3, "why": ""}, '
+            '"text_quality": {"score": 5, "why": ""}, "verdict": "core", "summary": "s"}}')
+    assert assess.parse(bare)["verdict"] == "core" and assess.parse(bare)["relevance"]["why"] == "rules {A}"
+    assert assess.parse("Here it is:\n" + bare + "\nDone.")["verdict"] == "core"
+    assert assess.parse('{"other": 1}') == {"missing": True}
 
 def test_ingest_records_the_assessment_and_never_acts_on_it(instance):
     rec, _ = catalog.add_file(SAMPLES / sorted(p.name for p in SAMPLES.iterdir())[0])
@@ -74,6 +85,19 @@ def test_backfill_for_sources_ingested_before_assessments(instance):
     assert not git("status", "--porcelain").strip() and git("log", "-1", "--format=%s").startswith("catalog")
     assert assess.row(judged[0])["pages_created"] == ""
 
+
+
+def test_an_unreadable_reply_is_kept_so_one_can_see_why(instance):
+    catalog.add_file(SAMPLES / sorted(p.name for p in SAMPLES.iterdir())[0])
+    wiki.ingest_pending(runner=ScriptedAgent())
+    agent = ScriptedAgent()
+    agent.run = lambda *a, **k: AgentResult("I could not finish the assessment.", 1.0, "m", 1, 1, None, [])
+    a = assess.backfill(with_model=True, force=True, runner=agent)[0]
+    assert a["model_assessment"] == {"missing": True} and a["reply_end"] == "I could not finish the assessment."
+    assert assess.short(a).startswith("no assessment in the model's reply")
+    agent.run = lambda *a, **k: AgentResult("", 1.0, "m", 1, 1, None, [])
+    a = assess.backfill(with_model=True, force=True, runner=agent)[0]
+    assert a["reply_end"] == "(empty reply)" and assess.short(a).startswith("the model's reply was empty")
 
 def test_backfill_never_replaces_an_assessment_made_at_ingest(instance):
     catalog.add_file(SAMPLES / sorted(p.name for p in SAMPLES.iterdir())[0])

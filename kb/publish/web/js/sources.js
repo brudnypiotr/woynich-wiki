@@ -67,7 +67,7 @@ function row(s) {const a = s.assessment, j = m(s), g = sig(s), on = SEL.has(s.id
     <td class="n">${g.citations_per_10k_chars ?? ''}</td><td class="n">${g.pages_citing ?? ''}</td><td class="wh">${when}</td></tr>`;
   if (!OPEN.has(s.id)) return main;
   const why = j.verdict ? `${j.summary ? `<p>${esc(j.summary)}</p>` : ''}<ul>${CRIT.map(([k, , l]) => `<li><b>${l} ${(j[k] || {}).score ?? '?'}</b> ${esc((j[k] || {}).why || '')}</li>`).join('')}</ul>`
-    : `<p>${j.invalid ? 'The model\'s answer could not be read: ' + esc(j.invalid) : 'No judgement by the model yet.'}</p>`;
+    : `<p>${j.invalid ? 'The model\'s answer could not be read: ' + esc(j.invalid) : a && a.reply_end ? 'The model answered, but without a readable assessment.' : 'No judgement by the model yet.'}</p>${a && a.reply_end ? `<pre class="reply">${esc(a.reply_end)}</pre>` : ''}`;
   const notes = ['pages_needing_ocr', 'slides_without_text', 'hidden_slides', 'cut_sheets'].filter(k => g[k]).map(k => `${k.replace(/_/g, ' ')}: ${g[k].join(', ')}`);
   return main + `<tr class="why"><td></td><td colspan="10">${why}<p class="meas">Measured: ${g.citations ?? '?'} citations on ${g.pages_citing ?? '?'} pages, ${(g.chars ?? 0).toLocaleString()} characters${notes.length ? '; ' + esc(notes.join('; ')) : ''}.${a && a.model ? ` Model: ${esc(a.model)}.` : ''}${a && a.prompt ? ` Prompt ${esc(a.prompt)}.` : ''}</p></td></tr>`}
 

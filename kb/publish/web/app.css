@@ -287,4 +287,5 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
 .oldp{font-size:11px;font-weight:700;color:var(--warn)}
 .srcs tr.why td{background:var(--soft);font-size:13px;color:var(--ink2)}.srcs tr.why ul{margin:4px 0;padding-left:18px}.srcs tr.why p{margin:4px 0}
 .srcs tr.why .meas{color:var(--mute)}
+.srcs tr.why pre.reply{font:12px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;max-height:200px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0}
 .job.run .bar{height:6px;border-radius:99px;background:var(--line);margin-top:10px;overflow:hidden}.job.run .bar i{display:block;height:100%;background:var(--ok)}
