@@ -49,11 +49,26 @@ def init() -> Path:
                 gitops.commit(inst, [gi], gitops.message("config", "ignore local logs, sessions and branding"))
     if not (inst / ".git").exists():
         subprocess.run(["git", "init", "-q", str(inst)], check=True)
-        hooks = config.paths().root / ".githooks"
-        if hooks.exists():
-            subprocess.run(["git", "-C", str(inst), "config", "core.hooksPath", str(hooks)], check=False)
+        _hooks(inst)
         gitops.commit(inst, [gi], gitops.message("config", "initialise knowledge base instance"))
+    else:
+        _hooks(inst)
     return inst
+
+
+_HOOKED: set[str] = set()
+
+
+def _hooks(inst: Path) -> None:
+    """Point the instance's pre-commit guard at this copy's .githooks, once per process: a repository folder that was
+    renamed or moved, or an instance made by another copy, would otherwise run another copy's (older) guard, or none."""
+    hooks = config.paths().root / ".githooks"
+    if str(inst) in _HOOKED or not hooks.exists():
+        return
+    have = subprocess.run(["git", "-C", str(inst), "config", "core.hooksPath"], capture_output=True, text=True).stdout.strip()
+    if have != str(hooks):
+        subprocess.run(["git", "-C", str(inst), "config", "core.hooksPath", str(hooks)], check=False)
+    _HOOKED.add(str(inst))
 
 
 def sha256(path: Path) -> str:

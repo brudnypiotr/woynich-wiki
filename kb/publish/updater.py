@@ -238,6 +238,13 @@ def rollback() -> dict:
             "restart": True}
 
 
+def setup_needed() -> bool:
+    """An update brought a new setup (setup/version.txt differs from the one this computer ran): Wiki.cmd runs it."""
+    need, have = appgit.root() / "setup" / "version.txt", appgit.local() / "setup-version.txt"
+    read = lambda f: f.read_text(encoding="utf-8-sig").strip() if f.exists() else ""  # noqa: E731
+    return bool(read(need)) and read(need) != read(have)
+
+
 def finish(python: str | None = None) -> dict:
     """After an update: install packages when requirements.txt changed (in a fresh process, before the app starts).
     On Windows also makes the desktop shortcut when this machine has none from the current shortcut.ps1 yet (a copy
