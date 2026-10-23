@@ -173,6 +173,26 @@ try {
   Add-Check 'system' 'GPU (optional, local transcription)' 'INFO' ($gpu -join '; ')
 } catch {}
 
+# ---------------------------------------------------------------- optional: older Office formats and text in pictures
+# probe-formats.ps1 in its own process (the Word and PowerPoint it starts go away with it); optional, so WARN, never FAIL.
+$probe = Join-Path $ScriptDir 'probe-formats.ps1'
+$probeJson = Join-Path (Split-Path -Parent $ScriptDir) 'local\probe-formats.json'
+if (Test-Path $probe) {
+  Write-Host 'Checking Word, PowerPoint and the text recognition (starts them invisibly, about 20 s) ...' -ForegroundColor Cyan
+  Remove-Item $probeJson -ErrorAction SilentlyContinue
+  $null = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $probe 2>&1
+  $labels = [ordered]@{ word = 'Word (.doc files)'; powerpoint = 'PowerPoint (.ppt files)'; ocr = 'Text in pictures (OCR)'; packages = 'Packages xlrd, Pillow (proxy)' }
+  $advice = @{ word = '.doc files will fail with a clear message; save them as .docx'; powerpoint = '.ppt files will fail with a clear message; save them as .pptx'
+               ocr = 'pictures are still added; the model reads them, but their text is not searchable'; packages = 'run setup.cmd (or Update) when the network allows' }
+  try {
+    $pf = Get-Content $probeJson -Raw | ConvertFrom-Json
+    foreach ($k in $labels.Keys) {
+      $c = $pf.checks.$k
+      if ($c) { Add-Check 'formats' $labels[$k] $(if ($c.ok) { 'OK' } else { 'WARN' }) $c.detail $advice[$k] }
+    }
+  } catch { Add-Check 'formats' 'Older Office formats and OCR' 'WARN' "the check did not finish: $($_.Exception.Message)" 'send doctor-report.json' }
+}
+
 # ---------------------------------------------------------------- report
 $counts = @{ OK = 0; WARN = 0; FAIL = 0; INFO = 0 }
 foreach ($c in $results) { $counts[$c.status]++ }
