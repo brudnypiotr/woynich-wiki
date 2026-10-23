@@ -25,3 +25,4 @@ Format: the same decision-record format the product uses for project decisions.
 | [ADR-0019](ADR-0019-questions-in-the-users-session-long-discussions-sandboxed-ingest.md) | Questions in the user's own agent session, long discussions, ingest stays sandboxed | accepted |
 | [ADR-0020](ADR-0020-web-app-as-static-es-modules-route-table-shared-parts.md) | The web app as static ES modules, a route table, shared settings parts | accepted |
 | [ADR-0021](ADR-0021-source-quality-recorded-read-only.md) | Source quality is assessed after every ingest and only recorded | accepted |
+| [ADR-0022](ADR-0022-older-office-formats-images-and-zip.md) | Older Office formats, images and ZIP archives | accepted |
