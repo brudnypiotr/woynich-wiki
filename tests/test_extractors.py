@@ -64,6 +64,29 @@ def test_xlsx_large_sheet_is_cut_with_a_note(monkeypatch):
     assert "(The sheet has 3 rows; only the first 1 are included here.)" in r["text"] and r["meta"]["cut_sheets"] == ["Rates"]
 
 
+
+def test_xls_reads_like_xlsx_with_dates_booleans_and_hidden_sheets():
+    """Excel 97-2003: the same text as .xlsx (one formatter), so the model and the citations see no difference."""
+    from kb.extractors import for_path
+    from kb.extractors.legacy import XlsExtractor
+    assert isinstance(for_path(FIX / "sample.xls"), XlsExtractor) and not isinstance(for_path(FIX / "sample.xlsx"), XlsExtractor)
+    r = XlsExtractor().extract(FIX / "sample.xls")
+    t = r["text"]
+    assert 'Sheet "Rates", row 2: Client = Example Air | Rest (h) = 12 | Valid from = 2024-01-01 | Note = base' in t
+    assert 'row 3: Client = Sample Jet | Rest (h) = 10.5 | Valid from = 2025-03-01' in t   # dd.mm.yyyy is still a date
+    assert 'row 4: Client = Check | Rest (h) = TRUE | Valid from = 2025-03-01 14:30' in t
+    assert '## Sheet "Notes" (hidden)' in t and 'Sheet "Notes", row 2: B = Only one note' in t
+    assert '## Sheet "Empty" (empty)' in t and r["meta"]["sheets"] == ["Rates", "Notes", "Empty"]
+    x = XlsExtractor(); x.max_rows = 1
+    assert x.extract(FIX / "sample.xls")["meta"]["cut_sheets"] == ["Rates"]
+
+
+def test_sheet_values_like_excel():
+    from kb.extractors import sheets
+    assert sheets.number(12.0) == "12" and sheets.number(22.5) == "22.5" and sheets.letters(0) == "A" and sheets.letters(26) == "AA"
+    assert sheets.date(45292) == "2024-01-01" and sheets.date(0.5) == "12:00" and sheets.date(0, date1904=True) == "1904-01-01"
+    assert sheets.date(-1) is None
+
 def test_pptx_slides_in_order_with_bullets_tables_groups_notes_and_pictures(tmp_path):
     from kb.extractors.ooxml import PptxExtractor
     r = PptxExtractor().extract(FIX / "sample.pptx", out_dir=tmp_path)

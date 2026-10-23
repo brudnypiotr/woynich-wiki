@@ -18,12 +18,13 @@ from __future__ import annotations
 import posixpath
 import re
 import zipfile
-from datetime import datetime, timedelta
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from kb.core.ports import Extractor
 from kb.extractors.base import marker, paragraphs_to_md
+from kb.extractors import sheets
+from kb.extractors.sheets import SheetText
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 S = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
@@ -159,7 +160,6 @@ class DocxExtractor(Extractor):
 # ------------------------------------------------------------------------------------------------------------ Excel
 
 BUILTIN_DATE_FORMATS = set(range(14, 23)) | {45, 46, 47}
-EPOCH = datetime(1899, 12, 30)  # Excel's day 0 (with the 1900 leap-year bug folded in)
 
 
 def _col(ref: str) -> int:
@@ -182,31 +182,12 @@ class XlsxExtractor(Extractor):
             if book is None:
                 raise ValueError("not an Excel workbook (xl/workbook.xml is missing)")
             rels = {r.get("Id"): r.get("Target") for r in _kids(_xml(z, "xl/_rels/workbook.xml.rels"))}
-            paras, cells, sheets, cut = [], 0, [], []
+            out = SheetText(self.max_rows, self.max_cells)
             for sh in book.iter(f"{S}sheet"):
-                name, state = sh.get("name") or "Sheet", sh.get("state") or "visible"
                 target = rels.get(sh.get(f"{R}id"), "")
                 part = posixpath.normpath(target.lstrip("/") if target.startswith("/") else "xl/" + target)
-                rows = self._rows(z, part, shared, dates)
-                sheets.append(name)
-                paras.append(f"## Sheet \"{name}\"" + (" (hidden)" if state != "visible" else "")
-                             + ("" if rows else " (empty)"))
-                if not rows:
-                    continue
-                header = rows[0][1] if len(rows) > 1 and all(isinstance(v, str) and v.strip() for v in rows[0][1].values()) \
-                    and len(rows[0][1]) >= 2 else None
-                if header:
-                    paras.append(f"Columns: {' | '.join(header[c] for c in sorted(header))}")
-                body = rows[1:] if header else rows
-                for i, (rnum, vals) in enumerate(body):
-                    if i >= self.max_rows or cells >= self.max_cells:
-                        cut.append(name)
-                        paras.append(f"(The sheet has {len(body)} rows; only the first {i} are included here.)")
-                        break
-                    cells += len(vals)
-                    parts = [f"{header.get(c, _letters(c)) if header else _letters(c)} = {v}" for c, v in sorted(vals.items())]
-                    paras.append(f"Sheet \"{name}\", row {rnum}: " + " | ".join(parts))
-        return {"text": paragraphs_to_md(paras), "meta": {"sheets": sheets, "cut_sheets": cut, "cells": cells}}
+                out.add(sh.get("name") or "Sheet", self._rows(z, part, shared, dates), hidden=(sh.get("state") or "visible") != "visible")
+        return out.result()
 
     @staticmethod
     def _shared(z) -> list[str]:
@@ -243,10 +224,9 @@ class XlsxExtractor(Extractor):
             num = float(raw)
         except ValueError:
             return raw
-        if int(c.get("s", "0")) in dates and 0 <= num < 2958466:
-            d = EPOCH + timedelta(days=num)
-            return d.strftime("%Y-%m-%d") if num == int(num) else d.strftime("%Y-%m-%d %H:%M") if num >= 1 else d.strftime("%H:%M")
-        return str(int(num)) if num == int(num) and abs(num) < 1e15 else f"{num:.10g}"
+        if int(c.get("s", "0")) in dates and sheets.date(num) is not None:
+            return sheets.date(num)
+        return sheets.number(num)
 
     def _rows(self, z, part, shared, dates) -> list[tuple[int, dict[int, str]]]:
         sheet = _xml(z, part)
@@ -408,12 +388,3 @@ class PptxExtractor(Extractor):
             (d / name).write_bytes(data)
             figs.append({"file": f"figures/{name}", "page": n, "from": target})
         return figs
-
-
-def _letters(i: int) -> str:
-    s = ""
-    i += 1
-    while i:
-        i, r = divmod(i - 1, 26)
-        s = chr(65 + r) + s
-    return s
