@@ -20,6 +20,8 @@ QUESTION: {{question}}
    If the question is about another version (a release, a branch, production vs. main), use `git_refs`, then
    `git_grep` or `git_diff` on that branch or tag instead of the checked-out code, and say which version you read.
 3. If a Jira key is mentioned or the answer depends on a ticket, use `jira_get` (or `jira_search`).
+   It lists the ticket's pictures at the end: `view` the ones the text depends on (a screenshot of an error or a
+   screen, a table, a diagram) and say what they show; cite the ticket, not the file.
    For who changed something, when and why (history, authors, the commit behind a line or a ticket), use `git_log`
    (by file, message text such as a Jira key, author or date), `git_blame` (lines → commit) and `git_show` (one commit).
 4. If an image is attached, describe what it shows and explain it with the wiki.

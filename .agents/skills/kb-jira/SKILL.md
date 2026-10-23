@@ -9,6 +9,10 @@ allowed-tools: ["shell", "view"]
 - `kb jira get PROJ-123` (several keys allowed; a URL works too) prints the issue as compact text: fields, links,
   custom fields, attachment list, `<!-- #description -->`, then each comment after `<!-- #c1 -->`, `<!-- #c2 -->` ….
   Cite as `PROJ-123#description` or `PROJ-123#c2`.
+  Its **pictures are downloaded by default** (into the knowledge base's `.cache/jira/PROJ-123/`, kept as a cache) and
+  listed at the end with their paths. Look at one with `view` when the text refers to a screen, an error message, a
+  table or a diagram, or when the user asks about what a screenshot shows; skip them otherwise. `--no-images` skips
+  the download (e.g. when reading many issues quickly).
 - `kb jira search "project = PROJ AND text ~ \"minimum rest\"" --limit 20` lists key, summary and status.
 - Combine with the wiki (`kb-ask`) and code (`kb-code`) in the same answer; keep what you read for follow-ups.
 

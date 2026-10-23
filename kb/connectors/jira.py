@@ -33,6 +33,7 @@ KEY = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 DOC_EXT = {".pdf", ".docx", ".doc", ".xlsx", ".pptx", ".txt", ".md", ".eml", ".msg", ".vtt", ".csv", ".json", ".xml", ".log", ".html"}
 MAX_ATTACHMENT = 25_000_000
+MAX_IMAGES = 20             # per issue, when looking an issue up (jira_get, kb jira get)
 
 
 def issue_key(value: str) -> str:
@@ -156,26 +157,41 @@ class Jira(Connector):
         item = FetchedItem(path=dst, title=key, kind="ticket", ref=key, mime="application/xml")
         item.meta.update(attachments=[], warnings=[])
         if attachments:
-            adir = dest_dir / f"{key}-attachments"
-            for a in ET.fromstring(xml).iter("attachment"):
-                att_id, name, size = a.get("id", ""), Path(a.get("name", "") or "").name, int(a.get("size") or 0)
-                if not att_id.isdigit() or not name:
-                    continue
-                if size > MAX_ATTACHMENT:
-                    item.meta["warnings"].append(f"{name}: {size // 1_000_000} MB, skipped (limit {MAX_ATTACHMENT // 1_000_000} MB)")
-                    continue
+            files, warnings = self.download(xml, dest_dir / f"{key}-attachments")
+            item.meta["attachments"] += [f["path"] for f in files]
+            item.meta["warnings"] += warnings
+        return item
+
+    def download(self, xml: str, dest: Path, only: set[str] | None = None, limit: int | None = None) -> tuple[list[dict], list[str]]:
+        """The issue's attachments into `dest` (only those with a suffix in `only`, at most `limit`). A file already
+        there with the same size is not fetched again, so looking an issue up twice costs nothing.
+        Returns ([{path, name, size, author, created}], warnings)."""
+        atts = [a for a in ET.fromstring(xml).iter("attachment") if (a.get("id") or "").isdigit() and Path(a.get("name") or "").name]
+        names = [Path(a.get("name")).name for a in atts]
+        files, warnings = [], []
+        for a, name in zip(atts, names):
+            if only is not None and Path(name).suffix.lower() not in only:
+                continue
+            if limit is not None and len(files) >= limit:
+                warnings.append(f"more than {limit} attachments: the rest not downloaded")
+                break
+            att_id, size = a.get("id"), int(a.get("size") or 0)
+            if size > MAX_ATTACHMENT:
+                warnings.append(f"{name}: {size // 1_000_000} MB, skipped (limit {MAX_ATTACHMENT // 1_000_000} MB)")
+                continue
+            safe = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
+            p = dest / (safe if names.count(name) == 1 else f"{Path(safe).stem}-{att_id}{Path(safe).suffix}")
+            if not (p.exists() and size and p.stat().st_size == size):
                 try:
                     data = self.attachment(att_id, name)
                 except Exception as e:
-                    item.meta["warnings"].append(f"{name}: not downloaded ({type(e).__name__}: {e})"[:200])
+                    warnings.append(f"{name}: not downloaded ({type(e).__name__}: {e})"[:200])
                     continue
-                adir.mkdir(exist_ok=True)
-                p = adir / re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
-                if p.exists():
-                    p = p.with_name(f"{p.stem}-{att_id}{p.suffix}")
+                dest.mkdir(parents=True, exist_ok=True)
                 p.write_bytes(data)
-                item.meta["attachments"].append(p)
-        return item
+            files.append({"path": p, "name": name, "size": p.stat().st_size, "author": a.get("author") or "",
+                          "created": a.get("created") or ""})
+        return files, warnings
 
 
 def _jira(**cfg) -> Jira:
@@ -184,13 +200,30 @@ def _jira(**cfg) -> Jira:
     return Jira(**cfg)
 
 
-def get_text(key: str, **cfg) -> str:
-    """One issue as compact text (for the assistant and `kb jira get`); nothing is stored."""
+def get_text(key: str, images: Path | None = None, shown_from: Path | None = None, **cfg) -> str:
+    """One issue as compact text (for the assistant and `kb jira get`); nothing goes into the knowledge base.
+    With `images` (a folder), its pictures are downloaded into images/<KEY>/ and listed at the end, so the model can
+    look at the ones that matter (a screenshot of an error, a diagram); paths are relative to `shown_from` if given."""
     from kb.extractors.office import JiraXmlExtractor
+    j, k = _jira(**cfg), issue_key(key)
+    xml = j.issue_xml(k)
     with tempfile.TemporaryDirectory() as tmp:
-        p = Path(tmp) / f"{issue_key(key)}.jira.xml"
-        p.write_text(_jira(**cfg).issue_xml(key), encoding="utf-8")
-        return JiraXmlExtractor().extract(p)["text"]
+        p = Path(tmp) / f"{k}.jira.xml"
+        p.write_text(xml, encoding="utf-8")
+        text = JiraXmlExtractor().extract(p)["text"]
+    if images is None:
+        return text
+    files, warnings = j.download(xml, Path(images) / k, only=IMAGE_EXT, limit=MAX_IMAGES)
+    if not files and not warnings:
+        return text
+    show = lambda f: (f.relative_to(shown_from) if shown_from and f.is_relative_to(shown_from) else f).as_posix()  # noqa: E731
+    lines = ["", "## Images attached to the issue (downloaded)",
+             "Look at one with the view tool when the text refers to a screen, an error message, a table or a diagram;"
+             " cite what you see as the issue (e.g. KEY#description), not the file."]
+    lines += [f"- `{show(f['path'])}` ({max(1, f['size'] // 1024)} KB"
+              + (f", attached by {f['author']}" if f["author"] else "") + ")" for f in files]
+    lines += [f"- {w}" for w in warnings]
+    return text + "\n".join(lines) + "\n"
 
 
 def linked_keys(xml_path: Path) -> list[str]:
