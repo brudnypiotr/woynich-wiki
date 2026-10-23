@@ -9,7 +9,6 @@ from __future__ import annotations
 import io
 import json
 import os
-import subprocess
 import zipfile
 from pathlib import Path
 
@@ -126,6 +125,6 @@ def refresh_shortcut() -> str:
     if os.name != "nt":
         return "skipped (not Windows)"
     script = config.paths().root / "setup" / "shortcut.ps1"
-    r = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)],
-                       capture_output=True, text=True, timeout=60, env={**os.environ, "PSModulePath": ""})
-    return "updated" if r.returncode == 0 else f"not updated: {(r.stderr or r.stdout).strip()[:200]}"
+    from kb.platform.windows import powershell
+    r = powershell.call(script, timeout=60)
+    return "updated" if r.returncode == 0 else f"not updated: {(r.stderr or r.stdout).decode('utf-8', 'replace').strip()[:200]}"

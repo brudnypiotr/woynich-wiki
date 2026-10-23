@@ -48,6 +48,7 @@ def _pkg(name: str) -> str | None:
 def report(gw, jobs=()) -> dict:
     """Everything support needs to see what this installation is and how it is doing. jobs: recent upload jobs."""
     from kb.knowledge import catalog, chat, pages
+    from kb import platform as platform_services
     from kb.publish import settings
     st = settings.state()
     inst = catalog.instance()
@@ -58,7 +59,7 @@ def report(gw, jobs=()) -> dict:
         "generated": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "app": version(),
         "runtime": {"python": sys.version.split()[0], "executable": sys.executable, "os": platform.platform(),
-                    "github-copilot-sdk": _pkg("github-copilot-sdk"), "keyring": _pkg("keyring"), "pydantic": _pkg("pydantic")},
+                    "github-copilot-sdk": _pkg("github-copilot-sdk"), "keyring": _pkg("keyring"), "pillow": _pkg("pillow"), "xlrd": _pkg("xlrd"), "pydantic": _pkg("pydantic")},
         "paths": {"repository": str(config.paths().root), "instance": str(inst),
                   "instance_from": "KB_INSTANCE" if os.environ.get("KB_INSTANCE") else "default"},
         "model": {k: st["model"][k] for k in ("effective", "source", "recommended", "timeout_s", "adapter")},
@@ -70,6 +71,7 @@ def report(gw, jobs=()) -> dict:
         "code_repos": [{"name": r["name"], "exists": r["exists"], "branch": r.get("branch"), "commit": r["commit"], "dirty": r["dirty"]}
                        for r in chat.repos()],
         "secrets": {x["name"]: x["set"] for x in st["secrets"]["items"]} | ({"error": st["secrets"]["error"]} if st["secrets"]["error"] else {}),
+        "formats": platform_services.status(),  # OCR (and later Office) on this laptop, cheap checks only
         "checks": settings.check(gw),  # GitHub Copilot sign-in and one Jira request, no AI credits
         "recent_errors": errors,
     }

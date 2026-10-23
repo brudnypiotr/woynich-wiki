@@ -10,7 +10,8 @@ from kb.core.ports import Connector, FetchedItem
 KIND_BY_EXT = {
     ".pdf": "document", ".docx": "document", ".doc": "document", ".pptx": "document", ".md": "document", ".txt": "document", ".html": "web",
     ".htm": "web", ".xlsx": "spreadsheet", ".xlsm": "spreadsheet", ".xls": "spreadsheet", ".csv": "spreadsheet", ".eml": "email", ".msg": "email",
-    ".vtt": "transcript", ".srt": "transcript", ".png": "image", ".jpg": "image", ".jpeg": "image",
+    ".vtt": "transcript", ".srt": "transcript", ".png": "image", ".jpg": "image", ".jpeg": "image", ".gif": "image", ".webp": "image",
+    ".bmp": "image", ".tif": "image", ".tiff": "image",
     ".py": "code", ".cs": "code", ".java": "code", ".js": "code", ".ts": "code", ".sql": "code", ".ps1": "code", ".xml": "code", ".xsd": "code",
 }
 
