@@ -175,3 +175,30 @@ def test_heartbeat_explains_errors(monkeypatch):
     monkeypatch.setattr(jira.Jira, "_request", offline)
     with pytest.raises(RuntimeError, match="cannot reach https://example.atlassian.net: getaddrinfo failed"):
         jira.Jira(**CFG).whoami()
+
+
+def test_looking_an_issue_up_downloads_its_pictures_once_and_lists_them(instance, fake, tmp_path):
+    """jira_get / kb jira get: the screenshots come along (the model decides whether to look), documents do not."""
+    from kb.knowledge.tools.jira import images_dir
+    t = jira.get_text("EXA-150", images=images_dir(), shown_from=instance, **CFG)
+    shot = instance / ".cache" / "jira" / "EXA-150" / "screen.png"
+    assert shot.read_bytes() == PNG and not (shot.parent / "om-a.pdf").exists()       # pictures only
+    assert "## Images attached to the issue (downloaded)" in t and "- `.cache/jira/EXA-150/screen.png` (1 KB, attached by anna)" in t
+    assert "view tool" in t
+    n = sum(u.endswith("/501") for u in fake)
+    jira.get_text("EXA-150", images=images_dir(), shown_from=instance, **CFG)
+    assert sum(u.endswith("/501") for u in fake) == n                                  # cached: not fetched again
+    assert "Images attached" not in jira.get_text("EXA-150", **CFG)                     # without images: as before
+
+
+def test_the_pictures_folder_is_readable_by_the_model_and_ignored_by_git(instance):
+    from kb.knowledge import catalog
+    from kb.knowledge.agent import Sandbox
+    from kb.knowledge.tools.jira import images_dir
+    catalog.init()
+    p = images_dir() / "EXA-1" / "a.png"
+    p.parent.mkdir(parents=True); p.write_bytes(PNG)
+    box = Sandbox(instance, write_dirs=())
+    assert box.decide("view", {"path": str(p)})[0] and not box.decide("create", {"path": str(p)})[0]
+    out = subprocess.run(["git", "-C", str(instance), "status", "--porcelain"], capture_output=True, text=True).stdout
+    assert ".cache" not in out

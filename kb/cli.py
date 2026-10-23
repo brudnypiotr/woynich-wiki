@@ -63,8 +63,9 @@ def cmd_jira(a) -> int:
     cfg = config.load("profile").get("jira") or {}
     try:
         if a.action == "get":
-            for k in a.args:
-                print(jira.get_text(k, **cfg))
+            from kb.knowledge.tools.jira import images_dir
+            for k in a.args:  # pictures to the instance's cache, absolute paths: the CLI model looks at them with view
+                print(jira.get_text(k, images=None if a.no_images else images_dir(), **cfg))
         elif a.action == "search":
             for i in jira.Jira(**cfg).search(" ".join(a.args), a.limit or 20):
                 print(f"{i['key']}: {i['fields'].get('summary', '')} [{(i['fields'].get('status') or {}).get('name', '')}]")
@@ -586,7 +587,8 @@ def main(argv=None) -> int:
     s = sub.add_parser("jira", help="Jira, read-only: get KEY… (print), search JQL (list), add KEY… (register as sources)")
     s.add_argument("action", choices=["get", "search", "add"]); s.add_argument("args", nargs="+")
     s.add_argument("--limit", type=int); s.add_argument("--links", action="store_true", help="add: also linked issues and sub-tasks")
-    s.add_argument("--no-attachments", action="store_true"); s.set_defaults(fn=cmd_jira)
+    s.add_argument("--no-attachments", action="store_true")
+    s.add_argument("--no-images", action="store_true", help="get: do not download the issue's pictures"); s.set_defaults(fn=cmd_jira)
     s = sub.add_parser("diagnostics", help="version and technical state for support, saved as instance/reports/diagnostics.json")
     s.add_argument("--adapter"); s.set_defaults(fn=cmd_diagnostics)
     s = sub.add_parser("check", help="test the GitHub Copilot sign-in and the Jira token (no AI credits used)")
