@@ -28,7 +28,7 @@ Score 1–5, honestly, with one short reason each that points to the text (e.g. 
 - `verdict`: `core` (a source this wiki is built on) · `useful` (adds real knowledge) · `marginal` (little that
   matters) · `noise` (nothing for this wiki: wrong project, empty, duplicate, junk).
 
-Reply with the JSON block only:
+Reply with this JSON only, inside a ```json fenced block, nothing before or after it:
 ```json
 {"assessment": {"relevance": {"score": 4, "why": "..."}, "novelty": {"score": 3, "why": "..."},
   "specificity": {"score": 5, "why": "..."}, "reliability": {"score": 3, "why": "..."},

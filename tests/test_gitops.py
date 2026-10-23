@@ -25,6 +25,22 @@ def test_commit_only_given_paths_and_idempotent(tmp_path):
     assert gitops.commit(tmp_path, [a], gitops.message("source", "add a")) is None  # nothing changed
 
 
+
+def test_a_failed_commit_says_why(tmp_path):
+    """A blocked commit (here: a pre-commit hook) shows git's own message, not only "exit status 1"."""
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    for k, v in (("user.email", "t@t"), ("user.name", "t"), ("core.hooksPath", "hooks")):
+        subprocess.run(["git", "-C", str(tmp_path), "config", k, v], check=True)
+    hook = tmp_path / "hooks" / "pre-commit"
+    hook.parent.mkdir()
+    hook.write_text("#!/bin/sh\necho 'pre-commit: raw/x/assessment.json looks like a secret' >&2\nexit 1\n")
+    hook.chmod(0o755)
+    a = tmp_path / "a.txt"
+    a.write_text("1")
+    with pytest.raises(subprocess.CalledProcessError) as e:
+        gitops.commit(tmp_path, [a], gitops.message("source", "add a"))
+    assert "git commit failed (exit 1)" in str(e.value) and "looks like a secret" in str(e.value)
+
 def test_windows_scripts_are_ascii():
     """Windows PowerShell 5.1 reads a .ps1 without BOM as cp1252: a "→" turns into a quote and breaks setup."""
     from pathlib import Path
