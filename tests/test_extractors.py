@@ -128,3 +128,16 @@ def test_xml_and_xsd_go_to_the_xml_reader_jira_xml_stays():
     assert type(extractors.for_path(Path("a.xml"))).__name__ == "XmlExtractor"
     assert type(extractors.for_path(Path("PROJ-1.jira.xml"))).__name__ == "JiraXmlExtractor"
     assert type(extractors.for_path(Path("Deck.PPTX"))).__name__ == "PptxExtractor" and ".pptx" in extractors.supported()
+
+
+def test_adding_again_commits_an_add_whose_commit_failed(instance, tmp_path):
+    import subprocess
+    from kb.knowledge import catalog
+    f = tmp_path / "note.md"
+    f.write_text("# Note\n\nSome text.\n", encoding="utf-8")
+    rec, created = catalog.add_file(f, commit=False)              # as if the commit had failed (a broken hook)
+    git = lambda *x: subprocess.run(["git", "-C", str(instance), *x], capture_output=True, text=True).stdout
+    assert created and f"raw/{rec['id']}" in git("status", "--porcelain", "-uall")
+    again, created = catalog.add_file(f)
+    assert not created and again["id"] == rec["id"]
+    assert f"raw/{rec['id']}" not in git("status", "--porcelain", "-uall") and "committed on a later add" in git("log", "-1", "--format=%b")

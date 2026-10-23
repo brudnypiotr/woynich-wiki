@@ -7,4 +7,8 @@ elif [ -x "$ROOT/.venv/bin/python" ]; then PY="$ROOT/.venv/bin/python"
 elif [ -n "$LOCALAPPDATA" ] && [ -x "$(cygpath -u "$LOCALAPPDATA" 2>/dev/null)/woynich-wiki/python312/python.exe" ]; then
   PY="$(cygpath -u "$LOCALAPPDATA")/woynich-wiki/python312/python.exe"  # embeddable Python (setup fallback)
 else PY=python; fi
-PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m kb.core.precommit
+# The blueprint goes first on the module path explicitly: the embeddable Python ignores PYTHONPATH, and its .pth file
+# points at whichever clone ran setup last (maybe moved or deleted since). -I: the same on every Python.
+ROOT_PY="$ROOT"
+if command -v cygpath >/dev/null 2>&1; then ROOT_PY="$(cygpath -w "$ROOT")"; fi
+exec "$PY" -I -c "import sys; sys.path.insert(0, sys.argv[1]); from kb.core.precommit import main; sys.exit(main())" "$ROOT_PY"

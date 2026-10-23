@@ -94,9 +94,11 @@ def add_file(path: Path, *, connector: str = "manual", ref: str | None = None, t
     path = Path(path)
     digest = sha256(path)
     sid = digest[:12]
-    if find(sid):
-        return load(sid), False
     d = inst / "raw" / sid
+    if find(sid):
+        if commit:  # an earlier add whose commit failed (e.g. a broken pre-commit hook): commit it now; no-op otherwise
+            gitops.commit(inst, [d], gitops.message("source", f"add {load(sid)['title']}", scope=sid, body="committed on a later add"))
+        return load(sid), False
     d.mkdir(parents=True, exist_ok=True)
     suffix = "".join(path.suffixes[-2:]) if path.name.endswith((".jira.json", ".jira.xml")) else path.suffix.lower()
     limit = (config.load("profile").get("store") or {}).get("max_git_bytes", 20_000_000)
