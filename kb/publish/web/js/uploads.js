@@ -1,6 +1,7 @@
 // Add sources: upload files or whole folders, follow each file through the ingest steps, cancel or remove.
 // A dropped folder is read recursively; before anything is sent the user sees what goes in (as a tree, per folder) and
-// what is skipped (types without an extractor, hidden and temporary files). Then each file is uploaded with its path
+// what is skipped (types without an extractor, hidden and temporary files); every file and folder has a checkbox
+// (all checked) to leave some out. Then each chosen file is uploaded with its path
 // in the folder; the jobs of one folder show as a tree with counts per folder, and each file opens to its full card.
 import {$, esc, ic, I, topbar} from './ui.js';
 import {api} from './api.js';
@@ -70,16 +71,35 @@ function pick(items) {
   for (const it of items) {const why = skipWhy(it.path, it.file); (why ? skip : take).push({...it, why})}
   if (items.length === 1 && take.length === 1 && !take[0].path.includes('/')) return upload(take);  // one file: as before
   take.sort((a, b) => treeOrder(a.path, b.path));  // ingested top to bottom, as the tree shows them
-  PENDING = {take, skip};
+  PENDING = {take, skip, off: new Set()};  // off: paths the user unchecked
   const {node: tree, name: top} = unwrap(build(take.map(t => ({path: t.path, bytes: t.file.size}))));
-  const size = take.reduce((n, t) => n + t.file.size, 0);
-  $('#preview').innerHTML = `<div class="set pv"><h3>${take.length} file${take.length === 1 ? '' : 's'} to add${top ? ` from <b>${esc(top)}</b>` : ''} <small>${mb(size)}</small></h3>
-    <p class="d">The model reads each file in its own session: every file costs AI credits and takes about a minute. The folders stay visible below and the model uses their names as context.</p>
+  $('#preview').innerHTML = `<div class="set pv"><h3><span id="pvn"></span>${top ? ` from <b>${esc(top)}</b>` : ''} <small id="pvmb"></small></h3>
+    <p class="d">The model reads each file in its own session: every file costs AI credits and takes about a minute. The folders stay visible below and the model uses their names as context. Uncheck the files or folders to leave out${take.length > 1 ? ' (<a href="#" data-pv="all">all</a> · <a href="#" data-pv="none">none</a>)' : ''}.</p>
     ${take.length ? `<div class="tree">${treeHTML(tree, {preview: true}, top ? top + '/' : '')}</div>` : ''}
     ${skip.length ? `<details class="skipped"><summary>${skip.length} skipped</summary><ul>${skip.slice(0, 200).map(s => `<li><code>${esc(s.path)}</code> · ${esc(s.why)}</li>`).join('')}</ul></details>` : ''}
-    <div class="btns">${take.length ? `<button class="pri" data-pv="go">Add ${take.length} file${take.length === 1 ? '' : 's'}</button>` : ''}<button class="ghost" data-pv="cancel">Cancel</button></div></div>`;
-  $('#preview').onclick = e => {const a = (e.target.closest('[data-pv]') || {}).dataset?.pv; if (!a) return;
-    const p = PENDING; PENDING = null; $('#preview').innerHTML = ''; if (a === 'go') upload(p.take)}}
+    <div class="btns">${take.length ? '<button class="pri" data-pv="go"></button>' : ''}<button class="ghost" data-pv="cancel">Cancel</button></div></div>`;
+  $('#preview').onchange = e => {const c = e.target; if (!c.matches('input.pick')) return;
+    const paths = c.dataset.p ? [c.dataset.p] : take.map(t => t.path).filter(p => p.startsWith(c.dataset.pd));  // a folder: all inside
+    paths.forEach(p => c.checked ? PENDING.off.delete(p) : PENDING.off.add(p)); syncPreview()};
+  $('#preview').onclick = e => {const a = (e.target.closest('[data-pv]') || {}).dataset?.pv; if (!a) return; e.preventDefault();
+    if (a === 'all' || a === 'none') {PENDING.off = new Set(a === 'none' ? take.map(t => t.path) : []); return syncPreview()}
+    const p = PENDING; PENDING = null; $('#preview').innerHTML = ''; if (a === 'go') upload(p.take.filter(t => !p.off.has(t.path)))};
+  syncPreview()}
+
+// checkboxes, counts and the button after a change: a folder is checked, unchecked or partly checked (indeterminate)
+function syncPreview() {const {take, off} = PENDING, on = take.filter(t => !off.has(t.path));
+  const n = on.length, size = on.reduce((k, t) => k + t.file.size, 0), all = take.length;
+  $('#pvn').textContent = n === all ? `${all} file${all === 1 ? '' : 's'} to add` : `${n} of ${all} files to add`;
+  $('#pvmb').textContent = mb(size);
+  const go = $('#preview [data-pv="go"]');
+  if (go) {go.textContent = n ? `Add ${n} file${n === 1 ? '' : 's'}` : 'Nothing chosen'; go.disabled = !n}
+  document.querySelectorAll('#preview input.pick').forEach(c => {
+    if (c.dataset.p) {c.checked = !off.has(c.dataset.p); c.closest('li').classList.toggle('off', !c.checked); return}
+    const inside = take.filter(t => t.path.startsWith(c.dataset.pd)), k = inside.filter(t => !off.has(t.path)).length;
+    c.checked = k === inside.length; c.indeterminate = k > 0 && k < inside.length;
+    c.closest('li').classList.toggle('off', !k);
+    const sm = c.parentElement.querySelector('small');
+    if (sm) sm.textContent = `${k === inside.length ? '' : k + ' of '}${inside.length} file${inside.length === 1 ? '' : 's'} · ${mb(inside.filter(t => !off.has(t.path)).reduce((m, t) => m + t.file.size, 0) || 0)}`})}
 
 async function upload(items) {
   const batch = items.length > 1 || items.some(i => i.path.includes('/')) ? Math.random().toString(36).slice(2, 10) : '';
@@ -147,9 +167,10 @@ function treeHTML(node, opts, prefix = '') {
       const sum = opts.preview ? `${items.length} file${items.length === 1 ? '' : 's'} · ${mb(items.reduce((n, i) => n + i.bytes, 0))}`
         : (c => `${c.done}/${c.total} done${c.bad ? ` · ${c.bad} failed` : ''}${c.live ? ` · ${c.live} to go` : ''}`)(count(items.map(i => i.job)));
       const st = opts.preview ? '' : (c => c.bad ? 'bad' : c.live ? 'live' : 'ok')(count(items.map(i => i.job)));
-      return `<li class="dir"><details${CLOSED.has(key) ? '' : ' open'} data-dir="${esc(key)}"><summary>${ic(FOLDER)}<b>${esc(name)}</b><small class="${st}">${sum}</small></summary>
+      const box = opts.preview ? `<input type="checkbox" class="pick" checked data-pd="${esc(prefix + name + '/')}" title="Add this folder">` : '';
+      return `<li class="dir"><details${CLOSED.has(key) ? '' : ' open'} data-dir="${esc(key)}"><summary>${box}${ic(FOLDER)}<b>${esc(name)}</b><small class="${st}">${sum}</small></summary>
         ${treeHTML(sub, opts, prefix + name + '/')}</details></li>`}).join('')}
-    ${files.map(f => opts.preview ? `<li class="file">${ic(I.file)}<span>${esc(f.name)}</span><small>${mb(f.bytes)}</small></li>`
+    ${files.map(f => opts.preview ? `<li class="file"><input type="checkbox" class="pick" checked data-p="${esc(f.path)}" title="Add this file">${ic(I.file)}<span>${esc(f.name)}</span><small>${mb(f.bytes)}</small></li>`
       : `<li class="file"><div class="row" data-open="${f.job.id}">${ic(I.file)}<span>${esc(f.name)}</span>${badge(f.job)}${verdict(f.job)}<small class="det1">${esc(line(f.job))}</small></div>
          ${OPEN.has(f.job.id) ? card(f.job) : ''}</li>`).join('')}</ul>`}
 

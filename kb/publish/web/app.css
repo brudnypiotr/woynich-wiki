@@ -259,6 +259,7 @@ h3.sec{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:upperc
 .tree summary::before{content:'▸';color:var(--mute);width:10px;font-size:11px}.tree details[open]>summary::before{content:'▾'}
 .tree summary small{color:var(--mute);margin-left:4px}.tree summary small.bad{color:var(--bad)}.tree summary small.live{color:var(--vio)}
 .tree .i{width:16px;height:16px;flex:none;color:var(--mute)}
+.tree input.pick{margin:0 2px 0 0;accent-color:var(--vio);cursor:pointer;flex:none}.tree li.off>span,.tree li.off>details>summary b{color:var(--mute);text-decoration:line-through}
 .tree li.file>.row,.tree li.file{display:flex;align-items:center;gap:6px;padding:3px 0 3px 16px;flex-wrap:wrap}
 .tree li.file>.row{padding-left:0;cursor:pointer;width:100%}.tree li.file>.row:hover span{color:var(--vio)}
 .tree li.file small{color:var(--mute)}.tree .det1{flex:1 1 200px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
