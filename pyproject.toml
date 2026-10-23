@@ -1,6 +1,6 @@
 [project]
 name = "woynich-wiki"
-version = "0.19.1"
+version = "0.19.2"
 description = "Project knowledge base with a paper trail (LLM Wiki with strict provenance)"
 requires-python = ">=3.11"
 dependencies = ["pyyaml>=6", "jsonschema>=4"]
@@ -23,4 +23,5 @@ include = ["kb*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]   # the repository first: the embeddable Python ignores the current folder and PYTHONPATH
 markers = ["smoke: the few end-to-end checks setup.cmd runs (pytest -m smoke)"]
