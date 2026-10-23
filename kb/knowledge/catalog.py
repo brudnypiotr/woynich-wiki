@@ -96,9 +96,14 @@ def add_file(path: Path, *, connector: str = "manual", ref: str | None = None, t
     sid = digest[:12]
     d = inst / "raw" / sid
     if find(sid):
-        if commit:  # an earlier add whose commit failed (e.g. a broken pre-commit hook): commit it now; no-op otherwise
-            gitops.commit(inst, [d], gitops.message("source", f"add {load(sid)['title']}", scope=sid, body="committed on a later add"))
-        return load(sid), False
+        rec, body = load(sid), "committed on a later add"
+        if rec["status"] == "error" and (original := _original(rec, d)):  # the reader may be fixed since (an Update)
+            rec = extract(rec, original, d)
+            save(rec)
+            body = f"read again: {rec['status']}"
+        if commit:  # also an earlier add whose commit failed (e.g. a broken pre-commit hook); no-op otherwise
+            gitops.commit(inst, [d], gitops.message("source", f"add {rec['title']}", scope=sid, body=body))
+        return rec, False
     d.mkdir(parents=True, exist_ok=True)
     suffix = "".join(path.suffixes[-2:]) if path.name.endswith((".jira.json", ".jira.xml")) else path.suffix.lower()
     limit = (config.load("profile").get("store") or {}).get("max_git_bytes", 20_000_000)
@@ -128,6 +133,14 @@ def add_file(path: Path, *, connector: str = "manual", ref: str | None = None, t
     return rec, True
 
 
+def _original(rec: dict, d: Path) -> Path | None:
+    """The kept original of a registered source: in raw/<id>/ or, when large, in store/."""
+    found = sorted(d.glob("original*"))
+    if not found and rec.get("stored_in") == "store":
+        found = sorted((instance() / "store").glob(f"{rec['sha256']}*"))
+    return found[0] if found else None
+
+
 def extract(rec: dict, original: Path, d: Path) -> dict:
     ex = extractors.for_path(original)
     info = {"extractor": None, "chars": 0}
@@ -135,6 +148,7 @@ def extract(rec: dict, original: Path, d: Path) -> dict:
         (d / "text.md").write_text("", encoding="utf-8")
         info["note"] = "no extractor for this file type; registered as metadata only"
     else:
+        info["extractor"] = type(ex).__name__  # also when it fails, so the error names the reader
         try:
             out = ex.extract(original, out_dir=d) if "out_dir" in inspect.signature(ex.extract).parameters else ex.extract(original)
             (d / "text.md").write_text(out["text"], encoding="utf-8")

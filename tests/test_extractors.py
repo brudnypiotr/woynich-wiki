@@ -1,3 +1,8 @@
+import json
+from pathlib import Path
+
+import pytest
+
 from kb.extractors.base import paragraphs_to_md, segments
 from kb.extractors.office import CodeExtractor, HtmlExtractor, TranscriptExtractor
 
@@ -80,6 +85,48 @@ def test_xls_reads_like_xlsx_with_dates_booleans_and_hidden_sheets():
     x = XlsExtractor(); x.max_rows = 1
     assert x.extract(FIX / "sample.xls")["meta"]["cut_sheets"] == ["Rates"]
 
+
+
+def test_xls_exports_that_are_really_xml_html_or_xlsx(tmp_path):
+    """Systems export reports as .xls that are XML Spreadsheet 2003 or an HTML table; Excel opens them, so do we."""
+    import shutil
+    from kb.extractors.legacy import XlsExtractor
+    r = XlsExtractor().extract(FIX / "sample-xml2003.xls")
+    t = r["text"]
+    assert r["meta"]["format"] == "spreadsheetml" and "Columns: Crew | Rule | Date | Hours" in t
+    assert 'row 2: Crew = A. Pilot | Rule = Minimum rest | Date = 2026-03-01 | Hours = 9.5' in t
+    assert 'row 4: Crew = B. Cabin | Date = 2026-03-02 14:30 | Hours = 12' in t           # ss:Index skips rows and cells
+    assert '## Sheet "Parameters" (hidden)' in t and 'row 1: A = TRUE' in t
+    r = XlsExtractor().extract(FIX / "sample-html.xls")
+    assert r["meta"]["format"] == "html" and 'row 2: Crew = A. Pilot | Rule = Minimum rest after night | Hours = 9.5' in r["text"]
+    assert 'row 3: Crew = Total | Hours = 9.5' in r["text"]                               # colspan keeps the columns
+    shutil.copy(FIX / "sample.xlsx", tmp_path / "renamed.xls")
+    r = XlsExtractor().extract(tmp_path / "renamed.xls")
+    assert r["meta"]["format"] == "xlsx" and "Client = Example Air" in r["text"]
+    assert XlsExtractor().extract(FIX / "sample.xls")["meta"]["format"] == "biff"
+    (tmp_path / "junk.xls").write_bytes(b"hello")
+    with pytest.raises(ValueError, match="not an Excel file"):
+        XlsExtractor().extract(tmp_path / "junk.xls")
+
+
+def test_a_file_that_failed_to_read_is_read_again_when_added_again(instance, monkeypatch, tmp_path):
+    """After an Update fixes a reader, dropping the same file again reads it, instead of "already there"."""
+    import shutil
+    import subprocess
+    from kb.extractors.legacy import XlsExtractor
+    from kb.knowledge import catalog
+    f = shutil.copy(FIX / "sample-xml2003.xls", tmp_path / "report.xls")
+    good = XlsExtractor.extract
+    monkeypatch.setattr(XlsExtractor, "extract", lambda self, p: (_ for _ in ()).throw(ValueError("old reader")))
+    rec, created = catalog.add_file(Path(f))
+    info = json.loads((instance / "raw" / rec["id"] / "extract.json").read_text(encoding="utf-8"))
+    assert created and rec["status"] == "error" and info["extractor"] == "XlsExtractor" and "old reader" in info["error"]
+    monkeypatch.setattr(XlsExtractor, "extract", good)
+    rec, created = catalog.add_file(Path(f))
+    assert not created and rec["status"] == "extracted" and catalog.load(rec["id"])["status"] == "extracted"
+    assert "Crew = A. Pilot" in (instance / "raw" / rec["id"] / "text.md").read_text(encoding="utf-8")
+    git = lambda *x: subprocess.run(["git", "-C", str(instance), *x], capture_output=True, text=True).stdout
+    assert not git("status", "--porcelain").strip() and "read again: extracted" in git("log", "-1", "--format=%b")
 
 def test_sheet_values_like_excel():
     from kb.extractors import sheets
