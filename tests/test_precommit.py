@@ -35,3 +35,16 @@ def test_the_hook_finds_kb_without_pythonpath(tmp_path):
     subprocess.run(["git", "-C", str(tmp_path), "add", "b.txt"], check=True, env=env)
     r = subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", "y"], capture_output=True, text=True, env=env)
     assert r.returncode == 1 and "GitHub token" in r.stderr     # the guard really ran
+
+
+def test_the_instance_uses_this_copys_guard(instance):
+    """A renamed or moved repository folder (or an instance made by another copy) would run another copy's guard."""
+    import subprocess
+    from kb.core import config
+    from kb.knowledge import catalog
+    catalog.init()
+    git = lambda *x: subprocess.run(["git", "-C", str(instance), *x], capture_output=True, text=True).stdout.strip()
+    subprocess.run(["git", "-C", str(instance), "config", "core.hooksPath", "C:/old-copy/.githooks"], check=True)
+    catalog._HOOKED.clear()
+    catalog.init()
+    assert git("config", "core.hooksPath") == str(config.paths().root / ".githooks")

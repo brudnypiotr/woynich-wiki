@@ -38,6 +38,19 @@ def test_restarts_after_an_update_then_stops(tmp_path, local):
     assert "kb serve exited with 3" in (local / "logs" / "tray.log").read_text()
 
 
+def test_an_update_that_needs_the_setup_hands_over_to_the_launcher(tmp_path, local):
+    """setup/version.txt changed with the update: the tray starts Wiki.cmd (which runs the setup) and stops."""
+    (tmp_path / "setup").mkdir()
+    (tmp_path / "setup" / "version.txt").write_text("3\n")
+    (local / "setup-version.txt").write_text("2")
+    cmd, runs = fake_serve(tmp_path, [updater.RESTART_CODE, 0])
+    started = []
+    sup = tray.Supervisor(command=cmd, finish=[sys.executable, "-c", "pass"], relaunch=lambda: started.append(1))
+    assert sup.run() == 0 and started == [1] and runs.read_text() == "1"      # not started again here
+    (local / "setup-version.txt").write_text("3")
+    assert not updater.setup_needed()
+
+
 def test_an_error_stops_and_says_so(tmp_path, local):
     cmd, runs = fake_serve(tmp_path, [1])
     states = []

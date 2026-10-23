@@ -139,6 +139,7 @@ foreach ($cand in @('py', 'python', 'python3')) {
 }
 if ($py -and ($py.major -gt 3 -or ($py.major -eq 3 -and $py.minor -ge 11))) { Add-Check 'tools' 'Python 3.11+' 'OK' ("{0} at {1}" -f $py.text, $py.exe) }
 elseif ($py) { Add-Check 'tools' 'Python 3.11+' 'WARN' ("{0} at {1}" -f $py.text, $py.exe) 'Too old; setup installs a private Python 3.12 for this user.' }
+elseif (Test-Path (Join-Path $env:LOCALAPPDATA 'woynich-wiki\python312\python.exe')) { Add-Check 'tools' 'Python 3.11+' 'OK' ('not on PATH; the app has its own: ' + (Join-Path $env:LOCALAPPDATA 'woynich-wiki\python312')) }
 else { Add-Check 'tools' 'Python 3.11+' 'WARN' 'not found (the Microsoft Store alias does not count)' 'Setup installs a private Python 3.12 for this user, no admin needed.' }
 
 $r = Invoke-Tool 'git' @('--version')
@@ -172,6 +173,23 @@ try {
   $gpu = Get-CimInstance Win32_VideoController -ErrorAction Stop | ForEach-Object { "{0} ({1} MB)" -f $_.Name, [math]::Round($_.AdapterRAM / 1MB) }
   Add-Check 'system' 'GPU (optional, local transcription)' 'INFO' ($gpu -join '; ')
 } catch {}
+
+# ---------------------------------------------------------------- this copy, after setup (check_install.py)
+# Run with the app's own Python (the one setup wrote down), so it sees what the app sees: packages, which copy's code
+# runs, the pre-commit guards, whether the setup for this version has run.
+$appPy = $null
+$pyw = Join-Path $repo 'local\pythonw.txt'
+if (Test-Path $pyw) { $appPy = Join-Path (Split-Path -Parent ((Get-Content $pyw -TotalCount 1).Trim())) 'python.exe' }
+foreach ($cand in @((Join-Path $repo '.venv\Scripts\python.exe'), (Join-Path $env:LOCALAPPDATA 'woynich-wiki\python312\python.exe'))) {
+  if (-not $appPy -or -not (Test-Path $appPy)) { $appPy = $cand }
+}
+if (-not (Test-Path $appPy)) { Add-Check 'install' 'This copy' 'INFO' 'not set up yet' 'run setup.cmd (or start Wiki.cmd)' }
+else {
+  try {
+    $json = (& $appPy -I (Join-Path $ScriptDir 'check_install.py') 2>&1 | Out-String).Trim()
+    foreach ($c in ($json | ConvertFrom-Json)) { Add-Check 'install' $c.name $c.status $c.detail $c.advice }
+  } catch { Add-Check 'install' 'This copy' 'WARN' "the check did not run: $($_.Exception.Message)" 'send doctor-report.json' }
+}
 
 # ---------------------------------------------------------------- optional: older Office formats and text in pictures
 # probe-formats.ps1 in its own process (the Word and PowerPoint it starts go away with it); optional, so WARN, never FAIL.

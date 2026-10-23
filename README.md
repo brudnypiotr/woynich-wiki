@@ -26,7 +26,7 @@ send `instance\reports\llm-smoke.json`), `kb init` and `kb serve`.
 
 | Script | What it does |
 |---|---|
-| `doctor.cmd` | read-only check of the machine (PowerShell, policies, proxy, Python, Git, Copilot); changes nothing |
+| `doctor.cmd` | read-only check of the machine (PowerShell, policies, proxy, Python, Git, Copilot), of this installed copy (packages, which copy's code runs, pre-commit guards, setup for this version) and of the optional formats (Word, PowerPoint, OCR); changes nothing |
 | `setup.cmd` | the setup on its own (Wiki.cmd runs it when needed): private Python and packages, Git, Copilot runtime, `kb.cmd`, shortcut, 5 smoke tests (`-FullTest`: all); safe to run again |
 | `Wiki.cmd [instance folder]` | **the one script for users** (the desktop shortcut runs it): runs the setup when it is not done for this version, starts the app in the background with a tray icon (`kb tray`: restarts it after an update, offers an update when it fails); `Wiki.cmd --console` runs it in the console window instead, with its output |
 | `update.cmd` | downloads and installs the newest version (the same as Update in the app) |

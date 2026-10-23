@@ -42,6 +42,13 @@ def lock() -> singleton.Lock:
     return singleton.Lock(catalog.instance() / ".cache" / "tray.lock")
 
 
+def launcher() -> None:
+    """Start Wiki.cmd in its own console window (it runs the setup when needed, then the app again)."""
+    script = appgit.root() / "Wiki.cmd"
+    if os.name == "nt" and script.exists():
+        subprocess.Popen(["cmd.exe", "/c", "start", "", str(script)], cwd=str(appgit.root()), env=os.environ.copy())
+
+
 def kb_command(*args: str) -> list[str]:
     """This copy's own code, as kb.cmd runs it; python.exe (not pythonw) so the child has normal stdout."""
     py = Path(sys.executable)
@@ -67,9 +74,10 @@ def running_url(wait: float = 0) -> str | None:
 class Supervisor:
     """Runs `kb serve` until it stops for good; restarts it after an update. No GUI here, so it is testable."""
 
-    def __init__(self, command=None, finish=None, on_state=None):
+    def __init__(self, command=None, finish=None, on_state=None, relaunch=None):
         self.command = command or kb_command("serve")
         self.finish = finish or kb_command("update", "--finish")
+        self.relaunch = relaunch or launcher  # an update needs the setup: Wiki.cmd runs it in a window, then the app
         self.on_state = on_state or (lambda state, detail: None)
         self.url: str | None = None
         self.proc: subprocess.Popen | None = None
@@ -104,6 +112,11 @@ class Supervisor:
                 r = subprocess.run(self.finish, cwd=str(appgit.root()), env=self._env(), capture_output=True, text=True,
                                    encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
                 log(f"update --finish: {r.returncode} {(r.stdout + r.stderr).strip()[-300:]}")
+                if updater.setup_needed():
+                    log("the update needs the setup: starting Wiki.cmd")
+                    self.on_state("stopped", "running the setup for the update")
+                    self.relaunch()
+                    return 0
                 continue
             if self.quitting or self.code in (0, ALREADY_RUNNING):  # already running: kb serve opened that one
                 self.on_state("stopped", "")
