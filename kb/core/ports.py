@@ -45,6 +45,35 @@ class Extractor(ABC):
         """Return {'text': str, 'meta': dict}. Text must contain locator markers."""
 
 
+
+class Unavailable(RuntimeError):
+    """A platform service this laptop does not have (no Word, no OCR). The message says what is missing, for the user."""
+
+
+class DocumentConverter(ABC):
+    """Turns a file into another format with a program on this laptop (e.g. .doc → .docx with Word)."""
+
+    @abstractmethod
+    def available(self) -> tuple[bool, str]:
+        """(usable, why): a cheap check, without starting the program."""
+
+    @abstractmethod
+    def convert(self, src: Path, dest: Path) -> Path:
+        """Write `src` as `dest` (its suffix says the format) and return it; raise Unavailable when it cannot."""
+
+
+class TextRecognizer(ABC):
+    """Reads the text in a picture (OCR)."""
+    name: str = "ocr"
+
+    @abstractmethod
+    def available(self) -> tuple[bool, str]:
+        """(usable, why): a cheap check."""
+
+    @abstractmethod
+    def recognize(self, image: Path) -> str:
+        """The text in the picture, lines separated by newlines ("" when there is none); raise Unavailable when it cannot."""
+
 @dataclass
 class LLMResult:
     text: str

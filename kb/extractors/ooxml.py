@@ -32,6 +32,8 @@ R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 P = "{http://schemas.openxmlformats.org/presentationml/2006/main}"
 A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")
+DECK_HINT = ("This is a slide deck: `<!-- p. N -->` marks slide N (cite it as `p. N`). Slides are often terse; the speaker "
+             "notes say what the slide means. A slide marked (hidden) was not shown.")
 
 
 def _xml(z: zipfile.ZipFile, name: str):
@@ -290,7 +292,7 @@ class PptxExtractor(Extractor):
                     figures += self._images(z, slide, srels, n, out_dir, self.max_images - len(figures))
         return {"text": "\n\n".join(out) + "\n",
                 "meta": {"slides": len(out), "hidden_slides": hidden, "slides_without_text": empty, "tables": self.tables,
-                         "figures": figures}}
+                         "figures": figures, "hint": DECK_HINT}}
 
     @staticmethod
     def _para(p) -> str:

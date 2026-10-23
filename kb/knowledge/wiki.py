@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -77,9 +78,9 @@ def _extra(rec: dict, d: Path, chars: int) -> str:
                         else "named by slide, e.g. p0012-01.png is on slide 12" if _is_deck(rec)
                         else "named by page, e.g. p0012-01.png")
                      + "). Look at them where the text refers to a screen or diagram.")
-    if _is_deck(rec):
-        lines.append("- This is a slide deck: `<!-- p. N -->` marks slide N (cite it as `p. N`). Slides are often terse; "
-                     "the speaker notes say what the slide means. A slide marked (hidden) was not shown.")
+    hint = _extracted(d).get("hint")  # what the extractor knows about its format (a deck, a picture)
+    if hint:
+        lines.append(f"- {hint}")
     if chars > LARGE_SOURCE_CHARS:
         lines.append(f"- This source is long. Work through it section by section (e.g. 30–50 pages at a time), updating the "
                      "source page and the knowledge pages as you go, until you reach the end.")
@@ -87,6 +88,14 @@ def _extra(rec: dict, d: Path, chars: int) -> str:
         lines.append("- This is a recorded conversation. Turn what people explain into knowledge; keep names only for "
                      "decisions, ownership and open doubts. Ignore small talk.")
     return "\n".join(lines)
+
+
+def _extracted(d: Path) -> dict:
+    f = d / "extract.json"
+    try:
+        return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+    except ValueError:
+        return {}
 
 
 def _is_deck(rec: dict) -> bool:

@@ -45,6 +45,6 @@ def test_windows_scripts_are_ascii():
     """Windows PowerShell 5.1 reads a .ps1 without BOM as cp1252: a "→" turns into a quote and breaks setup."""
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
-    bad = [f"{p.relative_to(root)}:{n}" for p in [*root.glob("*.cmd"), *(root / "setup").glob("*.ps1")]
+    bad = [f"{p.relative_to(root)}:{n}" for p in [*root.glob("*.cmd"), *(root / "setup").glob("*.ps1"), *(root / "kb").rglob("*.ps1")]
            for n, line in enumerate(p.read_bytes().splitlines(), 1) if any(b > 127 for b in line)]
     assert not bad, f"non-ASCII characters in Windows scripts: {bad}"
