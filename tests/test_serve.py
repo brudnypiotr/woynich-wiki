@@ -178,11 +178,14 @@ def test_settings_models_profile_and_secrets(app, instance, monkeypatch):
     with pytest.raises(urllib.error.HTTPError) as e:
         call(base, token, "/api/settings", json.dumps({"model": {"override": "x; rm -rf /"}}).encode())
     assert e.value.code == 400
-    st = call(base, token, "/api/secrets/copilot-github-token", json.dumps({"value": "ghp_secret"}).encode())
+    with pytest.raises(urllib.error.HTTPError) as e:  # a classic token: Copilot refuses it, say so at once
+        call(base, token, "/api/secrets/copilot-github-token", json.dumps({"value": "ghp_classic"}).encode())
+    assert e.value.code == 400 and "Copilot Requests" in e.value.read().decode()
+    st = call(base, token, "/api/secrets/copilot-github-token", json.dumps({"value": "github_pat_secret"}).encode())
     assert {"name": "copilot-github-token", "set": True}.items() <= st["items"][0].items()
-    assert "ghp_secret" not in json.dumps(call(base, token, "/api/settings"))  # never sent back
+    assert "github_pat_secret" not in json.dumps(call(base, token, "/api/settings"))  # never sent back
     import os
-    assert os.environ["COPILOT_GITHUB_TOKEN"] == "ghp_secret"
+    assert os.environ["COPILOT_GITHUB_TOKEN"] == "github_pat_secret"
     st = call(base, token, "/api/secrets/confluence-token", json.dumps({"value": "c"}).encode())
     assert any(x["name"] == "confluence-token" and x["set"] for x in st["items"])
     st = call(base, token, "/api/secrets/copilot-github-token/delete", b"")
@@ -373,3 +376,18 @@ def test_an_assessment_prompt_of_the_knowledge_base_replaces_the_blueprints(inst
     (instance / "prompts").mkdir(parents=True, exist_ok=True)
     (instance / "prompts" / "assess.md").write_text("Own criteria for {{title}}.", encoding="utf-8")
     assert agent.prompt("assess", title="X") == "Own criteria for X." and assess.prompt_version("backfill") != before
+
+
+def test_copilot_check_asks_for_real(monkeypatch):
+    """Signed in is not enough: a token without Copilot Requests passes auth_status and fails on the first question."""
+    from types import SimpleNamespace
+    from kb.publish import settings
+
+    def refuse():
+        raise RuntimeError("The token does not have the Copilot Requests permission")
+    inner = SimpleNamespace(auth_status=lambda: {"is_authenticated": True, "login": "dwight"}, list_models=refuse)
+    monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "github_pat_x")
+    c = settings.check(SimpleNamespace(llm=SimpleNamespace(inner=inner)), "copilot")["copilot"]
+    assert c["ok"] is False and "refuses" in c["detail"] and "Resource owner" in c["detail"]
+    inner.list_models = lambda: [{"id": "m"}]
+    assert settings.check(SimpleNamespace(llm=SimpleNamespace(inner=inner)), "copilot")["copilot"]["ok"] is True

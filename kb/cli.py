@@ -511,8 +511,10 @@ def cmd_login(a) -> int:
     cli = shutil.which("copilot")
     if cli:
         return subprocess.call([cli, "login"])
+    from kb.publish.settings import TOKEN_STEPS
     print("GitHub Copilot CLI not found. Install it (winget install GitHub.Copilot, or npm i -g @github/copilot),\n"
-          "run `copilot login` once, then `kb llm-smoke`. Alternative: set COPILOT_GITHUB_TOKEN for this user.")
+          "run `copilot login` once, then `kb llm-smoke`. Alternative: store a GitHub token in Settings → GitHub Copilot.\n"
+          + TOKEN_STEPS)
     return 2
 
 
