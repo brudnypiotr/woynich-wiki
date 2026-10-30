@@ -95,7 +95,8 @@ def branding_contact(h):
 def usage(h):
     if h.query("refresh") or not USAGE["data"] or time.time() - USAGE["at"] > 300:  # real reading from GitHub: every 5 min
         USAGE.update(at=time.time(), data=settings.usage(h.gw))
-    return h.send(200, settings.usage_estimate(USAGE["data"]))  # + what kb used since then
+    out = settings.usage_estimate(USAGE["data"])  # + what kb used since then
+    return h.send(200, {**(out or {}), "token": settings.token_expiry()})  # the sidebar warns before the token expires
 
 
 @route("GET", r"/api/status")
