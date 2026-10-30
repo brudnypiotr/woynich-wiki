@@ -33,6 +33,8 @@ KEY = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 DOC_EXT = {".pdf", ".docx", ".doc", ".xlsx", ".pptx", ".txt", ".md", ".eml", ".msg", ".vtt", ".csv", ".json", ".xml", ".log", ".html"}
 MAX_ATTACHMENT = 25_000_000
+IMAGES_BUDGET_S = 45        # looking an issue up: stop fetching its pictures after this long (the model is waiting)
+ATTACHMENT_TIMEOUT_S = 20
 MAX_IMAGES = 20             # per issue, when looking an issue up (jira_get, kb jira get)
 
 
@@ -78,14 +80,14 @@ class Jira(Connector):
         return email, token
 
     # ------------------------------------------------------------------ HTTP
-    def _request(self, url: str, accept: str) -> tuple[bytes, str]:
+    def _request(self, url: str, accept: str, timeout: float = 60) -> tuple[bytes, str]:
         req = urllib.request.Request(url, headers={"Accept": accept, "User-Agent": "woynich-wiki"})
         if self.cloud:  # Cloud: e-mail + API token; Data Center: personal access token (an e-mail, if known, is not used)
             req.add_header("Authorization", "Basic " + base64.b64encode(f"{self.email}:{self.token}".encode()).decode())
         else:
             req.add_header("Authorization", f"Bearer {self.token}")
         try:
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
                 body, ctype = r.read(), r.headers.get_content_type() or ""
         except urllib.error.HTTPError as e:
             if e.code in (401, 403):
@@ -123,7 +125,7 @@ class Jira(Connector):
     def attachment(self, att_id: str, name: str) -> bytes:
         url = (f"{self.base}/rest/api/3/attachment/content/{att_id}" if self.cloud
                else f"{self.base}/secure/attachment/{att_id}/{urllib.parse.quote(name)}")
-        return self._request(url, "*/*")[0]
+        return self._request(url, "*/*", timeout=ATTACHMENT_TIMEOUT_S)[0]
 
     def search(self, jql: str, limit: int = 50) -> list[dict]:
         issues, start = [], 0
@@ -162,10 +164,13 @@ class Jira(Connector):
             item.meta["warnings"] += warnings
         return item
 
-    def download(self, xml: str, dest: Path, only: set[str] | None = None, limit: int | None = None) -> tuple[list[dict], list[str]]:
-        """The issue's attachments into `dest` (only those with a suffix in `only`, at most `limit`). A file already
-        there with the same size is not fetched again, so looking an issue up twice costs nothing.
-        Returns ([{path, name, size, author, created}], warnings)."""
+    def download(self, xml: str, dest: Path, only: set[str] | None = None, limit: int | None = None,
+                 budget_s: float | None = None) -> tuple[list[dict], list[str]]:
+        """The issue's attachments into `dest` (only those with a suffix in `only`, at most `limit`, fetching for at
+        most `budget_s` seconds). A file already there with the same size is not fetched again, so looking an issue
+        up twice costs nothing. Returns ([{path, name, size, author, created}], warnings)."""
+        import time
+        t0 = time.monotonic()
         atts = [a for a in ET.fromstring(xml).iter("attachment") if (a.get("id") or "").isdigit() and Path(a.get("name") or "").name]
         names = [Path(a.get("name")).name for a in atts]
         files, warnings = [], []
@@ -182,6 +187,9 @@ class Jira(Connector):
             safe = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
             p = dest / (safe if names.count(name) == 1 else f"{Path(safe).stem}-{att_id}{Path(safe).suffix}")
             if not (p.exists() and size and p.stat().st_size == size):
+                if budget_s is not None and time.monotonic() - t0 > budget_s:
+                    warnings.append(f"{name} and the rest: not downloaded (took over {int(budget_s)} s; ask again to fetch more)")
+                    break
                 try:
                     data = self.attachment(att_id, name)
                 except Exception as e:
@@ -213,7 +221,7 @@ def get_text(key: str, images: Path | None = None, shown_from: Path | None = Non
         text = JiraXmlExtractor().extract(p)["text"]
     if images is None:
         return text
-    files, warnings = j.download(xml, Path(images) / k, only=IMAGE_EXT, limit=MAX_IMAGES)
+    files, warnings = j.download(xml, Path(images) / k, only=IMAGE_EXT, limit=MAX_IMAGES, budget_s=IMAGES_BUDGET_S)
     if not files and not warnings:
         return text
     show = lambda f: (f.relative_to(shown_from) if shown_from and f.is_relative_to(shown_from) else f).as_posix()  # noqa: E731

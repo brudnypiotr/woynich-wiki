@@ -21,12 +21,14 @@ class KbSearch(BaseModel):
 
 def tools() -> list:
     from copilot import define_tool
+    from kb.knowledge.tools import off_loop
     from kb.knowledge import search, wiki
 
     @define_tool(description="Full-text search in the knowledge base: wiki pages and the original sources, best matches "
                              "first, each with where it is (wiki page path, or source page and page/time locator) and a "
                              "fragment. Use it to find where something is mentioned before reading files; it matches words, "
                              "not meaning, so try other words (or English and Polish) if nothing comes back. Read-only.")
+    @off_loop
     def kb_search(params: KbSearch) -> str:
         search.ensure_fresh()
         kind = {"sources": "source", "pages": "page"}.get(params.scope.strip().lower())

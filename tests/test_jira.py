@@ -43,7 +43,7 @@ LINKS = """<issuelinktype id="1"><name>Relates</name><outwardlinks description="
 def fake(monkeypatch):
     calls = []
 
-    def request(self, url, accept):
+    def request(self, url, accept, timeout=60):
         calls.append(url)
         if "issue-xml/EXA-150/" in url:
             return issue("EXA-150", LINKS).encode(), "application/xml"
@@ -138,7 +138,7 @@ def test_heartbeat(monkeypatch, instance):
     from kb.llm.gateway import Gateway
     from kb.publish import settings
 
-    def request(self, url, accept):
+    def request(self, url, accept, timeout=60):
         assert url.endswith("/rest/api/3/myself?")
         return b'{"displayName": "Piotr", "emailAddress": "me@example.com"}', "application/json"
     monkeypatch.setattr(jira.Jira, "_request", request)
@@ -202,3 +202,30 @@ def test_the_pictures_folder_is_readable_by_the_model_and_ignored_by_git(instanc
     assert box.decide("view", {"path": str(p)})[0] and not box.decide("create", {"path": str(p)})[0]
     out = subprocess.run(["git", "-C", str(instance), "status", "--porcelain"], capture_output=True, text=True).stdout
     assert ".cache" not in out
+
+
+def test_tools_run_off_the_session_loop():
+    """A slow tool (Jira pictures) must not freeze the session's event loop, or Stop cannot reach the session."""
+    import asyncio
+    import threading
+    from kb.knowledge.tools import off_loop
+
+    @off_loop
+    def slow(x: int) -> str:
+        return threading.current_thread().name
+
+    async def main():
+        loop_thread = threading.current_thread().name
+        ticks = []
+        async def ticker():
+            for _ in range(3):
+                ticks.append(1); await asyncio.sleep(0)
+        name, _ = await asyncio.gather(slow(1), ticker())
+        return name != loop_thread and len(ticks) == 3
+    assert asyncio.run(main())
+
+
+def test_picture_download_stops_after_its_time_budget(fake, tmp_path):
+    xml = jira.Jira(**CFG).issue_xml("EXA-150")
+    files, warnings = jira.Jira(**CFG).download(xml, tmp_path, only=jira.IMAGE_EXT, budget_s=-1)
+    assert not files and "not downloaded (took over" in warnings[0]

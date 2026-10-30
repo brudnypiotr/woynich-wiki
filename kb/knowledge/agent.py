@@ -313,13 +313,20 @@ class LiveSession:
         return reply, await _usage(self.session)
 
     def abort(self) -> bool:
-        """Stop the answer being written (the session stays usable for the next question)."""
+        """Stop the answer being written (the session stays usable for the next question). If the runtime does not
+        take the abort within 15 s, stop the runtime itself: the answer ends at once with what was written, and the
+        next question opens a new session (`dead`)."""
         self.stopped = True
         try:
             self._call(self.session.abort(), 15)
             return True
         except Exception:
-            return False  # the sandbox still denies every further tool call
+            self.dead = True
+            try:
+                self._call(self.client.stop(), 15)
+                return True
+            except Exception:
+                return False  # the sandbox still denies every further tool call
 
     def send(self, prompt: str, attachments=(), progress=None, cancelled=None) -> AgentResult:
         # `stopped` is reset by the caller when the question starts (Conversation.ask), not here: a Stop pressed
