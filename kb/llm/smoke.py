@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import platform
-import shutil
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -57,7 +56,8 @@ def run() -> dict:
     p = config.paths()
     report = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "python": platform.python_version(),
               "os": platform.platform(), "adapters": {}}
-    cli = shutil.which("copilot")
+    from kb.llm.adapters import find_copilot_cli
+    cli = find_copilot_cli()
     report["copilot_cli_on_path"] = cli
     if cli:
         for args in (["--version"], ["--help"]):

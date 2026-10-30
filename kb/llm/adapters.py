@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+import glob
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -15,6 +17,50 @@ CLI_MAX_PROMPT_CHARS = 28000
 
 
 _NOTED: set[str] = set()
+
+
+def _registry_path() -> str:
+    """PATH as Windows has it now (user + system), not as this process inherited it: a CLI installed after the
+    app started is on it."""
+    import winreg
+    parts = []
+    for root, key in ((winreg.HKEY_CURRENT_USER, "Environment"),
+                      (winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment")):
+        try:
+            with winreg.OpenKey(root, key) as k:
+                parts.append(os.path.expandvars(winreg.QueryValueEx(k, "Path")[0]))
+        except OSError:
+            pass
+    return os.pathsep.join(parts)
+
+
+def find_copilot_cli(windows: bool = os.name == "nt") -> str | None:
+    """The full GitHub Copilot CLI (the one with `copilot login`), also when it is installed but not on this process's
+    PATH: the PATH from the registry, winget, npm, and the copy the Copilot Chat extension of VS Code keeps.
+    The runtime bundled with the SDK is not it: it has no `login`."""
+    found = shutil.which("copilot")
+    if found or not windows:
+        return found
+    try:
+        found = shutil.which("copilot", path=_registry_path())
+    except Exception:  # no registry access
+        found = None
+    if found:
+        return found
+    local, roaming = os.environ.get("LOCALAPPDATA"), os.environ.get("APPDATA")
+    patterns = []
+    if local:
+        patterns += [os.path.join(local, "Microsoft", "WinGet", "Links", "copilot.exe"),
+                     os.path.join(local, "Microsoft", "WinGet", "Packages", "GitHub.Copilot*", "copilot.exe")]
+    if roaming:
+        patterns += [os.path.join(roaming, "npm", "copilot.cmd"),
+                     *(os.path.join(roaming, "Code*", "User", "globalStorage", "github.copilot-chat", "**", f"copilot.{ext}")
+                       for ext in ("exe", "cmd", "bat"))]
+    for pattern in patterns:
+        hits = sorted(glob.glob(pattern, recursive=True), key=os.path.getmtime, reverse=True)
+        if hits:
+            return hits[0]
+    return None
 
 
 def _run(coro):
@@ -67,7 +113,7 @@ class CopilotCLIAdapter(LLM):
         """How to start the CLI. On Windows an npm install is a `copilot.CMD` shim: Python cannot start it by name, and
         running it through cmd.exe would mangle long prompts (quoting, 8 KB limit). Run its JavaScript with node instead."""
         if self._argv is None:
-            path = shutil.which(self.command) or self.command
+            path = (find_copilot_cli() if self.command == "copilot" else shutil.which(self.command)) or self.command
             self._argv = [path]
             if path.lower().endswith((".cmd", ".bat")):
                 import re
@@ -81,7 +127,7 @@ class CopilotCLIAdapter(LLM):
         return self._argv
 
     def available(self) -> bool:
-        return shutil.which(self.command) is not None
+        return (find_copilot_cli() if self.command == "copilot" else shutil.which(self.command)) is not None
 
     def _supports(self, flag: str) -> bool:
         """CLI versions differ (e.g. --usage-output-file appeared in 1.0.81); detect from --help once."""

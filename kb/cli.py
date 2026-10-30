@@ -506,9 +506,9 @@ def cmd_llm_smoke(a) -> int:
 def cmd_login(a) -> int:
     """Sign in to GitHub Copilot once. The SDK reuses the credentials stored by the Copilot CLI login
     (or COPILOT_GITHUB_TOKEN / GH_TOKEN). The runtime bundled with the SDK has no `login` command."""
-    import shutil
     import subprocess
-    cli = shutil.which("copilot")
+    from kb.llm.adapters import find_copilot_cli
+    cli = find_copilot_cli()
     if cli:
         return subprocess.call([cli, "login"])
     from kb.publish.settings import TOKEN_STEPS
