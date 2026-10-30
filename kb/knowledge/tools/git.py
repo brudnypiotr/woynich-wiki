@@ -61,10 +61,12 @@ class GitDiff(BaseModel):
 
 def tools() -> list:
     from copilot import define_tool
+    from kb.knowledge.tools import off_loop
 
     @define_tool(description="Commit history of a code repository: hash, date, author and subject. Filter by file or "
                              "folder, message text (e.g. a Jira key), author, date, or start from a branch or tag. "
                              "Cite a commit as `repo@hash`. Read-only.")
+    @off_loop
     def git_log(params: GitLog) -> str:
         args = ["log", f"-n{max(1, min(50, params.limit))}", "--date=short", "--format=%h %ad %an <%ae> %s"]
         if params.grep.strip():
@@ -83,6 +85,7 @@ def tools() -> list:
 
     @define_tool(description="One commit of a code repository: author, date, full message, changed files and the diff "
                              "(optionally of one file only). Cite as `repo@hash`. Read-only.")
+    @off_loop
     def git_show(params: GitShow) -> str:
         if not repo.HASH.fullmatch(params.commit.strip()):
             return "commit must be a hash (4-40 hex characters)"
@@ -95,6 +98,7 @@ def tools() -> list:
 
     @define_tool(description="Who last changed each line of a file (git blame): commit, author and date per line. "
                              "Use it to find the commit behind a rule or a value, then git_show it. Read-only.")
+    @off_loop
     def git_blame(params: GitBlame) -> str:
         start, end = max(1, params.start), max(1, params.end)
         if end < start or end - start > 200:
@@ -106,6 +110,7 @@ def tools() -> list:
 
     @define_tool(description="Branches and tags of a code repository (newest first) with their commit and date, and "
                              "what is checked out now. Use it before comparing versions or searching another branch. Read-only.")
+    @off_loop
     def git_refs(params: GitRefs) -> str:
         now = repo.git(params.repo, "rev-parse", "--abbrev-ref", "HEAD")
         out = repo.git(params.repo, "for-each-ref", "--sort=-committerdate", "--count=300",
@@ -118,6 +123,7 @@ def tools() -> list:
     @define_tool(description="Search the code of a repository at a branch, tag or commit (default: what is checked "
                              "out): exact text, case-insensitive, with file and line. Use it to see what another version "
                              "contains. Cite as `repo/path:line@commit` with the commit given in the first line. Read-only.")
+    @off_loop
     def git_grep(params: GitGrep) -> str:
         text = params.text.strip()
         if not text:
@@ -135,6 +141,7 @@ def tools() -> list:
 
     @define_tool(description="What changed between two versions of a repository (branches, tags or commits): first "
                              "with stat_only to see the files, then for one file or folder. Read-only.")
+    @off_loop
     def git_diff(params: GitDiff) -> str:
         try:
             old, new = repo.ref(params.old), repo.ref(params.new)

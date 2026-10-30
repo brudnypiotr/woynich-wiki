@@ -203,9 +203,12 @@ class Conversation:
                 self.close()  # the next question starts a new session with the history
                 raise
             self.changed = set()
+            live = self.live
+            if getattr(live, "dead", False):  # stopped the hard way: the next question opens a new session
+                self.close()
             out = _finish(question, res, focus, attachments, t0, "agent_discussion")
-            out["session"] = "new" if fresh and not getattr(self.live, "resumed", False) else ("resumed" if fresh else "continued")
-            out["stopped"] = bool(getattr(self.live, "stopped", False))
+            out["session"] = "new" if fresh and not getattr(live, "resumed", False) else ("resumed" if fresh else "continued")
+            out["stopped"] = bool(getattr(live, "stopped", False))
             self.history.append({"question": question, "answer_text": out["answer_text"]})
             return out
 

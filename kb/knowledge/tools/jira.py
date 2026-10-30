@@ -40,6 +40,7 @@ class JiraSearch(BaseModel):
 def tools() -> list:
     cfg = jira_config()
     from copilot import define_tool
+    from kb.knowledge.tools import off_loop
     from kb.connectors import jira
 
     @define_tool(description="Fetch one Jira issue as compact text: fields, links, custom fields (e.g. found in release), "
@@ -47,12 +48,14 @@ def tools() -> list:
                              "Its pictures are downloaded and their paths listed at the end: look at one with the view tool "
                              "when the text refers to a screen, an error, a table or a diagram (you decide; not every one). "
                              "Accepts a key or a Jira URL. Read-only.")
+    @off_loop
     def jira_get(params: JiraGet) -> str:
         from kb.knowledge import catalog
         return jira.get_text(params.key.strip(), images=images_dir() if params.images else None,
                              shown_from=catalog.instance(), **cfg)[:40_000]
 
     @define_tool(description="Search Jira with JQL; returns key, summary and status of matching issues. Read-only.")
+    @off_loop
     def jira_search(params: JiraSearch) -> str:
         issues = jira.Jira(**cfg).search(params.jql, max(1, min(20, params.limit)))
         return "\n".join(f"{i['key']}: {i['fields'].get('summary', '')} [{(i['fields'].get('status') or {}).get('name', '')}]"

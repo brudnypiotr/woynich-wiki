@@ -71,10 +71,12 @@ def _is_definition(line: str, name: str) -> bool:
 
 def tools() -> list:
     from copilot import define_tool
+    from kb.knowledge.tools import off_loop
 
     @define_tool(description="Outline of a source file: classes, methods, functions, SQL objects, FitNesse headings or "
                              "named XML elements, each with its line number. Read it first, then view only the lines "
                              "you need instead of the whole file. Read-only.")
+    @off_loop
     def code_outline(params: CodeOutline) -> str:
         r = next((x for x in repo.repos() if x["name"] == params.repo), None)
         if r is None:
@@ -94,6 +96,7 @@ def tools() -> list:
     @define_tool(description="Where a name (class, method, function, procedure, table, parameter) is defined and "
                              "where it is used in a repository, with file and line: definitions first, then up to 60 "
                              "uses. Faster than searching file by file. Read-only.")
+    @off_loop
     def find_symbol(params: FindSymbol) -> str:
         name = params.name.strip()
         if not re.fullmatch(r"[A-Za-z_$][\w$.]{0,120}", name):

@@ -20,6 +20,8 @@ export const isBusy = () => PENDS.size > 0;
 
 export async function delSession(id) {if (!confirm('Delete this discussion? Wiki pages saved from it stay.')) return;
   try {await api('/api/sessions/' + id + '/delete', {method: 'POST'})} catch (e) {return alert(e.message)}
+  const p = PENDS.get(id); if (p) {p.live = false; PENDS.delete(id); flag(id, 'done'); busyUi()}  // its answer is dropped: free the slot now
+  FAILED.delete(id);
   if (S && S.id === id) {S = null; if (location.hash.slice(1)) location.hash = ''; else openChat(null)} loadSessions()}
 
 export function openChat(s, keep) {S = s; mark(s ? 's=' + s.id : 'new'); const top = keep && $('#scroll') ? $('#scroll').scrollTop : 0; if (!keep) AT_END = true;
@@ -71,6 +73,7 @@ function renderTurns() {const el = $('#turns'), p = pendHere(), sc = $('#scroll'
   if (AT_END) scrollEnd(); else if (sc) sc.scrollTop = top}  // a reader scrolled up keeps their place when the answer lands
 
 async function stopAnswer() {const pend = pendHere(); if (!pend) return; const p = $('#pnow'); if (p) p.textContent = 'Stopping…';
+  setTimeout(() => {const n = pendHere() === pend && $('#pnow'); if (n && pend.live) n.textContent = 'Stopping… (waiting for the current step to end; at most ~30 s)'}, 8000);
   try {await api('/api/sessions/' + pend.sid + '/stop', {method: 'POST'})} catch (e) {if (p) p.textContent = e.message}}
 // the send button: Stop while this discussion is being answered; disabled while MAX_PARALLEL others are
 function busyUi() {const b = $('#ask'); if (!b) return; const mine = !!pendHere(), full = !mine && PENDS.size >= MAX_PARALLEL; b.classList.toggle('stop', mine);
