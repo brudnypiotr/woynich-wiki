@@ -55,3 +55,22 @@ def test_cli_parsing_final_message_and_tokens():
          "agentMetrics": {"main": {"modelMetrics": {"m": {"usage": {"inputTokens": 100, "outputTokens": 7}}}}},
          "providerModelMetrics": [{"metrics": {"usage": {"inputTokens": 100, "outputTokens": 7}}}]}
     assert _sum_tokens(u) == (100, 7)
+
+
+def test_find_copilot_cli_off_path(tmp_path, monkeypatch):
+    """Installed but not on this process's PATH (winget after the app started, npm, VS Code's Copilot Chat): still found."""
+    from kb.llm import adapters
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    monkeypatch.setattr(adapters, "_registry_path", lambda: str(tmp_path / "empty"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "roaming"))
+    assert adapters.find_copilot_cli(windows=True) is None
+    vscode = tmp_path / "roaming" / "Code" / "User" / "globalStorage" / "github.copilot-chat" / "copilotCli" / "copilot.bat"
+    vscode.parent.mkdir(parents=True)
+    vscode.write_text("@echo off")
+    assert adapters.find_copilot_cli(windows=True) == str(vscode)
+    winget = tmp_path / "local" / "Microsoft" / "WinGet" / "Links" / "copilot.exe"
+    winget.parent.mkdir(parents=True)
+    winget.write_text("")
+    assert adapters.find_copilot_cli(windows=True) == str(winget)          # winget first
+    assert adapters.find_copilot_cli(windows=False) is None                # elsewhere: PATH only

@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -18,6 +17,7 @@ import yaml
 
 from kb.core import config, registry
 from kb.core import secrets as secret_env
+from kb.llm.adapters import find_copilot_cli
 
 TOKEN_STEPS = ("Create a fine-grained token at https://github.com/settings/personal-access-tokens/new: Resource owner = "
                "your own account (not the organisation), Permissions → Add permissions → Copilot Requests. "
@@ -97,7 +97,7 @@ def state() -> dict:
                     "jira_email": jira.get("email") or "",
                     "code_repos": _repos(), "architecture": str(prof.get("architecture") or "")},
         "secrets": secrets_state(),
-        "copilot_cli": bool(shutil.which("copilot")),
+        "copilot_cli": bool(find_copilot_cli()),
         "files": {"models": str(_inst("models")), "profile": str(_inst("profile"))},
     }
 
@@ -386,10 +386,11 @@ def setup_done(done: bool = True) -> dict:
 
 def login() -> dict:
     """Start `copilot login` (GitHub device flow) in its own console window on Windows."""
-    cli = shutil.which("copilot")
+    cli = find_copilot_cli()
     if not cli:
-        return {"ok": False, "message": "The browser sign-in needs the GitHub Copilot CLI, which is not installed on this PC. "
-                                        "Use a GitHub token below instead. " + TOKEN_STEPS}
+        return {"ok": False, "message": "The browser sign-in needs the GitHub Copilot CLI and it is not on this PC (looked on PATH, "
+                                        "winget, npm and VS Code). Install it per user: winget install GitHub.Copilot, then press "
+                                        "Sign in with GitHub again. Or use a GitHub token below: " + TOKEN_STEPS}
     if os.name == "nt":
         subprocess.Popen([cli, "login"], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
         return {"ok": True, "message": "A console window opened: follow the steps there, then press Check sign-in."}
