@@ -20,9 +20,11 @@ from kb.core import secrets as secret_env
 from kb.llm.adapters import find_copilot_cli
 
 TOKEN_STEPS = ("Create a fine-grained token at https://github.com/settings/personal-access-tokens/new: "
-               "1) Resource owner = your personal account (not the organisation); 2) Repository access = Public repositories; "
-               "3) Permissions → the Account tab (not Repositories) → Add permissions → Copilot Requests; "
-               "4) Generate token and paste it here. Classic tokens (ghp_…) do not work with Copilot.")
+               "1) Resource owner = your personal account (not the organisation); 2) Expiration = one year (Custom); "
+               "3) Repository access = Public repositories; "
+               "4) Permissions → the Account tab (not Repositories) → Add permissions → Copilot Requests; "
+               "5) Generate token and paste it here. Classic tokens (ghp_…) do not work with Copilot.")
+TOKEN_WARN_DAYS = 7
 KNOWN_SECRETS = [
     {"name": "copilot-github-token", "label": "GitHub token for Copilot",
      "help": "Only needed when the browser sign-in is not possible (used as COPILOT_GITHUB_TOKEN). " + TOKEN_STEPS},
@@ -250,6 +252,50 @@ def account(gw) -> dict:
     return out
 
 
+_EXPIRY: dict = {"at": 0.0, "token": None, "data": None}
+
+
+def _parse_expiry(header: str):
+    """GitHub-Authentication-Token-Expiration, e.g. "2027-10-27 09:15:00 UTC" (or with a +hhmm offset)."""
+    from datetime import datetime, timezone
+    m = re.match(r"\s*(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})\s*(UTC|[+-]\d{2}:?\d{2})?", header or "")
+    if not m:
+        return None
+    off = (m.group(3) or "UTC").replace(":", "")
+    when = datetime.strptime(f"{m.group(1)} {m.group(2)} {'+0000' if off == 'UTC' else off}", "%Y-%m-%d %H:%M:%S %z")
+    return when.astimezone(timezone.utc)
+
+
+def token_expiry(fetch=None, now=None) -> dict | None:
+    """When the stored GitHub token for Copilot expires. GitHub says it in a response header on any API call made
+    with the token (one GET /user, no AI credits). Asked again every 6 hours or when the token changes.
+    None: no token, or GitHub could not be reached. {"expires": None} : a token without an expiry date."""
+    import urllib.request
+    from datetime import datetime, timezone
+    token = os.environ.get("COPILOT_GITHUB_TOKEN")
+    if not token:
+        return None
+    if _EXPIRY["token"] != token or time.time() - _EXPIRY["at"] > 6 * 3600:
+        def get(tok):
+            req = urllib.request.Request("https://api.github.com/user", headers={
+                "Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json", "User-Agent": "woynich-wiki"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.headers.get("GitHub-Authentication-Token-Expiration")
+        try:
+            header = (fetch or get)(token)
+            when = _parse_expiry(header) if header else None
+            _EXPIRY.update(at=time.time(), token=token, data={"expires": when.isoformat() if when else None})
+        except Exception:
+            return None  # offline or proxy: try again next time, never block the app
+    data = dict(_EXPIRY["data"] or {})
+    if data.get("expires"):
+        left = datetime.fromisoformat(data["expires"]) - (now or datetime.now(timezone.utc))
+        data["days_left"] = max(0, left.days)
+        data["expired"] = left.total_seconds() <= 0
+        data["warn"] = left.days < TOKEN_WARN_DAYS
+    return data
+
+
 def check(gw, what: str = "all") -> dict:
     """Heartbeat of the credentials, no premium request: GitHub Copilot sign-in and one Jira /myself call.
     Each entry: ok (True / False / None = not configured), detail."""
@@ -267,6 +313,10 @@ def check(gw, what: str = "all") -> dict:
                 via = " (GitHub token from Keys and tokens)" if os.environ.get("COPILOT_GITHUB_TOKEN") else ""
                 out["copilot"] = {"ok": ok, "detail": (f"signed in{' as ' + who if who else ''}{' · ' + how if how else ''}{via}" if ok
                                                        else (st.get("status_message") or st.get("statusMessage") or "not signed in: run kb login"))}
+                exp = token_expiry() if via else None
+                if ok and exp and exp.get("expires"):
+                    out["copilot"]["detail"] += (" · token expired" if exp["expired"]
+                                                 else f" · token expires on {exp['expires'][:10]} ({exp['days_left']} days)")
                 lister = getattr(gw.llm.inner, "list_models", None)
                 if ok and lister:  # a token can sign in and still be refused on the first question: ask for real, at no cost
                     try:

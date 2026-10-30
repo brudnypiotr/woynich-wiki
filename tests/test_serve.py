@@ -387,7 +387,57 @@ def test_copilot_check_asks_for_real(monkeypatch):
         raise RuntimeError("The token does not have the Copilot Requests permission")
     inner = SimpleNamespace(auth_status=lambda: {"is_authenticated": True, "login": "dwight"}, list_models=refuse)
     monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "github_pat_x")
+    monkeypatch.setattr(settings, "token_expiry", lambda: {"expires": "2027-10-27T09:15:00+00:00", "days_left": 362, "expired": False, "warn": False})
     c = settings.check(SimpleNamespace(llm=SimpleNamespace(inner=inner)), "copilot")["copilot"]
     assert c["ok"] is False and "refuses" in c["detail"] and "Resource owner" in c["detail"]
     inner.list_models = lambda: [{"id": "m"}]
-    assert settings.check(SimpleNamespace(llm=SimpleNamespace(inner=inner)), "copilot")["copilot"]["ok"] is True
+    c = settings.check(SimpleNamespace(llm=SimpleNamespace(inner=inner)), "copilot")["copilot"]
+    assert c["ok"] is True and "expires on 2027-10-27 (362 days)" in c["detail"]
+
+
+def test_two_discussions_are_answered_at_once(app):
+    """Each discussion has its own agent session: a slow answer in one does not hold up a question in another."""
+    from kb.knowledge.agent import AgentResult
+    both = threading.Barrier(2, timeout=20)  # passes only while both answers are in progress at the same time
+
+    class Parallel:
+        def open(self, model, root, read_roots=(), tools=(), resume=None):
+            class Live:
+                id, resumed = f"live-{time.time_ns()}", False
+                def send(self, task, attachments=(), progress=None, cancelled=None):
+                    both.wait()
+                    return AgentResult("NOT FOUND: nothing on this yet.", 0.1, model, 10, 1, 1.0, [])
+                def close(self):
+                    pass
+            return Live()
+    base, token = app
+    serve.Handler.runner = Parallel()
+    ids = [call(base, token, "/api/sessions", json.dumps({"topic": f"t{i}"}).encode())["id"] for i in range(2)]
+    out = {}
+    ts = [threading.Thread(target=lambda i=i: out.setdefault(i, call(base, token, f"/api/sessions/{i}/ask",
+                                                                    json.dumps({"question": "rest?"}).encode()))) for i in ids]
+    [t.start() for t in ts]; [t.join(30) for t in ts]
+    assert set(out) == set(ids) and all(t["not_found"] for t in out.values())
+
+
+def test_token_expiry_from_github_header(monkeypatch):
+    from datetime import datetime, timezone
+    from kb.publish import settings
+    monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "github_pat_a")
+    settings._EXPIRY.update(at=0.0, token=None, data=None)
+    now = datetime(2026, 10, 30, 12, tzinfo=timezone.utc)
+    e = settings.token_expiry(fetch=lambda tok: "2027-10-27 09:15:00 UTC", now=now)
+    assert e["expires"].startswith("2027-10-27T09:15") and not e["warn"] and not e["expired"]
+    calls = []
+    assert settings.token_expiry(fetch=lambda tok: calls.append(tok), now=now)["days_left"] > 300 and not calls  # cached
+    monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "github_pat_b")                                                  # new token: asked again
+    e = settings.token_expiry(fetch=lambda tok: "2026-11-03 10:00:00 +0100", now=now)
+    assert e["days_left"] == 3 and e["warn"] and not e["expired"]
+    settings._EXPIRY.update(at=0.0)
+    assert settings.token_expiry(fetch=lambda tok: None, now=now) == {"expires": None}                         # no expiry date
+    settings._EXPIRY.update(at=0.0)
+    def offline(tok):
+        raise OSError("no network")
+    assert settings.token_expiry(fetch=offline, now=now) is None                                               # never blocks
+    monkeypatch.delenv("COPILOT_GITHUB_TOKEN")
+    assert settings.token_expiry() is None

@@ -14,6 +14,7 @@ const STEPS = `<p class="howto"><b>Works on every PC, takes 2 minutes.</b> Press
   <ol class="steps">
     <li><b>Token name</b>: already filled in (any name works).</li>
     <li><b>Resource owner</b>: <b>your personal account</b>, not the organisation.</li>
+    <li><b>Expiration</b>: <b>Custom</b> → a date <b>one year</b> from today. The app warns you a week before it expires.</li>
     <li><b>Repository access</b>: <b>Public repositories</b>.</li>
     <li><b>Permissions</b>: open the <b>Account</b> tab (not <i>Repositories</i>) → <b>Add permissions</b> → tick <b>Copilot Requests</b>.</li>
     <li><b>Generate token</b>, copy it (it starts with <code>github_pat_</code>), paste it below and press <b>Save</b>.</li>
