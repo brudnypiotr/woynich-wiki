@@ -13,7 +13,7 @@ export function mountCopilot(el, C) {
     <div class="cstat"></div><div class="acc"></div>
     <details class="alt"><summary>No browser sign-in possible? Use a GitHub token</summary><div class="tok"></div></details>`;
   const n = el.querySelector('.note'), stat = () => {el.querySelector('.cstat').innerHTML = checkLine(checkState('copilot'))};
-  const tok = () => {const x = secretItem(secrets, SECRET_NAME); el.querySelector('.tok').innerHTML = secretRow(x); if (x.set) el.querySelector('details.alt').open = true};
+  const tok = () => {const x = secretItem(secrets, SECRET_NAME); el.querySelector('.tok').innerHTML = secretRow(x); if (x.set || !C.copilot_cli) el.querySelector('details.alt').open = true};
   tok(); stat();
   const off = onCheck(w => {if (!el.isConnected) return off(); if (w === 'copilot') stat()});
   bindSecrets(el.querySelector('.tok'), st => {secrets = st; tok(); runCheck('copilot')});

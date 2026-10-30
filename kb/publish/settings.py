@@ -19,9 +19,12 @@ import yaml
 from kb.core import config, registry
 from kb.core import secrets as secret_env
 
+TOKEN_STEPS = ("Create a fine-grained token at https://github.com/settings/personal-access-tokens/new: Resource owner = "
+               "your own account (not the organisation), Permissions → Add permissions → Copilot Requests. "
+               "Classic tokens (ghp_…) do not work with Copilot.")
 KNOWN_SECRETS = [
     {"name": "copilot-github-token", "label": "GitHub token for Copilot",
-     "help": "Only needed when copilot login is not possible: a GitHub token with Copilot access (used as COPILOT_GITHUB_TOKEN)."},
+     "help": "Only needed when the browser sign-in is not possible (used as COPILOT_GITHUB_TOKEN). " + TOKEN_STEPS},
     {"name": "jira-token", "label": "Jira token",
      "help": "Personal access token (Jira Data Center) or API token (Jira Cloud). Not needed if the Windows credential copilot-jira (jira-snapshot skill) exists."},
 ]
@@ -185,6 +188,8 @@ def secret_set(name: str, value: str) -> dict:
     value = (value or "").strip()
     if not value:
         raise ValueError("value is empty")
+    if name == "copilot-github-token" and value.startswith("ghp_"):
+        raise ValueError("this is a classic token: Copilot does not accept it. " + TOKEN_STEPS)
     store().set(name, value)
     if name in secret_env.ENV:
         os.environ[secret_env.ENV[name]] = value  # this server uses it at once
@@ -261,6 +266,14 @@ def check(gw, what: str = "all") -> dict:
                 via = " (GitHub token from Keys and tokens)" if os.environ.get("COPILOT_GITHUB_TOKEN") else ""
                 out["copilot"] = {"ok": ok, "detail": (f"signed in{' as ' + who if who else ''}{' · ' + how if how else ''}{via}" if ok
                                                        else (st.get("status_message") or st.get("statusMessage") or "not signed in: run kb login"))}
+                lister = getattr(gw.llm.inner, "list_models", None)
+                if ok and lister:  # a token can sign in and still be refused on the first question: ask for real, at no cost
+                    try:
+                        lister()
+                    except Exception as e:
+                        msg = str(e)
+                        out["copilot"] = {"ok": False, "detail": (f"signed in{' as ' + who if who else ''}, but Copilot refuses: {msg[:200]}"
+                                                                  + (f". {TOKEN_STEPS}" if via or "permission" in msg.lower() else ""))}
             except Exception as e:
                 out["copilot"] = {"ok": False, "detail": f"{type(e).__name__}: {e}"[:300]}
     if what in ("all", "jira"):
@@ -375,7 +388,8 @@ def login() -> dict:
     """Start `copilot login` (GitHub device flow) in its own console window on Windows."""
     cli = shutil.which("copilot")
     if not cli:
-        return {"ok": False, "message": "GitHub Copilot CLI not found. Install it, or store a GitHub token below."}
+        return {"ok": False, "message": "The browser sign-in needs the GitHub Copilot CLI, which is not installed on this PC. "
+                                        "Use a GitHub token below instead. " + TOKEN_STEPS}
     if os.name == "nt":
         subprocess.Popen([cli, "login"], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
         return {"ok": True, "message": "A console window opened: follow the steps there, then press Check sign-in."}
