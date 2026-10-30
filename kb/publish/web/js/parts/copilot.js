@@ -1,19 +1,35 @@
-// GitHub Copilot: sign in (copilot login), or a GitHub token; check the sign-in; account and quota details.
-import {esc, note} from '../ui.js';
+// GitHub Copilot: a GitHub token (step by step, with a button to GitHub), or the browser sign-in (copilot login) where
+// the Copilot CLI is installed; check the sign-in; account and quota details.
+import {esc, ic, note} from '../ui.js';
 import {api, post} from '../api.js';
 import {runCheck, checkState, checkLine, onCheck} from './checks.js';
 import {secretRow, bindSecrets, secretItem} from './secret.js';
 
 const SECRET_NAME = 'copilot-github-token';
+const EXT = 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6';
+// GitHub fills in the name and description from the URL; the permission is chosen by hand (step 4)
+const tokenPage = title => 'https://github.com/settings/personal-access-tokens/new?' + new URLSearchParams({
+  name: (title || 'Knowledge base') + ' wiki', description: 'GitHub Copilot for the knowledge base app (Copilot Requests only)'});
+const STEPS = `<p class="howto"><b>Works on every PC, takes 2 minutes.</b> Press the button, then on the GitHub page:</p>
+  <ol class="steps">
+    <li><b>Token name</b>: already filled in (any name works).</li>
+    <li><b>Resource owner</b>: <b>your personal account</b>, not the organisation.</li>
+    <li><b>Repository access</b>: <b>Public repositories</b>.</li>
+    <li><b>Permissions</b>: open the <b>Account</b> tab (not <i>Repositories</i>) → <b>Add permissions</b> → tick <b>Copilot Requests</b>.</li>
+    <li><b>Generate token</b>, copy it (it starts with <code>github_pat_</code>), paste it below and press <b>Save</b>.</li>
+  </ol>
+  <p class="howto d">Not a classic token (<code>ghp_…</code>): Copilot does not accept it. Not there? Your organisation may block it: ask the person who set up this app.</p>`;
 
 // C: settings state (GET /api/settings). Returns {ok()}: whether the sign-in check passed.
 export function mountCopilot(el, C) {
   let secrets = C.secrets;
-  el.innerHTML = `<div class="btns" style="margin-top:0"><button class="ghost" data-a="check">Check sign-in</button><button class="ghost" data-a="login">Sign in with GitHub…</button><span class="note"></span></div>
+  el.innerHTML = `<div class="tokhelp">${STEPS}<a class="bigbtn" target="_blank" rel="noopener" href="${esc(tokenPage(C.profile && C.profile.title))}">${ic(EXT, 2)}<span>Create a GitHub token for Copilot</span><small>github.com/settings/personal-access-tokens/new</small></a></div>
+    <div class="tok"></div>
+    <div class="btns"><button class="ghost" data-a="check">Check sign-in</button><button class="ghost" data-a="login">Sign in in the browser…</button><span class="note"></span></div>
     <div class="cstat"></div><div class="acc"></div>
-    <details class="alt"><summary>No browser sign-in possible? Use a GitHub token</summary><div class="tok"></div></details>`;
+    <p class="howto d">The browser sign-in needs the GitHub Copilot CLI on this PC${C.copilot_cli ? ' (found)' : ' (not found here: use the token above)'}.</p>`;
   const n = el.querySelector('.note'), stat = () => {el.querySelector('.cstat').innerHTML = checkLine(checkState('copilot'))};
-  const tok = () => {const x = secretItem(secrets, SECRET_NAME); el.querySelector('.tok').innerHTML = secretRow(x); if (x.set || !C.copilot_cli) el.querySelector('details.alt').open = true};
+  const tok = () => {el.querySelector('.tok').innerHTML = secretRow({...secretItem(secrets, SECRET_NAME), help: 'Stored in Windows Credential Manager, for your user only.'})};
   tok(); stat();
   const off = onCheck(w => {if (!el.isConnected) return off(); if (w === 'copilot') stat()});
   bindSecrets(el.querySelector('.tok'), st => {secrets = st; tok(); runCheck('copilot')});

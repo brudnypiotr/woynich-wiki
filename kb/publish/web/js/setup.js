@@ -15,7 +15,7 @@ const STEPS = [
     mount: (el, C) => mountPack(el, C, {confirm: false, after: r => {location.hash = r.branding && r.branding.length ? 'setup/2' : 'setup/1'; location.reload()}})},
   {key: 'branding', title: 'Project branding', optional: true, text: 'Optional. Got a branding.zip from a colleague? Drop it here: the project logo, icon and knowledge base title are set for you. You can do it later in Settings.',
     mount: (el, C) => mountBranding(el, C, {reload: () => {location.hash = 'setup/2'; location.reload()}})},
-  {key: 'copilot', title: 'Sign in to GitHub Copilot', text: 'The assistant runs on your GitHub Copilot subscription. Sign in once in the browser; if that is not possible, store a GitHub token with Copilot access.', mount: mountCopilot},
+  {key: 'copilot', title: 'Sign in to GitHub Copilot', text: 'The assistant runs on your GitHub Copilot subscription. Create a GitHub token with the button below (2 minutes, step by step) and paste it here.', mount: mountCopilot},
   {key: 'model', title: 'Choose the model', text: 'The model that writes the wiki and answers questions. The recommended one is preselected when your Copilot account offers it; each source or question costs AI credits. You can change it later in Settings.', mount: (el, C) => mountModel(el, C, {setup: true})},
   {key: 'jira', title: 'Connect Jira', optional: true, text: 'Optional. With Jira the assistant can read tickets you paste into a question (read only). You can add it later in Settings.', mount: mountJira},
   {key: 'repos', title: 'Add code repositories', optional: true, text: 'Optional. Local clones the assistant may read (never change), so answers can point to the exact line of code. You can add them later in Settings.', mount: mountRepos},
@@ -34,7 +34,7 @@ export async function openSetup(at = 0) {mark('setup');
   const part = s.mount($('#part'), C);
   const go = async save => {
     if (save && part.save && !(await part.save())) return;  // the part shows what went wrong
-    if (save && s.key === 'copilot' && !part.ok()) {$('.wmsg').textContent = 'Not signed in yet: press “Sign in with GitHub…”, finish the steps there, then “Check sign-in”. Or continue anyway and do it later in Settings.'; return}
+    if (save && s.key === 'copilot' && !part.ok()) {$('.wmsg').textContent = 'Not signed in yet: create a GitHub token with the button above, paste it and press Save. Or continue anyway and do it later in Settings.'; return}
     if (!last) return openSetup(at + 1);
     await post('/api/setup/done'); location.hash = ''};
   $('.wiz').onclick = e => {const a = (e.target.closest('button') || {}).dataset?.a;

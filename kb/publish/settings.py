@@ -390,8 +390,7 @@ def login() -> dict:
     cli = find_copilot_cli()
     if not cli:
         return {"ok": False, "message": "The browser sign-in needs the GitHub Copilot CLI and it is not on this PC (looked on PATH, "
-                                        "winget, npm and VS Code). Install it per user: winget install GitHub.Copilot, then press "
-                                        "Sign in with GitHub again. Or use a GitHub token below: " + TOKEN_STEPS}
+                                        "winget, npm and VS Code). Use the GitHub token above instead (the button and the steps)."}
     if os.name == "nt":
         subprocess.Popen([cli, "login"], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
         return {"ok": True, "message": "A console window opened: follow the steps there, then press Check sign-in."}
