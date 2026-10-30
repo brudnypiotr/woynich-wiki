@@ -19,9 +19,10 @@ from kb.core import config, registry
 from kb.core import secrets as secret_env
 from kb.llm.adapters import find_copilot_cli
 
-TOKEN_STEPS = ("Create a fine-grained token at https://github.com/settings/personal-access-tokens/new: Resource owner = "
-               "your own account (not the organisation), Permissions → Add permissions → Copilot Requests. "
-               "Classic tokens (ghp_…) do not work with Copilot.")
+TOKEN_STEPS = ("Create a fine-grained token at https://github.com/settings/personal-access-tokens/new: "
+               "1) Resource owner = your personal account (not the organisation); 2) Repository access = Public repositories; "
+               "3) Permissions → the Account tab (not Repositories) → Add permissions → Copilot Requests; "
+               "4) Generate token and paste it here. Classic tokens (ghp_…) do not work with Copilot.")
 KNOWN_SECRETS = [
     {"name": "copilot-github-token", "label": "GitHub token for Copilot",
      "help": "Only needed when the browser sign-in is not possible (used as COPILOT_GITHUB_TOKEN). " + TOKEN_STEPS},
