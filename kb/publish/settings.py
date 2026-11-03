@@ -24,7 +24,21 @@ TOKEN_STEPS = ("Create a fine-grained token at https://github.com/settings/perso
                "3) Repository access = Public repositories; "
                "4) Permissions → the Account tab (not Repositories) → Add permissions → Copilot Requests; "
                "5) Generate token and paste it here. Classic tokens (ghp_…) do not work with Copilot.")
+NO_COPILOT = ("your GitHub account has no Copilot access (the token itself is fine). Request a Copilot license; "
+              "if you already have one, ask your GitHub admin whether Copilot CLI is enabled for your organisation, "
+              "and check that the token was created on the account the license is assigned to (your company GitHub account).")
 TOKEN_WARN_DAYS = 7
+
+
+def copilot_hint(msg: str) -> str | None:
+    """What a Copilot refusal means for the user. GitHub answers 401 when the token lacks Copilot Requests and 403
+    when the token is fine but the account may not use Copilot (no license, or a policy turns it off)."""
+    m = msg.lower()
+    if "not authorized to use this copilot feature" in m or ('"status":403' in m.replace(" ", "") and "copilot" in m):
+        return NO_COPILOT
+    if "copilot requests" in m and "permission" in m:
+        return "the GitHub token is missing the Copilot Requests permission. " + TOKEN_STEPS
+    return None
 KNOWN_SECRETS = [
     {"name": "copilot-github-token", "label": "GitHub token for Copilot",
      "help": "Only needed when the browser sign-in is not possible (used as COPILOT_GITHUB_TOKEN). " + TOKEN_STEPS},
@@ -322,9 +336,10 @@ def check(gw, what: str = "all") -> dict:
                     try:
                         lister()
                     except Exception as e:
-                        msg = str(e)
-                        out["copilot"] = {"ok": False, "detail": (f"signed in{' as ' + who if who else ''}, but Copilot refuses: {msg[:200]}"
-                                                                  + (f". {TOKEN_STEPS}" if via or "permission" in msg.lower() else ""))}
+                        msg, hint = str(e), copilot_hint(str(e))
+                        out["copilot"] = {"ok": False, "detail": (f"signed in{' as ' + who if who else ''}, but Copilot refuses: "
+                                                                  + (f"{hint} GitHub said: {msg[:200]}" if hint else
+                                                                     msg[:200] + (f". {TOKEN_STEPS}" if via or "permission" in msg.lower() else "")))}
             except Exception as e:
                 out["copilot"] = {"ok": False, "detail": f"{type(e).__name__}: {e}"[:300]}
     if what in ("all", "jira"):
