@@ -94,7 +94,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 traceback.print_exc()  # into the app log (local/logs/serve.log) for support and feedback packages
                 print(f"error in {method} {path}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-                return self.send(500, {"error": f"{type(e).__name__}: {e}"[:500]})
+                from kb.publish.settings import copilot_hint
+                hint = copilot_hint(str(e))  # a Copilot refusal in plain words first, GitHub's text after it
+                return self.send(500, {"error": (f"Copilot refuses: {hint} GitHub said: " if hint else "") + f"{type(e).__name__}: {e}"[:500]})
         if not self.authorised():
             return self.send(403, {"error": "missing or wrong token"})
         return self.send(404, {"error": "not found"})

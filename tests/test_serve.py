@@ -441,3 +441,28 @@ def test_token_expiry_from_github_header(monkeypatch):
     assert settings.token_expiry(fetch=offline, now=now) is None                                               # never blocks
     monkeypatch.delenv("COPILOT_GITHUB_TOKEN")
     assert settings.token_expiry() is None
+
+
+def test_copilot_refusals_are_told_apart():
+    """401 = the token lacks Copilot Requests; 403 = the token is fine but the account has no Copilot (license or policy)."""
+    from kb.publish import settings
+    no_perm = ('GenericFailure, {"kind":"http","status":401,"statusText":"Unauthorized","body":"checking third-party user token: '
+               'unauthorized: Personal Access Token does not have \\"Copilot Requests\\" permission\\n"}')
+    no_seat = ('GenericFailure, {"kind":"http","status":403,"statusText":"Forbidden","body":"unauthorized: '
+               'not authorized to use this Copilot feature\\n"}')
+    assert "Copilot Requests permission" in settings.copilot_hint(no_perm) and "Resource owner" in settings.copilot_hint(no_perm)
+    assert "license" in settings.copilot_hint(no_seat) and "Resource owner" not in settings.copilot_hint(no_seat)
+    assert settings.copilot_hint("TimeoutError: no answer") is None
+
+
+def test_check_names_a_missing_copilot_license(monkeypatch):
+    from types import SimpleNamespace
+    from kb.publish import settings
+
+    def refuse():
+        raise RuntimeError('{"status":403,"body":"unauthorized: not authorized to use this Copilot feature"}')
+    inner = SimpleNamespace(auth_status=lambda: {"is_authenticated": True, "login": "edna"}, list_models=refuse)
+    monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "github_pat_x")
+    monkeypatch.setattr(settings, "token_expiry", lambda: {})
+    c = settings.check(SimpleNamespace(llm=SimpleNamespace(inner=inner)), "copilot")["copilot"]
+    assert c["ok"] is False and "license" in c["detail"] and "Resource owner" not in c["detail"] and "GitHub said" in c["detail"]
