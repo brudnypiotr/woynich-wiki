@@ -67,7 +67,8 @@ iframe{flex:1;border:0;width:100%;min-height:0;background:var(--bg)}
 .msg{margin:0 0 26px}
 .msg.user{display:flex;flex-direction:column;align-items:flex-end}
 .msg.user .bubble{background:var(--bubble);border-radius:20px 20px 6px 20px;padding:10px 16px;max-width:85%;white-space:pre-wrap;word-wrap:break-word}
-.msg.user .att{font-size:12px;color:var(--mute);margin-top:4px}
+.msg.user .att{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;margin-top:6px;max-width:85%}
+.msg.user .att img{display:block;max-width:220px;max-height:160px;border-radius:10px;border:1px solid var(--line);object-fit:cover}
 .msg.bot{display:flex;gap:14px}
 .msg.bot .mark{width:28px!important;height:28px!important;margin-top:2px}
 .msg.bot .body{flex:1;min-width:0}

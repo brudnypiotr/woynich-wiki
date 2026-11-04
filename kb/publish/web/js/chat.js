@@ -1,5 +1,5 @@
 // Discussions: the chat view, asking a question, the live view of the answer, attachments.
-import {$, esc, ic, I, MARK, topbar} from './ui.js';
+import {$, esc, ic, I, MARK, ACCESS, topbar} from './ui.js';
 import {api} from './api.js';
 import {mdl} from './markdown.js';
 import {traceHtml, markMore, initTrace} from './trace.js';
@@ -46,7 +46,11 @@ export function openChat(s, keep) {S = s; mark(s ? 's=' + s.id : 'new'); const t
 
 function addImgs(fs) {for (const f of fs) {if (!f.type.startsWith('image/')) continue; const r = new FileReader(); r.onload = () => {IM.push({name: f.name || 'screenshot.png', data: r.result}); showImgs()}; r.readAsDataURL(f)}}
 function showImgs() {const el = $('#imgs'); if (!el) return; el.innerHTML = IM.map((x, k) => `<span><img src="${x.data}" alt="">${esc(x.name)}<b data-rm="${k}" title="Remove">×</b></span>`).join('')}
-function userMsg(q, imgs) {return `<div class="msg user"><div class="bubble">${esc(q)}</div>${imgs && imgs.length ? `<div class="att">📎 ${imgs.map(esc).join(', ')}</div>` : ''}</div>`}
+// imgs: file names saved with the turn (shown from the server, click opens full size) or, while asking, {name, data}
+function userMsg(q, imgs, sid) {const th = x => typeof x === 'string'
+    ? `<a href="/api/sessions/${sid}/images/${encodeURIComponent(x)}?t=${ACCESS}" target="_blank" title="Open full size"><img src="/api/sessions/${sid}/images/${encodeURIComponent(x)}?t=${ACCESS}" alt="${esc(x)}"></a>`
+    : `<img src="${x.data}" alt="${esc(x.name)}">`;
+  return `<div class="msg user"><div class="bubble">${esc(q)}</div>${imgs && imgs.length ? `<div class="att">${imgs.map(th).join('')}</div>` : ''}</div>`}
 function checkHtml(c) {if (!c) return ''; const b = c.broken || [];
   if (b.length) return `<span class="badc" title="${esc(b.join('\n'))}" onclick="alert(this.title)">⚠ ${b.length} citation${b.length > 1 ? 's' : ''} not found</span>`;
   return c.ok ? `<span class="okc" title="Every link and page/time reference was found in the wiki and its sources">✓ ${c.ok} citation${c.ok > 1 ? 's' : ''} checked</span>` : ''}
@@ -69,7 +73,7 @@ function renderTurns() {const el = $('#turns'), p = pendHere(), sc = $('#scroll'
     <div class="chips">${['What are the main topics in the wiki?', 'Which sources contradict each other?', 'Summarise the most recent source'].map(x => `<button>${x}</button>`).join('')}</div>`;
     el.querySelectorAll('.chips button').forEach(b => b.onclick = () => {$('#q').value = b.textContent; $('#q').oninput(); go()}); return}
   const f = S && FAILED.get(S.id);
-  el.className = 'col'; el.innerHTML = (S ? S.turns.map(t => userMsg(t.question, t.images) + botMsg(t)).join('') : '') + (f ? failHtml(f) : '') + (p ? pendHtml(p) : ''); markMore(el);
+  el.className = 'col'; el.innerHTML = (S ? S.turns.map(t => userMsg(t.question, t.images, S.id) + botMsg(t)).join('') : '') + (f ? failHtml(f) : '') + (p ? pendHtml(p) : ''); markMore(el);
   if (AT_END) scrollEnd(); else if (sc) sc.scrollTop = top}  // a reader scrolled up keeps their place when the answer lands
 
 async function stopAnswer() {const pend = pendHere(); if (!pend) return; const p = $('#pnow'); if (p) p.textContent = 'Stopping…';
@@ -89,7 +93,7 @@ async function go() {if (pendHere()) return stopAnswer(); const q = $('#q').valu
     catch (e) {if ($('#q') && !$('#q').value) {$('#q').value = q; $('#q').oninput()} return alert(e.message)}
     if (!S && $('#turns')) {S = sess; history.replaceState(null, '', '#s=' + S.id); $('.top .ttl').textContent = S.topic; mark('s=' + S.id)}  // still on this view: it becomes the discussion
     loadSessions()}
-  const p = {sid: sess.id, q, imgs: imgs.map(x => x.name), now: `Reading the wiki${code ? ' and the code' : ''}…`, ev: [], open: new Set(), live: true};
+  const p = {sid: sess.id, q, imgs, now: `Reading the wiki${code ? ' and the code' : ''}…`, ev: [], open: new Set(), live: true};
   FAILED.delete(sess.id); PENDS.set(sess.id, p); flag(sess.id, 'running'); busyUi();
   if (pendHere() === p) {const el = $('#turns'); if (el.className === 'hero') {el.className = 'col'; el.innerHTML = ''}
     el.insertAdjacentHTML('beforeend', pendHtml(p)); scrollEnd(true)}

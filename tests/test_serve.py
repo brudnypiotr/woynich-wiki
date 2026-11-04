@@ -1,4 +1,5 @@
 """Local web app: token required, upload runs the ingest steps, discussion sessions answer with citations."""
+import base64
 import json
 import threading
 import time
@@ -119,7 +120,17 @@ def test_upload_steps_then_discussion(app):
     assert [e["kind"] for e in t["trace"]][:2] == ["thinking", "read"]             # what the model did
     pr = call(base, token, f"/api/sessions/{s['id']}/progress")
     assert pr["running"] is False and pr["total"] == len(t["trace"])
-    t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest again"}).encode())
+    png = b"\x89PNG\r\n\x1a\nfake"
+    t = call(base, token, f"/api/sessions/{s['id']}/ask", json.dumps({"question": "minimum rest again", "images": [
+        {"name": "shot.png", "data": "data:image/png;base64," + base64.b64encode(png).decode()}]}).encode())
+    assert t["images"] == ["002-1.png"]
+    with urllib.request.urlopen(f"{base}/api/sessions/{s['id']}/images/002-1.png?t={token}") as r:  # shown again later
+        assert r.headers["Content-Type"] == "image/png" and r.read() == png
+    for bad, code in ((f"/api/sessions/{s['id']}/images/002-1.png", 403), (f"/api/sessions/{s['id']}/images/009-1.png?t={token}", 404),
+                      (f"/api/sessions/{s['id']}/images/..%2F{s['id']}.json?t={token}", 404)):
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(base + bad)
+        assert e.value.code == code, bad
     runner = serve.Handler.runner
     assert t["session"] == "continued" and runner.opened == ["live-1"]  # one long session (ADR-0019)
     with pytest.raises(urllib.error.HTTPError) as e:
