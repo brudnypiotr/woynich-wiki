@@ -131,6 +131,14 @@ def progress(h, sid):
     return h.send(200, {"running": t["running"], "events": t["events"][since:], "total": len(t["events"])})
 
 
+@route("GET", r"/api/sessions/([0-9a-f]{12})/images/(\d{3}-\d\.(?:png|jpg|jpeg|gif|webp))")
+def image(h, sid, name):
+    """A screenshot attached to a question, so the discussion shows it again (the token comes as ?t= in <img src>)."""
+    data = (_sessions_dir() / sid / name).read_bytes()
+    ext = name.rsplit(".", 1)[1]
+    return h.send(200, data, "image/" + {"jpg": "jpeg"}.get(ext, ext))
+
+
 @route("GET", r"/api/sessions/([^/]+)")
 def get_session(h, sid):
     return h.send(200, _load_session(sid))
